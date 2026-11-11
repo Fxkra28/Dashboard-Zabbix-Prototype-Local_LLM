@@ -1,0 +1,22 @@
+---
+title: "HCML Monitoring Portal: which folder may import which"
+---
+flowchart LR
+    %% Two packages, one direction each. A test in each package fails on a file that breaks it.
+
+    subgraph SERVER["server/src: imports run one way"]
+        direction LR
+        IDX["index.ts<br/>composition root"] --> RT["routes/<br/>HTTP only"]
+        RT --> SV["services/<br/>the work"]
+        SV --> SH["clients, domain, security,<br/>sli, export"]
+        SH --> CORE["core/<br/>imports nothing else"]
+    end
+
+    subgraph WEB["web/src: imports run one way"]
+        direction LR
+        APP["App.tsx and main.tsx"] --> FE["features/<br/>one folder per part"]
+        FE --> SHR["shared/<br/>components, hooks, lib"]
+        FE --> CON["api/, types/, guards/<br/>the contract with the server"]
+        SHR --> CON
+    end
+%% source-hash: 16bd5471b0df

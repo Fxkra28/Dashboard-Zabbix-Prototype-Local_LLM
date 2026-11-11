@@ -1,0 +1,23 @@
+---
+title: "HCML Monitoring Portal: acknowledging or closing a problem"
+---
+sequenceDiagram
+    autonumber
+    participant O as Operator's browser
+    participant S as Server
+    participant Z as Zabbix
+
+    %% The portal's only write. It uses a separate token, so no read path can write.
+    %% Zabbix applies a close a few seconds after the call returns, so the page waits for it.
+
+    O->>S: POST /api/problems/acknowledge with event ids, a message, close or not, and the X-HCML-CSRF header
+    S->>S: guard: signed in, role operator or admin, and the write switched on
+    S->>S: check the body, at most 50 event ids, and add the user's name to the message
+    S->>Z: event.acknowledge with the write token
+    Z-->>S: result
+    S->>S: log the name, the address and the outcome, then drop the cached problem entries
+    S-->>O: 200 ok
+
+    Note over S,Z: for about 15 seconds the server re-reads the list with a very short cache, because the problem can still read as open
+    S-->>O: the live stream pushes the new list when it changes
+%% source-hash: 1d97dcc04c47

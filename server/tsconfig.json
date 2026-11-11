@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "sourceMap": true,
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["src"],
+  // Tests live under src (so they can use relative imports and the same module
+  // resolution as the code) but must not reach the shipped dist/. They are
+  // still typechecked. See tsconfig.test.json and the `typecheck` script.
+  "exclude": ["src/__tests__"]
+}

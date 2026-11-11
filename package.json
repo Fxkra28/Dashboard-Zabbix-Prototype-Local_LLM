@@ -1,0 +1,26 @@
+{
+  "name": "hcml-portal",
+  "private": true,
+  "description": "Runs the checks of both packages from the repository root. It has no dependencies of its own: server/ and web/ are separate npm projects with separate lockfiles, and tools/ uses Node's standard library.",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "install:all": "npm ci --prefix server && npm ci --prefix web",
+    "typecheck": "npm run typecheck --prefix server && npm run typecheck --prefix web",
+    "lint": "npm run lint --prefix server && npm run lint --prefix web",
+    "test": "npm test --prefix server && npm test --prefix web",
+    "build": "npm run build --prefix server && npm run build --prefix web",
+    "check:api": "./server/node_modules/.bin/tsx tools/check/openapi.check.ts",
+    "check:erd": "./server/node_modules/.bin/tsx tools/check/erd.check.ts",
+    "check:styles": "node web/scripts/css.check.mjs && node web/scripts/tokens.check.mjs",
+    "tokens:export": "node web/scripts/tokens.export.mjs",
+    "handover:build": "node tools/handover/build.mjs",
+    "check:web": "./server/node_modules/.bin/tsx web/scripts/markdown.check.ts && ./server/node_modules/.bin/tsx web/scripts/units.check.ts",
+    "check:docs": "node tools/check/links.check.mjs && node tools/check/facts.check.mjs && node tools/check/diagrams.check.mjs",
+    "check:handover": "node tools/check/handover.check.mjs",
+    "check:parity": "node tools/check/parity.check.mjs",
+    "check": "npm run check:api && npm run check:erd && npm run check:styles && npm run check:web && npm run check:docs && npm run check:handover && npm run check:parity",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run build && npm run check"
+  }
+}

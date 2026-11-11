@@ -1,0 +1,100 @@
+/* Layout shell */
+.app {
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: var(--chrome);
+  color: var(--on-chrome);
+  padding: var(--s-5) var(--s-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1-5);
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+/*
+ * Brand lockup. The supplied logo is a stacked lockup, "HCML" over two lines of
+ * much smaller type, so it does not survive being shrunk into a 38px square:
+ * the second and third lines turn to grey texture. Expanded, it therefore gets
+ * a wide plate and reads at full size; the rail and the wall header get the
+ * square H icon instead (DESIGN.md section 9).
+ */
+.brand {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--s-2);
+  padding: var(--s-1) var(--s-1) var(--s-5);
+}
+.brand .subtitle {
+  font-size: var(--t-xs);
+  color: var(--on-chrome-3);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  font-weight: var(--w-semibold);
+  padding-left: var(--s-1);
+}
+
+.brand-mark {
+  border-radius: var(--r-md);
+  background: var(--logo-plate);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  width: 100%;
+  /* Clear space, so the artwork never touches the plate's rounded corners. */
+  padding: var(--s-2) var(--s-3);
+}
+.brand-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+.brand-mark-fallback {
+  font-weight: var(--w-bold);
+  letter-spacing: var(--track-caps);
+  color: var(--logo-ink);
+}
+
+/* The plate takes the asset's own proportions: 810x485 for the lockup, square
+   for the icon. Matching them means object-fit never has to letterbox, so the
+   plate has no dead white margin at either size. The icon file is already
+   flattened onto white, so its plate needs no clear space of its own. */
+.brand-mark-lockup {
+  aspect-ratio: 810 / 485;
+  max-width: 216px;
+}
+/* The sidebar's lockup: the same logo in white on the navy chrome, so it needs no plate (15.54:1 on
+   the light chrome, 18.68:1 on the dark one). The owner's choice of 26 October 2026, DESIGN.md section 10. */
+.brand-mark-lockup-white {
+  background: transparent;
+  padding: 0;
+  aspect-ratio: 504 / 289;
+  max-width: 168px;
+  margin-top: var(--s-1);
+}
+.brand-mark-lockup-white .brand-mark-fallback {
+  font-size: var(--t-3xl);
+  color: var(--on-chrome);
+}
+.brand-mark-lockup .brand-mark-fallback {
+  font-size: var(--t-3xl);
+}
+.brand-mark-icon {
+  /* A fixed size, not the plate's 100%: the rail centres its brand, which
+     shrinks to its content, so a missing image left a 19px disc. */
+  width: 40px;
+  height: 40px;
+  flex: none;
+  padding: 0;
+}
+.brand-mark-icon .brand-mark-fallback {
+  font-size: var(--t-sm);
+}
+

@@ -1,0 +1,243 @@
+/* Sidebar rail, theme picker, and the shell's response to both. DESIGN.md §6. */
+
+.app {
+  transition: grid-template-columns var(--dur-1) ease;
+}
+.app.rail {
+  grid-template-columns: 68px 1fr;
+}
+
+.sidebar {
+  position: sticky;
+  overflow: visible;
+}
+
+/* The chevron sits on the sidebar's edge, half over the seam, so it reads as
+   belonging to the boundary it moves rather than to either side of it. */
+.rail-toggle {
+  position: absolute;
+  top: 74px;
+  right: calc(var(--control-sm) / -2);
+  width: var(--control-sm);
+  height: var(--control-sm);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+  box-shadow: var(--e-1);
+  transition: color var(--dur-1) ease;
+  z-index: var(--z-raise);
+}
+.rail-toggle:hover {
+  color: var(--primary);
+}
+.rail-toggle svg {
+  width: 14px;
+  height: 14px;
+  transform: rotate(90deg);
+  transition: transform var(--dur-1) ease;
+}
+.app.rail .rail-toggle svg {
+  transform: rotate(-90deg);
+}
+
+.app.rail .sidebar {
+  padding-left: var(--s-3);
+  padding-right: var(--s-3);
+  align-items: center;
+}
+.app.rail .brand {
+  padding: var(--s-1) 0 var(--s-5);
+  align-items: center;
+}
+.app.rail .brand .subtitle {
+  display: none;
+}
+.app.rail .nav-link {
+  justify-content: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+.app.rail .nav-label {
+  /* Hidden from sight and from the accessibility tree alike: the link keeps
+     its name from the title attribute, so a screen reader is not left with an
+     icon and nothing to read. */
+  display: none;
+}
+.app.rail .nav-items {
+  gap: var(--s-1);
+}
+.app.rail .nav-scroll {
+  gap: var(--s-4);
+  width: 100%;
+}
+
+.theme-pick select {
+  min-width: 0;
+  min-height: var(--control-sm);
+  padding: var(--s-1) var(--s-2);
+  font-size: var(--t-sm);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+/* Visible to a screen reader, not to the eye. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Figures are read down a column here, not along a line, so they get fixed
+   advance widths. DESIGN.md section 4. */
+table.data td,
+.kpi .value,
+.score-hero-num,
+.site-big,
+.aging-count {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A selected row in dark mode rests on --tint, which is only 1.32:1 against the
+   surface: correct for a hover, too faint to be the sole mark of a selection.
+   The bar carries it instead, so selection survives a theme that cannot spare
+   the luminance. DESIGN.md R-2. */
+table.data tr.sel td:first-child {
+  box-shadow: inset 3px 0 0 var(--primary);
+}
+
+/* The live list's count and its way out to the full list (DESIGN.md section 9,
+   UX-12). Underlined, because colour alone does not set a link apart from the
+   text around it. */
+.panel-foot {
+  margin: var(--s-3) 0 0;
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+.panel-foot a {
+  color: var(--primary);
+  text-decoration: underline;
+}
+
+/* Wall mode (DESIGN.md section 9): the Dashboard alone, larger. The type
+   scale goes up by about a quarter, and everything sized from it follows. */
+.app.wall {
+  grid-template-columns: 1fr;
+  --t-xs: 14px;
+  --t-sm: 15px;
+  --t-base: 16px;
+  --t-md: 18px;
+  --t-lg: 19px;
+  --t-xl: 22px;
+  --t-2xl: 30px;
+  --t-3xl: 38px;
+  --t-4xl: 55px;
+}
+.wall-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-8);
+  margin-bottom: var(--s-3);
+}
+.wall-title {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin-right: auto;
+}
+.wall-title h1 {
+  margin: 0;
+  font-size: var(--t-2xl);
+  font-weight: var(--w-semibold);
+}
+.wall-stamp {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--s-1);
+}
+.wall-label {
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+.wall-time {
+  /* Shrinks on a narrow window before the bar has to wrap. */
+  font-size: clamp(var(--t-2xl), 3.2vw, var(--t-4xl));
+  font-weight: var(--w-bold);
+  line-height: var(--lh-solid);
+  font-variant-numeric: tabular-nums;
+}
+.wall-zone {
+  margin-left: var(--s-2);
+  font-size: var(--t-sm);
+  font-weight: var(--w-medium);
+  color: var(--muted);
+}
+.wall-stamp.late .wall-time,
+.wall-stamp.late .wall-label {
+  color: var(--warn-text);
+}
+/* The larger type is paid for in spacing, so the whole Dashboard, the twelfth
+   row and the count line included, fits a 1080p screen without scrolling. */
+.app.wall .content {
+  padding-top: var(--s-4);
+  padding-bottom: var(--s-4);
+}
+.app.wall .grid {
+  gap: var(--s-3);
+}
+.app.wall .kpis {
+  margin-bottom: var(--s-3);
+}
+.app.wall .kpi {
+  padding: var(--s-3) var(--s-4);
+  gap: var(--s-1);
+}
+.app.wall .panel {
+  padding: var(--s-3) var(--s-4);
+}
+.app.wall table.data th,
+.app.wall table.data td {
+  padding-top: var(--s-1-5);
+  padding-bottom: var(--s-1-5);
+}
+/* Its count inherits the body's 16px, outside the scaled tokens. */
+.app.wall .sev-tile strong {
+  font-size: var(--t-xl);
+}
+
+/* A problem that just appeared or cleared, on the wall: the pill says which, and the tint fades
+   over --dur-highlight (HIGHLIGHT_MS in useChangeHighlight). Reduced motion marks nothing. */
+.pill.fresh {
+  color: var(--primary);
+  background: var(--tint);
+  border-color: var(--tint-line);
+}
+table.data tr.row-new td {
+  animation: row-arrive var(--dur-highlight) ease-out both;
+}
+table.data tr.row-cleared td {
+  color: var(--muted);
+}
+@keyframes row-arrive {
+  from {
+    background: var(--tint);
+  }
+  to {
+    background: transparent;
+  }
+}
+

@@ -1,0 +1,132 @@
+---
+title: "HCML Monitoring Portal: Server flow (one request through the BFF)"
+---
+sequenceDiagram
+    autonumber
+
+    %%  Server flow: one GET /api/sites, end to end, in the order the
+    %%  BFF actually runs it. Read top to bottom: that order is the
+    %%  design. A Fastify hook only covers the routes registered after
+    %%  it, so index.ts registers helmet, CORS, the rate limit, the
+    %%  compression hook, the error handler and the auth guard before
+    %%  any route module.
+
+    %%  The browser never holds the portal JWT in script: it rides in an
+    %%  httpOnly session cookie (ADR-0010). Scripts may send it as a
+    %%  Bearer header instead, which wins when both arrive.
+
+    %%  The Zabbix token exists only inside portal-bff. It is never sent
+    %%  to the browser and never appears in a log line.
+
+    %%  The two 503s in the red band are deliberate, not a typo for 502
+    %%  or 504: a rejected token and an unreachable Zabbix are
+    %%  configuration states, not upstream faults, and errors.ts returns
+    %%  503 for both (pinned by routes.test.ts and zabbix.test.ts).
+    %%  Only zabbix_error is a 502. Nothing in the server ever returns
+    %%  504. Do not "correct" these back.
+
+    %%  A miss on /api/sites issues four methods across three cache keys
+    %%  with three different TTLs: host.get (hosts:meta, 30 s),
+    %%  problem.get (problems, 5 s) plus trigger.get because problem.get
+    %%  carries no host names, and item.get (icmp:hosts, 15 s) for the
+    %%  ICMP readings. hostgroup.get is not called here: host groups
+    %%  ride along as selectHostGroups on host.get. hostgroup.get
+    %%  belongs to /api/hosts and /api/reports.
+
+    %%  The last block, the report by email, runs only when the MAIL_
+    %%  settings are usable. This file is byte-identical in both repos
+    %%  and the local-model copy passes none, so there it never runs.
+
+    participant B as Browser
+    participant N as nginx<br/>portal-web
+    participant F as Fastify<br/>portal-bff
+    participant C as TTL cache<br/>in memory
+    participant Z as Zabbix API<br/>JSON-RPC 2.0
+    participant M as Mail server<br/>SMTP, optional
+    participant S as portal-state<br/>volume
+
+    B->>N: GET /bff/api/sites<br/>Cookie: hcml_session=<jwt>
+    N->>F: GET /api/sites<br/>Host with its port, X-Forwarded-For preserved
+
+    rect rgb(241, 245, 249)
+        Note over F: The plugin chain, in registration order
+        F->>F: helmet: security headers<br/>CSP off: this process serves JSON only
+        F->>F: CORS: one allowed origin (WEB_ORIGIN)
+        F->>F: rate limit: per IP, before auth,<br/>so a flood is rejected before JWT work
+        F->>F: compression hook: brotli / gzip
+    end
+
+    alt rate limit exceeded
+        F-->>B: 429 rate_limited<br/>"the limit is N per minute"
+    end
+
+    rect rgb(254, 243, 199)
+        Note over F: onRequest: forgery check, then the auth guard
+        F->>F: forgery check, unsafe methods only: a cookie POST<br/>needs X-HCML-CSRF: 1 and an Origin naming this host
+        F->>F: verify the JWT: Bearer header, else the cookie.<br/>Never ?token=, not even on the stream
+        F->>F: requiredRole(url): first match wins,<br/>anything unmatched needs viewer
+    end
+
+    alt cookie POST without the header, or from another site
+        F-->>B: 403 csrf, before any token is checked
+    else no or bad token
+        F-->>B: 401 unauthorized: "Sign in to continue."
+    else role too low
+        F-->>B: 403 forbidden: names the role needed
+    end
+
+    F->>C: cached("sites", 15 s, fn)
+
+    alt fresh, within TTL
+        C-->>F: the stored value
+        Note right of C: no Zabbix call at all
+    else another request is already fetching
+        C-->>F: await the same promise
+        Note right of C: coalesced: twenty NOC screens<br/>cost one upstream read
+    else stale but inside staleMs
+        C-->>F: the old value, now
+        C->>Z: one background refresh
+        Note right of C: a failed refresh keeps the old value<br/>and is logged, not thrown
+    else miss
+        C->>Z: host.get · problem.get · trigger.get · item.get
+        Z-->>C: raw JSON-RPC result
+        C->>C: store, LRU, max 500 keys
+    end
+
+    rect rgb(220, 252, 231)
+        Note over F: The part Zabbix cannot do
+        F->>F: resolveSite(): tag, then host name,<br/>then inventory, then group
+        F->>F: roll hosts up per site, worst severity wins
+    end
+
+    F-->>N: 200 application/json<br/>content-encoding: br
+    N-->>B: same, unbuffered
+
+    rect rgb(254, 226, 226)
+        Note over F,Z: When Zabbix does not cooperate
+        Z--xF: token rejected → 503 zabbix_auth<br/>"fix the token", not an opaque 500
+        Z--xF: no answer in ZABBIX_TIMEOUT_MS → 503 zabbix_timeout
+        Z--xF: JSON-RPC error → 502 zabbix_error, carrying Zabbix's own words
+        Note over F: the address in ZBX_URL goes to the log,<br/>never into the response body
+    end
+
+    rect rgb(237, 233, 254)
+        Note over B,Z: The one write to Zabbix, for comparison
+        B->>F: POST /api/problems/acknowledge, operator only<br/>the cookie plus X-HCML-CSRF: 1
+        F->>Z: event.acknowledge, on the SEPARATE write token
+        F->>C: invalidate("problems", holdMs)
+        F->>B: push the new list to every open screen at once
+    end
+
+    rect rgb(226, 232, 240)
+        Note over B,S: The report by email: administrators only, and off until MAIL_ is set
+        B->>F: POST /api/sli/email<br/>the cookie plus X-HCML-CSRF: 1
+        F->>F: month, files and addresses checked: one to ten,<br/>inside MAIL_ALLOWED_DOMAINS, five sends an hour each
+        F->>M: log in first, so a wrong password<br/>fails in a second
+        F->>C: the month's SLA, both methods<br/>from the cache, or from Zabbix on a miss
+        F->>M: one message: the figures in the text,<br/>the files attached
+        F->>S: the record of the send: counts and a word,<br/>never an address
+        F-->>B: how many addresses the mail server took
+        Note over F,S: On the chosen day the scheduler does the same without a browser,<br/>and saves each step to the state file before the next
+    end
+%% source-hash: 526379aafdcb

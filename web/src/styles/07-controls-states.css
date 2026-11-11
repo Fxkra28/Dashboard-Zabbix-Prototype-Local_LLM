@@ -1,0 +1,236 @@
+/* Controls */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-3);
+  align-items: end;
+  margin-bottom: var(--s-4);
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+}
+.field label,
+.field .field-label {
+  font-size: var(--t-sm);
+  color: var(--muted);
+  font-weight: var(--w-semibold);
+}
+/* A checkbox filter in a controls row, as tall as the fields beside it. */
+.filter-check {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--control-md);
+  cursor: pointer;
+}
+.filter-check input {
+  width: 16px;
+  height: 16px;
+  min-width: auto;
+}
+select,
+input,
+button {
+  font-family: inherit;
+  font-size: var(--t-md);
+}
+select,
+input[type='text'],
+input[type='password'] {
+  min-height: var(--control-md);
+  padding: var(--s-1) var(--s-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  min-width: 200px;
+  color: var(--text);
+}
+/* Chrome's own placeholder grey is 3.78:1 on the dark panel; --muted is 5.96:1 on white and 7.17:1 there. */
+input::placeholder,
+textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+select:focus,
+input:focus {
+  border-color: var(--mid);
+  box-shadow: var(--focus-ring);
+}
+button.btn,
+a.btn {
+  min-height: var(--control-md);
+  padding: var(--s-1) var(--s-4);
+  border-radius: var(--r-md);
+  border: 1px solid var(--primary);
+  background: var(--primary);
+  color: var(--on-primary);
+  font-weight: var(--w-semibold);
+  cursor: pointer;
+}
+button.btn.ghost,
+a.btn.ghost {
+  background: var(--surface);
+  color: var(--primary);
+}
+button.btn:hover,
+a.btn:hover {
+  filter: brightness(1.05);
+}
+/* For what the portal cannot take back, such as closing a problem; tokens.check measures its ink. */
+button.btn.danger,
+a.btn.danger {
+  background: var(--danger-text);
+  border-color: var(--danger-text);
+  color: var(--on-primary);
+}
+
+/* One disabled look. A disabled checkbox's words turn muted, not dim, since one of them says why. */
+button.btn:disabled,
+button.btn[aria-disabled='true'],
+.type-tile:disabled,
+.seg button:disabled,
+select:disabled,
+input:disabled,
+textarea:disabled {
+  opacity: var(--disabled-opacity);
+  cursor: default;
+}
+.check.disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+/* States */
+.state {
+  padding: var(--s-10);
+  text-align: center;
+  color: var(--muted);
+}
+.state.error {
+  color: var(--danger-text);
+}
+/* The lines of a state message (shared/components/states.tsx, ErrorBoundary, NotFound). */
+.state-title {
+  font-weight: var(--w-semibold);
+}
+.state-detail {
+  margin-top: var(--s-2);
+}
+.state-label,
+.state-hint {
+  margin-top: var(--s-2-5);
+}
+.state-hint {
+  font-size: var(--t-sm);
+}
+.state-action {
+  margin-top: var(--s-4);
+}
+.spinner {
+  width: 22px;
+  height: 22px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin var(--dur-spin) linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.muted {
+  color: var(--muted);
+}
+.mono {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-sm);
+}
+
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1-5);
+  font-size: var(--t-sm);
+}
+.live .dot {
+  background: var(--good);
+  box-shadow: 0 0 0 3px var(--good-glow);
+}
+.live.off .dot {
+  background: var(--muted);
+  box-shadow: none;
+}
+/* The data on screen is older than a wall screen may show without saying so. */
+.live.late {
+  color: var(--warn-text);
+  font-weight: var(--w-semibold);
+}
+.live.late .dot {
+  background: var(--warn);
+  box-shadow: none;
+}
+.live-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-3);
+}
+.live-age {
+  color: var(--muted);
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Device grid (network) */
+.device-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--s-3);
+}
+.device {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: var(--s-3);
+  background: var(--surface);
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  border-left: 4px solid var(--muted);
+  transition: transform var(--dur-1) var(--ease-out);
+}
+.device:hover {
+  transform: translateY(-2px);
+}
+.device.up {
+  border-left-color: var(--good);
+}
+.device.down {
+  border-left-color: var(--danger);
+}
+/* A ring made of shadow, not outline: the keyboard focus ring is an outline, and on a selected card it
+   would otherwise replace the selection and look the same as it. The offset puts it outside the ring. */
+.device.sel {
+  box-shadow: var(--shadow), 0 0 0 2px var(--mid);
+}
+.device.sel:focus-visible {
+  outline-offset: 4px;
+}
+.device .name {
+  font-weight: var(--w-semibold);
+  font-size: var(--t-md);
+  margin-bottom: var(--s-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.device .meta {
+  font-size: var(--t-sm);
+  color: var(--muted);
+  display: flex;
+  gap: var(--s-3);
+  margin-top: var(--s-2);
+}
+

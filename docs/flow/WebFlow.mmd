@@ -1,0 +1,146 @@
+---
+title: "HCML Monitoring Portal: Web flow (the browser)"
+config:
+  layout: elk
+  elk:
+    mergeEdges: false
+    nodePlacementStrategy: BRANDES_KOEPF
+---
+flowchart TB
+
+    %%  Web flow: what happens in the browser, from the first byte
+    %%  nginx serves to the moment a page has data on screen.
+
+    %%  Amber  runs in the browser.
+    %%  Green  the portal's own BFF, same origin, behind /bff.
+    %%  Grey   a decision, a guard, or a boundary.
+
+    %%  Nothing here ever holds a Zabbix or model credential. Every call
+    %%  goes to /bff. The portal JWT rides in an httpOnly cookie that no
+    %%  script on the page can read (ADR-0010); it only proves who the
+    %%  user is to the portal and grants nothing in Zabbix.
+
+    %%  Two arrows were corrected against the code and must stay this
+    %%  way. (1) The stream is opened by the Dashboard, not the shell:
+    %%  useSSE has exactly one call site, Overview.tsx, and navigating
+    %%  away closes the connection. The Problems page does not stream at
+    %%  all: it polls every 30 s. (2) There is no ExplainPanel ->
+    %%  markdown arrow: ExplainPanel renders its fields as plain <p>
+    %%  paragraphs and never imports the renderer. The Assistant is its
+    %%  only consumer.
+
+    %%  Note also that stage 2's "signed in?" diamond is not implemented
+    %%  as a route guard. No component reads the role and redirects; the
+    %%  automatic paths to /login are the api client reacting to a 401, to a
+    %%  sign-out in another tab, or to a page Back restores after one, so
+    %%  an unauthenticated visitor sees the chrome for one round trip.
+
+    %%  The Email report and Schedule dialogs sit on the two SLA pages.
+    %%  An administrator sees them only when GET /api/sli/email says
+    %%  email is on; for everyone else the buttons are not drawn.
+
+    subgraph W1["1 &middot; Boot"]
+        HTML["<b>index.html</b><br>served by nginx from the static build<br>Cache-Control: no-cache"]
+        MAIN["<b>main.tsx</b><br>React 18 root"]
+        APP["<b>App.tsx</b><br>BrowserRouter &middot; 19 pages<br>every page is lazy()"]
+        CHUNK["<b>page chunk</b><br>fetched on first visit only<br>1 to 28 kB &middot; /assets/ cached 1 year"]
+
+        HTML --> MAIN --> APP --> CHUNK
+    end
+
+    subgraph W2["2 &middot; Who is this?"]
+        ME["<b>useAuth</b><br>GET /api/auth/me<br>one shared probe per tab"]
+        HASROLE{"signed in?"}
+        LOGIN["<b>Login.tsx</b><br>POST /api/auth/login<br>with X-HCML-CSRF: 1"]
+        COOKIE["<b>session cookie</b><br>hcml_session &middot; a 12 h JWT<br>httpOnly &middot; SameSite=Strict<br>scripts cannot read it"]
+        LAYOUT["<b>Layout + Sidebar</b><br>nav filtered by role<br>viewer &middot; operator &middot; admin"]
+
+        ME --> HASROLE
+        HASROLE -->|"no"| LOGIN
+        LOGIN --> COOKIE
+        COOKIE --> ME
+        HASROLE -->|"yes"| LAYOUT
+    end
+
+    subgraph W3["3 &middot; A page asks for data"]
+        PAGE["<b>the page</b><br>Dashboard, Problems, Sites, &hellip;"]
+        ASYNC["<b>useAsync(fn, deps, intervalMs)</b><br>loading &middot; error &middot; stale &middot; updatedAt"]
+        GUARD["only the newest run may write state:<br>a slow answer for an old selection<br>is aborted, not painted"]
+        POLL["<b>sequential polling</b><br>the next poll is scheduled only once<br>the last has settled &middot; paused while<br>the tab is hidden"]
+        APICALL["<b>api/client.ts request()</b><br>fetch /bff/api/&hellip;<br>the cookie rides along<br>POST: X-HCML-CSRF: 1"]
+
+        PAGE --> ASYNC
+        ASYNC --> GUARD
+        ASYNC --> POLL
+        ASYNC --> APICALL
+    end
+
+    subgraph W4["4 &middot; Live, without polling"]
+        SSE["<b>useSSE</b><br>EventSource /bff/api/stream<br>no token in the URL:<br>the cookie rides along"]
+        FRAMES["<b>frames</b><br>problems &middot; error &middot; keep-alive"]
+        HIDDEN["closed while the tab is hidden,<br>reopened on return"]
+
+        SSE --> FRAMES
+        SSE --> HIDDEN
+    end
+
+    subgraph W5["5 &middot; On demand only"]
+        EXPLAIN["<b>ExplainPanel</b><br>GET /api/explain/problem<br>never called on page load<br>renders plain paragraphs, not markdown"]
+        CHATP["<b>Assistant</b><br>POST /api/chat<br>body read as a stream, frame by frame"]
+        MD["<b>features/assistant/parseMarkdown.ts</b><br>141 lines, hand-rolled: the Assistant's<br>answers are the only markdown here"]
+        ACK["<b>AckDialog</b><br>POST /api/problems/acknowledge<br>operator role<br>the only write to Zabbix"]
+        MAILD["<b>Email report, Schedule</b><br>POST /api/sli/email<br>PUT /api/sli/schedule<br>administrator role<br>drawn only when the server<br>says email is on"]
+
+        CHATP --> MD
+    end
+
+    subgraph W6["6 &middot; When it goes wrong"]
+        R401{"401?"}
+        SIGNOUT["forget the session<br>redirect to /login"]
+        TYPED["<b>typed message</b><br>the BFF names what to fix;<br>show that, not the status code"]
+        BOUNDARY["<b>ErrorBoundary</b><br>a thrown render keeps<br>the rest of the app alive"]
+
+        R401 -->|"yes"| SIGNOUT
+        R401 -->|"no"| TYPED
+    end
+
+    BFF["<b>/bff</b><br>nginx reverse-proxies to portal-bff<br>see ServerFlow"]
+
+    CHUNK --> ME
+    LAYOUT --> PAGE
+    PAGE -->|"Dashboard only"| SSE
+    PAGE --> EXPLAIN
+    PAGE --> ACK
+    PAGE -->|"SLA pages only"| MAILD
+    PAGE --> BOUNDARY
+    APICALL --> R401
+    APICALL -.-> BFF
+    SSE -.-> BFF
+    CHATP -.-> BFF
+    ACK -.-> BFF
+    MAILD -.-> BFF
+
+    %% Frames must stay unfilled or they paint over the relationship lines.
+
+    classDef browser fill:#fef3c7,stroke:#d97706,color:#451a03
+    classDef server  fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef choice  fill:#e2e8f0,stroke:#475569,color:#0f172a
+    classDef written fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+
+    style W1 fill:none,stroke:#94a3b8
+    style W2 fill:none,stroke:#94a3b8
+    style W3 fill:none,stroke:#94a3b8
+    style W4 fill:none,stroke:#94a3b8
+    style W5 fill:none,stroke:#94a3b8
+    style W6 fill:none,stroke:#94a3b8
+
+    class HTML,MAIN,APP,CHUNK browser
+    class ME,LOGIN,COOKIE,LAYOUT browser
+    class PAGE,ASYNC,POLL,APICALL browser
+    class SSE,FRAMES,EXPLAIN,CHATP,MD,MAILD browser
+    class SIGNOUT,TYPED,BOUNDARY browser
+
+    class ACK written
+    class BFF server
+    class HASROLE,R401,GUARD,HIDDEN choice
+%% source-hash: efd65b6a8449

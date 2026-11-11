@@ -1,0 +1,11 @@
+# Keep the host's platform-specific modules and any real credentials out of the
+# build context. The Dockerfile copies only package files, tsconfig and src, but
+# a smaller context is faster and this makes the exclusion explicit.
+node_modules
+dist
+
+*.tsbuildinfo
+.env
+.env.*
+*.log
+.DS_Store

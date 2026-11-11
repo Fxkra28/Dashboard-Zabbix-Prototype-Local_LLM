@@ -1,0 +1,354 @@
+/* Login */
+.login-wrap {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  /* A margin to each edge: at 320 and 360 px the card would otherwise touch the screen. */
+  padding: var(--s-4);
+  background: var(--chrome);
+}
+.login-card {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  padding: var(--s-8);
+  width: 100%;
+  max-width: 360px;
+  box-shadow: var(--e-3);
+}
+.login-card h1 {
+  font-size: var(--t-xl);
+  margin: 0 0 var(--s-1);
+}
+.login-card p {
+  color: var(--muted);
+  font-size: var(--t-base);
+  margin: 0 0 var(--s-5);
+}
+.login-card .field {
+  margin-bottom: var(--s-3);
+}
+.login-card input {
+  width: 100%;
+}
+.login-card button {
+  width: 100%;
+  margin-top: var(--s-1-5);
+}
+.login-error {
+  color: var(--danger-text);
+  font-size: var(--t-base);
+  margin-top: var(--s-2-5);
+  /* An address of 254 characters has no place to break: let it wrap in a narrow dialog. */
+  overflow-wrap: anywhere;
+}
+
+/* Plain-language layer */
+button.btn.sm,
+a.btn.sm {
+  min-height: var(--control-sm);
+  padding: var(--s-1) var(--s-3);
+  font-size: var(--t-sm);
+  font-weight: var(--w-semibold);
+  white-space: nowrap;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+}
+.panel-head h2 {
+  margin: 0;
+}
+
+/* Slide-over used by the Explain panels */
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  display: flex;
+  justify-content: flex-end;
+  z-index: var(--z-overlay);
+}
+.drawer {
+  background: var(--surface);
+  width: min(480px, 100%);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--e-drawer);
+  animation: slide-in var(--dur-2) var(--ease-out);
+}
+@keyframes slide-in {
+  from {
+    transform: translateX(24px);
+    opacity: 0.4;
+  }
+}
+.drawer-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-5) var(--s-3);
+  border-bottom: 1px solid var(--border);
+}
+.drawer-head h2 {
+  margin: 0 0 var(--s-1-5);
+  font-size: var(--t-lg);
+  font-weight: var(--w-semibold);
+}
+.drawer-sub {
+  font-size: var(--t-base);
+  line-height: var(--lh-body);
+}
+.drawer-close {
+  border: none;
+  background: none;
+  font-size: var(--t-2xl);
+  line-height: var(--lh-solid);
+  color: var(--muted);
+  cursor: pointer;
+  /* The cross alone is 14 px wide, under the 24 px a target needs. */
+  min-width: var(--target-min);
+  min-height: var(--target-min);
+  padding: 0 var(--s-1);
+}
+.drawer-close:hover {
+  color: var(--text);
+}
+.drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--s-1-5) var(--s-5) var(--s-5);
+}
+.drawer-foot {
+  border-top: 1px solid var(--border);
+  padding: var(--s-3) var(--s-5);
+  font-size: var(--t-xs);
+  color: var(--muted);
+  line-height: var(--lh-body);
+}
+
+.explain-section {
+  margin-top: var(--s-4);
+}
+.explain-section h3 {
+  margin: 0 0 var(--s-1-5);
+  font-size: var(--t-xs);
+  font-weight: var(--w-bold);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.explain-section p {
+  margin: 0 0 var(--s-2);
+  font-size: var(--t-md);
+  line-height: var(--lh-loose);
+}
+.explain-lead {
+  font-size: var(--t-lg) !important;
+  font-weight: var(--w-medium);
+}
+.explain-action {
+  background: var(--tint);
+  border-left: 3px solid var(--primary);
+  border-radius: 0 var(--r-md) var(--r-md) 0;
+  padding: var(--s-2-5) var(--s-3);
+}
+
+.tag-glossary {
+  margin: 0;
+}
+.tag-glossary > div {
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+.tag-glossary > div:last-child {
+  border-bottom: none;
+}
+.tag-glossary dt {
+  margin-bottom: var(--s-1);
+}
+.tag-glossary dd {
+  margin: 0;
+  font-size: var(--t-base);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+
+/* Services → SLA */
+.sla-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1-5);
+}
+.sla-item {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: var(--s-0-5);
+  text-align: left;
+  padding: var(--s-2-5) var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  cursor: pointer;
+}
+.sla-item:hover {
+  border-color: var(--mid);
+}
+.sla-item.sel {
+  border-color: var(--primary);
+  background: var(--tint);
+}
+.sla-item .name {
+  font-weight: var(--w-semibold);
+  font-size: var(--t-base);
+}
+.sla-item .muted {
+  font-size: var(--t-sm);
+}
+.sla-over {
+  color: var(--danger-text);
+  font-weight: var(--w-semibold);
+}
+
+/* Modal (acknowledge / close write-back) */
+.drawer-overlay:has(.modal) {
+  align-items: center;
+  justify-content: center;
+}
+.modal {
+  background: var(--surface);
+  width: min(480px, calc(100% - 32px));
+  max-height: calc(100% - 64px);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  box-shadow: var(--e-3);
+  animation: modal-in var(--dur-2) var(--ease-out);
+}
+@keyframes modal-in {
+  from {
+    transform: translateY(8px) scale(0.99);
+    opacity: 0;
+  }
+}
+.modal-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2) var(--s-3);
+}
+/* The main button stays at the right edge when the row has to wrap. */
+.modal-foot > :last-child:not(:first-child) {
+  margin-left: auto;
+}
+.saved-list {
+  margin-top: var(--s-3);
+}
+.saved-list-items {
+  list-style: none;
+  margin: var(--s-2) 0;
+  padding: 0;
+}
+.saved-list-items li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  padding: var(--s-1) 0;
+  /* An address of 254 characters has no place to break: let it wrap in a narrow dialog. */
+  overflow-wrap: anywhere;
+}
+.saved-list-add {
+  display: flex;
+  gap: var(--s-2);
+  margin: var(--s-2) 0;
+}
+.saved-list-add input {
+  flex: 1;
+  min-width: 0;
+}
+.saved-list-ask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+  margin: var(--s-2) 0;
+}
+.saved-list-ask p {
+  flex-basis: 100%;
+  margin: 0;
+}
+.modal textarea {
+  font-family: inherit;
+  font-size: var(--t-md);
+  padding: var(--s-2) var(--s-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  resize: vertical;
+  width: 100%;
+  color: var(--text);
+}
+.modal textarea:focus {
+  border-color: var(--mid);
+  box-shadow: var(--focus-ring);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  padding: var(--s-1-5) 0;
+  font-size: var(--t-base);
+  cursor: pointer;
+}
+.check input {
+  width: 16px;
+  height: 16px;
+  min-width: auto;
+  margin: 0;
+}
+
+/* Notices */
+.notice {
+  background: var(--tint);
+  border: 1px solid var(--tint-line);
+  border-left: 3px solid var(--primary);
+  border-radius: var(--r-md);
+  padding: var(--s-2-5) var(--s-3);
+  margin-bottom: var(--s-4);
+  font-size: var(--t-sm);
+  line-height: var(--lh-body);
+  color: var(--text);
+}
+.notice.warn {
+  background: var(--warn-bg);
+  border-color: var(--warn-line);
+  border-left-color: var(--warn);
+}
+
+/* Role chip (RBAC) */
+.role-chip {
+  text-transform: uppercase;
+  letter-spacing: var(--track-caps);
+  font-size: var(--t-xs);
+  font-weight: var(--w-bold);
+  padding: var(--s-0-5) var(--s-2);
+  border-radius: var(--r-sm);
+  background: var(--neutral-bg);
+  color: var(--neutral-text);
+}
+.role-chip.admin {
+  background: var(--tint);
+  color: var(--primary-strong);
+}
+.role-chip.operator {
+  background: var(--good-bg);
+  color: var(--good-text);
+}
+

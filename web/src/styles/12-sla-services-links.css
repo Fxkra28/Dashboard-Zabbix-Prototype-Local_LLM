@@ -1,0 +1,212 @@
+/* Derived SLA, services, availability, capacity, sites, links          */
+/* (SLI engine web views: Phases 3, 4, 7)                              */
+
+/* Neutral "no data": never green, never red */
+.pill.nodata {
+  color: var(--muted);
+  background: var(--surface-2);
+  border-color: var(--border);
+  border-style: dashed;
+  font-weight: var(--w-semibold);
+}
+.sli-partial {
+  margin-left: var(--s-0-5);
+  opacity: 0.7;
+}
+.sli-cov {
+  font-size: var(--t-sm);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.sli-cov.low {
+  color: var(--warn-text);
+  font-weight: var(--w-semibold);
+}
+.nowrap {
+  white-space: nowrap;
+}
+
+/* Banner, method note, gaps note */
+.sli-banner strong {
+  font-weight: var(--w-semibold);
+}
+.sli-method-note {
+  margin: calc(var(--s-1-5) * -1) 0 var(--s-3);
+  font-size: var(--t-sm);
+  line-height: var(--lh-body);
+  color: var(--muted);
+}
+.sli-method-note strong {
+  color: var(--text);
+  font-weight: var(--w-semibold);
+}
+.sli-gaps {
+  background: var(--surface-2);
+  border-color: var(--border);
+  border-left-color: var(--border-strong);
+}
+.sli-source-note {
+  font-size: var(--t-sm);
+  margin-bottom: var(--s-3);
+}
+.sli-tabs {
+  margin-bottom: var(--s-4);
+}
+.sli-tabs button {
+  min-height: var(--control-md);
+  padding: var(--s-1) var(--s-4);
+  font-size: var(--t-base);
+}
+
+/* Grid tracks must be allowed to shrink so wide tables scroll inside them */
+.sli-grid > * {
+  min-width: 0;
+}
+.sli-grid:not(.two-col) {
+  grid-template-columns: minmax(0, 1fr);
+}
+.two-col.sli-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+@media (max-width: 1099.98px) {
+  .two-col.sli-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.kpis.sli-kpis {
+  grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr));
+}
+@media (min-width: 1100px) {
+  .two-col.sli-grid.sli-grid-wide {
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  }
+}
+
+/* Denser tables for long lists */
+table.data.compact td {
+  padding: var(--s-2) var(--s-2-5);
+}
+table.data.compact th {
+  padding: var(--s-2) var(--s-2-5);
+}
+.sli-scroll {
+  max-height: 620px;
+  overflow: auto;
+}
+.sli-scroll thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: var(--z-head);
+}
+.th-sort {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  /* A 24 px target (WCAG 2.2); the margin leaves the header as tall as before. */
+  min-height: var(--target-min);
+  line-height: var(--target-min);
+  margin: calc(var(--s-1) * -1) 0;
+}
+.th-sort:hover,
+.th-sort.on {
+  color: var(--text);
+}
+input[type='text'].sli-search {
+  min-width: 0;
+  width: 220px;
+  max-width: 100%;
+  padding: var(--s-1) var(--s-2-5);
+  font-size: var(--t-base);
+}
+
+/* WAN path legs */
+.sli-legs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-1-5);
+}
+.sli-leg {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1-5);
+  font-size: var(--t-sm);
+  padding: var(--s-0-5) var(--s-0-5) var(--s-0-5) var(--s-2);
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  max-width: 100%;
+}
+.sli-leg-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+/* Services: subtle kind label on derived nodes */
+.svc-kind {
+  font-size: var(--t-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--track-caps);
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xs);
+  padding: 0 var(--s-1);
+  white-space: nowrap;
+}
+
+/* Sites: where a host's site came from */
+.site-src {
+  font-size: var(--t-xs);
+  white-space: nowrap;
+  color: var(--muted);
+}
+.site-src.tag,
+.site-src.inventory {
+  color: var(--good-text);
+}
+.site-src.group {
+  color: var(--warn-text);
+}
+
+/* Links: path cards never wider than the screen */
+.path-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
+}
+.path-head {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 639.98px) {
+  .sli-method-note {
+    margin-top: 0;
+  }
+  .sli-scroll {
+    max-height: none;
+  }
+  .svc-row {
+    flex-wrap: wrap;
+  }
+  .svc-main,
+  .svc-right {
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+  .svc-right {
+    flex-basis: 100%;
+    padding-left: var(--s-12);
+  }
+  .kpis.sli-kpis {
+    grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
+  }
+  .site-grid {
+    grid-template-columns: repeat(auto-fill, minmax(min(240px, 100%), 1fr));
+  }
+}
+

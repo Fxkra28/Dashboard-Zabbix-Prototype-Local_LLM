@@ -1,0 +1,15 @@
+# The web Dockerfile does `COPY . .` after installing dependencies inside the
+# image. Without this file the host's node_modules, built for the developer's
+# platform, typically darwin/arm64 is copied over the linux one npm just
+# installed, and `vite build` fails on Rolldown's platform binaries.
+node_modules
+dist
+
+# Build artifacts and local config that must never enter an image.
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+.env
+.env.*
+*.log
+.DS_Store

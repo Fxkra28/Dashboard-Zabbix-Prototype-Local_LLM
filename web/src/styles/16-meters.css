@@ -1,0 +1,222 @@
+/* Dashboard views: the Overview and the internet traffic meters, as the pages of a Zabbix dashboard. */
+.dash-tabs {
+  margin-bottom: var(--s-4);
+}
+.dash-tabs button {
+  min-height: var(--control-md);
+  padding: var(--s-1) var(--s-4);
+  font-size: var(--t-base);
+}
+
+/* Internet traffic meters: one gauge for each gauge widget of HCML's Zabbix dashboard. */
+.meters-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-4);
+  margin-bottom: var(--s-3);
+}
+.meters-head h2 {
+  margin: 0;
+}
+.meters-summary {
+  margin: 0;
+  font-size: var(--t-sm);
+}
+.meters-page {
+  font-size: var(--t-sm);
+}
+.meters-updated {
+  margin-left: auto;
+  font-size: var(--t-sm);
+  font-variant-numeric: tabular-nums;
+}
+.meters-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: var(--s-3);
+}
+.meters-grid > li {
+  display: flex;
+  min-width: 0;
+}
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  width: 100%;
+  min-width: 0;
+  padding: var(--s-3);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+.meter-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-2);
+  min-width: 0;
+}
+.meter-title {
+  margin: 0;
+  min-width: 0;
+  /* A cut like "SITE TWO INTER…" cannot tell the first link from the second, so the title wraps to a second line first. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: var(--t-sm);
+  font-weight: var(--w-bold);
+}
+.meter-title a {
+  color: inherit;
+  text-decoration: none;
+}
+.meter-title a:hover {
+  text-decoration: underline;
+}
+/* The title clips what overflows it, so the focus ring sits inside the link and is not cut off. */
+.meter-title a:focus-visible {
+  outline-offset: -2px;
+}
+.meter-dir {
+  flex: none;
+  padding: 0 var(--s-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-pill);
+  color: var(--muted);
+  font-size: var(--t-xs);
+}
+.meter-dial {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.meter-plain {
+  justify-content: center;
+  flex: 1;
+  min-height: var(--s-10);
+}
+.gauge-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+/* The frame keeps the band's edge at 3:1 whatever colour a zone has (WCAG 1.4.11), and the words under the dial carry the zone. */
+.gauge-frame {
+  fill: none;
+  stroke: var(--border-strong);
+}
+.gauge-zone {
+  fill: none;
+}
+.gauge-zone.none {
+  stroke: var(--border);
+}
+.gauge-zone.low {
+  stroke: var(--mid);
+}
+.gauge-zone.ok {
+  stroke: var(--good);
+}
+.gauge-zone.warn {
+  stroke: var(--warn);
+}
+.gauge-zone.critical {
+  stroke: var(--danger);
+}
+.gauge-gap {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+.gauge-needle {
+  stroke: var(--text);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.gauge-hub {
+  fill: var(--text);
+}
+.gauge-tick {
+  fill: var(--muted);
+  font-family: var(--sans);
+}
+.meter-value {
+  font-size: var(--t-xl);
+  font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--lh-tight);
+}
+.meter-foot {
+  margin: 0;
+  text-align: center;
+  font-size: var(--t-sm);
+  color: var(--muted);
+}
+.meter.zone-warn .meter-foot {
+  color: var(--warn-text);
+  font-weight: var(--w-semibold);
+}
+.meter.zone-critical .meter-foot {
+  color: var(--danger-text);
+  font-weight: var(--w-semibold);
+}
+/* The other direction, written only when it is High or Critical. */
+.meter-other {
+  margin: 0;
+  text-align: center;
+  font-size: var(--t-sm);
+  font-weight: var(--w-semibold);
+}
+.meter-other.other-warn {
+  color: var(--warn-text);
+}
+.meter-other.other-critical {
+  color: var(--danger-text);
+}
+/* A tile that needs a look has an edge, as its text is too small to read from across a room: red for a Critical gauge, a Critical other direction or a link that is down, amber for a High other direction. */
+.meter.flag-warn {
+  border-color: var(--warn);
+  box-shadow: inset 5px 0 0 var(--warn);
+}
+.meter.flag-critical,
+.meter.zone-critical,
+.meter.meter-down {
+  border-color: var(--danger);
+  box-shadow: inset 5px 0 0 var(--danger);
+}
+/* A link that is down: the dial keeps its frame and zones, dimmed and with no needle, and the value is the word Down. */
+.meter-down .gauge-zone {
+  opacity: 0.4;
+}
+.meter-down .meter-value,
+.meter-down .meter-foot {
+  color: var(--danger-text);
+}
+.meter-down .meter-foot {
+  font-weight: var(--w-semibold);
+}
+/* A reading that is not current, or none: the dial is dimmed and the value is quiet, and the line under it says why. */
+.meter-stale .gauge-zone,
+.meter-nodata .gauge-zone {
+  opacity: 0.4;
+}
+.meter-stale .gauge-needle {
+  stroke: var(--muted);
+}
+.meter-stale .gauge-hub {
+  fill: var(--muted);
+}
+.meter-stale .meter-value,
+.meter-nodata .meter-value,
+.meter-unsupported .meter-value,
+.meter-missing .meter-value {
+  color: var(--muted);
+}
+

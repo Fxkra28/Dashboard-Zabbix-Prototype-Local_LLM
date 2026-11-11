@@ -1,0 +1,455 @@
+---
+title: "HCML Monitoring Portal: database ERD"
+config:
+  layout: elk
+  elk:
+    mergeEdges: false
+    nodePlacementStrategy: BRANDES_KOEPF
+---
+erDiagram
+    direction TB
+
+    %%  The MySQL tables behind the portal, and every foreign key between
+    %%  them. The portal itself owns no database: it reaches all of this
+    %%  through the Zabbix API. Logical model: ERD-Mermaid.mmd.
+
+    %%  Generated on 15 Sep 2026 from information_schema of the live
+    %%  database (Zabbix 7.0.30 on MySQL 8.0), metadata only, no rows.
+    %%  That schema is identical to the stock 7.0.30 create.sql.
+    %%  45 of its 203 tables are shown; readable version: ERD-Database.md
+
+    %%  Lines:   solid   a FOREIGN KEY constraint, labelled with its column
+    %%           dashed  related in the data only, MySQL enforces nothing
+    %%  Colour:  blue    rows come back to the portal from an API call
+    %%           purple  written by event.acknowledge
+    %%           grey    read inside Zabbix, never returned to the portal
+    %%  Every bigint here is bigint unsigned.
+
+    subgraph D_HOSTS["Hosts &amp; Inventory"]
+        hosts {
+            bigint hostid PK
+            varchar(128) host "technical name, map labels only"
+            varchar(128) name "visible name"
+            int status "0 monitored, 1 not monitored, 3 template"
+            int flags "0 plain, 2 prototype, 4 discovered"
+            int maintenance_status "1 in maintenance"
+            text description
+        }
+        interface {
+            bigint interfaceid PK
+            bigint hostid FK
+            int main "1 the default interface"
+            int type "1 agent, 2 SNMP, 3 IPMI, 4 JMX"
+            int useip "1 connect by IP"
+            varchar(64) ip
+            varchar(255) dns
+            int available "0 unknown, 1 up, 2 down"
+        }
+        host_inventory {
+            bigint hostid PK,FK "no row when inventory is disabled"
+            int inventory_mode "0 manual, 1 automatic"
+            varchar(128) site_city
+            text location
+            varchar(128) poc_1_name
+            varchar(128) poc_1_email
+            text notes
+        }
+        host_tag {
+            bigint hosttagid PK
+            bigint hostid FK
+            varchar(255) tag "site, owner, criticality"
+            varchar(255) value
+        }
+        hosts_groups {
+            bigint hostgroupid PK
+            bigint hostid FK
+            bigint groupid FK
+        }
+        hstgrp {
+            bigint groupid PK
+            varchar(255) name
+            int type "0 host group, 1 template group"
+        }
+
+        hosts                ||--o{ interface            : "hostid, cascade"
+        hosts                ||--o| host_inventory       : "hostid, cascade"
+        hosts                ||--o{ host_tag             : "hostid"
+        hosts                ||--o{ hosts_groups         : "hostid, cascade"
+        hstgrp               ||--o{ hosts_groups         : "groupid, cascade"
+    end
+
+    subgraph D_ITEMS["Items"]
+        items {
+            bigint itemid PK
+            bigint hostid FK
+            bigint interfaceid FK
+            varchar(255) name
+            varchar(2048) key_
+            int value_type "picks the history and trend table"
+            varchar(255) units
+            int status "0 enabled, 1 disabled"
+        }
+        item_rtdata {
+            bigint itemid PK,FK
+            int state "0 normal, 1 not supported"
+            varchar(2048) error
+        }
+        item_tag {
+            bigint itemtagid PK
+            bigint itemid FK
+            varchar(255) tag "link_group, link_role"
+            varchar(255) value
+        }
+
+        items                ||--o| item_rtdata          : "itemid, cascade"
+        items                ||--o{ item_tag             : "itemid"
+    end
+
+    subgraph D_STORAGE["History &amp; trends"]
+        history {
+            bigint itemid PK "no FK to items"
+            int clock PK
+            int ns PK
+            double value
+        }
+        history_uint {
+            bigint itemid PK "no FK to items"
+            int clock PK
+            int ns PK
+            bigint value
+        }
+        history_str {
+            bigint itemid PK "no FK to items"
+            int clock PK
+            int ns PK
+            varchar(255) value
+        }
+        history_log {
+            bigint itemid PK "no FK to items"
+            int clock PK
+            int ns PK
+            text value
+        }
+        history_text {
+            bigint itemid PK "no FK to items"
+            int clock PK
+            int ns PK
+            text value
+        }
+        trends {
+            bigint itemid PK "no FK to items"
+            int clock PK "start of the hour"
+            int num "values in that hour"
+            double value_min
+            double value_avg
+            double value_max
+        }
+        trends_uint {
+            bigint itemid PK "no FK to items"
+            int clock PK "start of the hour"
+            int num "values in that hour"
+            bigint value_min
+            bigint value_avg
+            bigint value_max
+        }
+    end
+
+    subgraph D_EVENTS["Triggers, events &amp; problems"]
+        triggers {
+            bigint triggerid PK
+            varchar(2048) expression "refers to items through functions"
+            int manual_close "1 Close permitted"
+            varchar(255) opdata "template behind problem opdata"
+        }
+        functions {
+            bigint functionid PK
+            bigint itemid FK
+            bigint triggerid FK
+        }
+        events {
+            bigint eventid PK
+            int source "0 triggers, 4 services"
+            int object "0 trigger, 4 item, 5 LLD rule, 6 service"
+            bigint objectid "no FK, object says what it points at"
+            int clock
+            int value "1 problem, 0 recovery"
+            int acknowledged "set by event.acknowledge"
+            varchar(2048) name
+            int severity "0 to 5"
+        }
+        event_recovery {
+            bigint eventid PK,FK "the problem event"
+            bigint r_eventid FK "the event that resolved it"
+            bigint c_eventid FK "the correlation event, if any"
+        }
+        problem {
+            bigint eventid PK,FK
+            int object
+            bigint objectid "no FK"
+            int clock
+            bigint r_eventid FK "NULL while open"
+            int r_clock
+            bigint cause_eventid FK "set when this is a symptom"
+            varchar(2048) name
+            int acknowledged "set by event.acknowledge"
+            int severity
+        }
+        problem_tag {
+            bigint problemtagid PK
+            bigint eventid FK
+            varchar(255) tag
+            varchar(255) value
+        }
+
+        triggers             ||--o{ functions            : "triggerid"
+        events               ||--o| event_recovery       : "eventid, cascade"
+        events               ||--o{ event_recovery       : "r_eventid, cascade"
+        events               |o--o{ event_recovery       : "c_eventid, cascade"
+        events               ||--o| problem              : "eventid, cascade"
+        events               |o--o{ problem              : "r_eventid, cascade"
+        events               |o--o{ problem              : "cause_eventid"
+        problem              ||--o{ problem_tag          : "eventid, cascade"
+        triggers             |o..o{ events               : "objectid when object=0, no FK"
+        triggers             |o..o{ problem              : "objectid when object=0, no FK"
+    end
+
+    subgraph D_WRITES["Acknowledge writes"]
+        acknowledges {
+            bigint acknowledgeid PK
+            bigint userid FK "the API token user"
+            bigint eventid FK
+            int clock
+            varchar(2048) message
+            int action "bitmask 1 close, 2 ack, 4 message"
+        }
+        task {
+            bigint taskid PK
+            int type "1 close problem, 4 acknowledge"
+            int status
+            int clock
+        }
+        task_close_problem {
+            bigint taskid PK,FK
+            bigint acknowledgeid "no FK"
+        }
+        task_acknowledge {
+            bigint taskid PK,FK
+            bigint acknowledgeid "no FK"
+        }
+
+        task                 ||--o| task_close_problem   : "taskid, cascade"
+        task                 ||--o| task_acknowledge     : "taskid, cascade"
+        acknowledges         ||..o| task_close_problem   : "acknowledgeid, no FK"
+        acknowledges         ||..o| task_acknowledge     : "acknowledgeid, no FK"
+    end
+
+    subgraph D_SERVICES["Services"]
+        services {
+            bigint serviceid PK
+            varchar(128) name
+            int status "-1 OK, else a severity"
+            int algorithm
+            int sortorder
+            text description
+        }
+        services_links {
+            bigint linkid PK
+            bigint serviceupid FK "the parent"
+            bigint servicedownid FK "the child"
+        }
+        service_tag {
+            bigint servicetagid PK
+            bigint serviceid FK
+            varchar(255) tag
+            varchar(255) value
+        }
+        service_problem {
+            bigint service_problemid PK
+            bigint eventid FK "a problem row, not an event"
+            bigint serviceid FK
+            int severity
+        }
+        service_problem_tag {
+            bigint service_problem_tagid PK
+            bigint serviceid FK
+            varchar(255) tag
+            int operator
+            varchar(255) value
+        }
+        service_alarms {
+            bigint servicealarmid PK
+            bigint serviceid FK
+            int clock
+            int value "status from this clock on"
+        }
+
+        services             ||--o{ services_links       : "serviceupid, cascade"
+        services             ||--o{ services_links       : "servicedownid, cascade"
+        services             ||--o{ service_tag          : "serviceid, cascade"
+        services             ||--o{ service_problem      : "serviceid, cascade"
+        services             ||--o{ service_problem_tag  : "serviceid, cascade"
+        services             ||--o{ service_alarms       : "serviceid, cascade"
+    end
+
+    subgraph D_SLAS["SLA"]
+        sla {
+            bigint slaid PK
+            varchar(255) name UK
+            int period "0 daily to 4 annually"
+            double slo "target percent"
+            int effective_date
+            varchar(50) timezone
+            int status "0 disabled, 1 enabled"
+            text description
+        }
+        sla_service_tag {
+            bigint sla_service_tagid PK
+            bigint slaid FK
+            varchar(255) tag
+            int operator
+            varchar(255) value
+        }
+        sla_schedule {
+            bigint sla_scheduleid PK
+            bigint slaid FK
+            int period_from
+            int period_to
+        }
+        sla_excluded_downtime {
+            bigint sla_excluded_downtimeid PK
+            bigint slaid FK
+            varchar(255) name
+            int period_from
+            int period_to
+        }
+
+        sla                  ||--o{ sla_service_tag      : "slaid, cascade"
+        sla                  ||--o{ sla_schedule         : "slaid, cascade"
+        sla                  ||--o{ sla_excluded_downtime : "slaid, cascade"
+    end
+
+    subgraph D_MAPS["Maps"]
+        sysmaps {
+            bigint sysmapid PK
+            varchar(128) name UK
+            int width
+            int height
+            bigint userid FK "the owner"
+        }
+        sysmaps_elements {
+            bigint selementid PK
+            bigint sysmapid FK
+            bigint elementid "no FK, elementtype says what it points at"
+            int elementtype "0 host, 1 map, 2 trigger, 3 group, 4 image"
+            varchar(2048) label "macros stored unresolved"
+            int x
+            int y
+        }
+        sysmaps_links {
+            bigint linkid PK
+            bigint sysmapid FK
+            bigint selementid1 FK
+            bigint selementid2 FK
+            varchar(6) color "hex without the #"
+        }
+
+        sysmaps              ||--o{ sysmaps_elements     : "sysmapid, cascade"
+        sysmaps              ||--o{ sysmaps_links        : "sysmapid, cascade"
+        sysmaps_elements     ||--o{ sysmaps_links        : "selementid1, cascade"
+        sysmaps_elements     ||--o{ sysmaps_links        : "selementid2, cascade"
+    end
+
+    subgraph D_ACCESS["API token &amp; permissions"]
+        token {
+            bigint tokenid PK
+            varchar(64) name
+            bigint userid FK "every call runs as this user"
+            varchar(128) token UK "SHA-512 of the secret"
+            int status "0 enabled, 1 disabled"
+            int expires_at
+            bigint creator_userid FK
+        }
+        users {
+            bigint userid PK
+            varchar(100) username UK
+            bigint roleid FK
+        }
+        role {
+            bigint roleid PK
+            varchar(255) name UK
+            int type "1 user, 2 admin, 3 super admin"
+        }
+        users_groups {
+            bigint id PK
+            bigint usrgrpid FK
+            bigint userid FK
+        }
+        usrgrp {
+            bigint usrgrpid PK
+            varchar(64) name UK
+        }
+        rights {
+            bigint rightid PK
+            bigint groupid FK "the user group"
+            bigint id FK "the host group"
+            int permission "0 deny, 2 read, 3 read-write"
+        }
+
+        users                ||--o{ token                : "userid, cascade"
+        users                |o--o{ token                : "creator_userid"
+        role                 |o--o{ users                : "roleid, cascade"
+        usrgrp               ||--o{ users_groups         : "usrgrpid, cascade"
+        users                ||--o{ users_groups         : "userid, cascade"
+        usrgrp               ||--o{ rights               : "groupid, cascade"
+    end
+
+    %%  Relationships that cross domains
+
+    hosts                ||--o{ items                : "hostid"
+    interface            |o--o{ items                : "interfaceid"
+    items                ||--o{ functions            : "itemid"
+    users                ||--o{ acknowledges         : "userid, cascade"
+    events               ||--o{ acknowledges         : "eventid, cascade"
+    problem              ||--o{ service_problem      : "eventid, cascade"
+    users                ||--o{ sysmaps              : "userid"
+    hstgrp               ||--o{ rights               : "id, cascade"
+    items                ||..o{ history              : "itemid, value_type 0, no FK"
+    items                ||..o{ history_str          : "itemid, value_type 1, no FK"
+    items                ||..o{ history_log          : "itemid, value_type 2, no FK"
+    items                ||..o{ history_uint         : "itemid, value_type 3, no FK"
+    items                ||..o{ history_text         : "itemid, value_type 4, no FK"
+    items                ||..o{ trends               : "itemid, value_type 0, no FK"
+    items                ||..o{ trends_uint          : "itemid, value_type 3, no FK"
+    hosts                |o..o{ sysmaps_elements     : "elementid when elementtype=0, no FK"
+    service_tag          }o..o{ sla_service_tag      : "matched on tag and value, no key"
+    problem_tag          }o..o{ service_problem_tag  : "matched on tag and value by the server"
+
+    %%  Colours, and domain frames that must stay unfilled (see erd.md)
+
+    classDef returned fill:#dbeafe,stroke:#2563eb,color:#14213d
+    classDef written  fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    classDef internal fill:#e2e8f0,stroke:#475569,color:#0f172a
+
+    style D_HOSTS fill:none,stroke:#94a3b8
+    style D_ITEMS fill:none,stroke:#94a3b8
+    style D_STORAGE fill:none,stroke:#94a3b8
+    style D_EVENTS fill:none,stroke:#94a3b8
+    style D_WRITES fill:none,stroke:#94a3b8
+    style D_SERVICES fill:none,stroke:#94a3b8
+    style D_SLAS fill:none,stroke:#94a3b8
+    style D_MAPS fill:none,stroke:#94a3b8
+    style D_ACCESS fill:none,stroke:#94a3b8
+
+    class event_recovery,events,history,history_log returned
+    class history_str,history_text,history_uint,host_inventory returned
+    class host_tag,hosts,hstgrp,interface returned
+    class item_rtdata,item_tag,items,problem returned
+    class problem_tag,service_problem,service_tag,services returned
+    class services_links,sla,sysmaps,sysmaps_elements returned
+    class sysmaps_links,trends,trends_uint,triggers returned
+    class acknowledges,task,task_acknowledge,task_close_problem written
+    class functions,hosts_groups,rights,role internal
+    class service_alarms,service_problem_tag,sla_excluded_downtime,sla_schedule internal
+    class sla_service_tag,token,users,users_groups internal
+    class usrgrp internal
+%% source-hash: 0eb48aaa3cda

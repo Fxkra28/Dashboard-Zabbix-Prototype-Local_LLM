@@ -1,0 +1,51 @@
+/*
+ * One visible focus ring for every control, drawn outside the element so a tight table cell cannot
+ * clip it. A rule that sets `outline: none` with nothing in its place leaves keyboard users unable
+ * to tell where they are.
+ */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+/* On the dark sidebar the brand-blue ring is 2.02:1; white clears 3:1 on both chrome shades (1.4.11). */
+.sidebar :focus-visible {
+  outline-color: var(--on-chrome);
+}
+/* The collapse chevron hangs half over the light page, where white vanishes: blue, drawn on its own fill. */
+.sidebar .rail-toggle:focus-visible {
+  outline-color: var(--focus);
+  outline-offset: 0;
+}
+/* <main> takes focus only as the skip link's target: a ring round the whole page would say nothing. */
+main[tabindex='-1']:focus {
+  outline: none;
+}
+/* Keeps a control reached with Shift+Tab from landing under the sticky 64px top bar. */
+html {
+  scroll-padding-top: 72px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--sans);
+  background: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+

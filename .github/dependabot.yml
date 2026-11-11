@@ -1,0 +1,39 @@
+# Dependabot proposes updates as pull requests; nothing is merged for you.
+# github-actions keeps the commit SHAs in .github/workflows current, and docker keeps the image
+# digests in both Dockerfiles current, which pinning would otherwise freeze for good.
+# npm minor and patch releases come as one pull request a week, so a review is one diff and the
+# lockfile moves together; a major release comes alone, because that is the one to read.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: npm
+    directory: /server
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: weekly
+    groups:
+      npm-minor-and-patch:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /server
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker
+    directory: /web
+    schedule:
+      interval: weekly

@@ -1,0 +1,8 @@
+{
+  // The app config leaves src/__tests__ out so tests never reach the build.
+  // This one puts them back, for typechecking only: vitest transpiles without
+  // checking types, so without it the tests would drift out of sync silently.
+  "extends": "./tsconfig.json",
+  "include": ["src", "vitest.config.ts"],
+  "exclude": []
+}

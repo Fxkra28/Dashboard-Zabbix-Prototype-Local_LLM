@@ -1,0 +1,446 @@
+/* Inventory scorecard */
+.score-hero {
+  display: flex;
+  align-items: center;
+  gap: var(--s-5);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--s-5) var(--s-6);
+  margin-bottom: var(--s-4);
+  font-size: var(--t-base);
+  line-height: var(--lh-body);
+}
+.score-hero-num {
+  font-size: var(--t-4xl);
+  font-weight: var(--w-bold);
+  line-height: var(--lh-solid);
+  flex: none;
+}
+
+.score-bar {
+  display: block;
+  flex: 1;
+  min-width: 60px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: var(--neutral-bg);
+  overflow: hidden;
+}
+.score-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  transition: width var(--dur-4) var(--ease-out);
+}
+
+.score-dim {
+  padding: var(--s-2-5) 0;
+  border-bottom: 1px solid var(--border);
+}
+.score-dim:last-child {
+  border-bottom: none;
+}
+.score-dim-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s-2-5);
+  font-size: var(--t-base);
+  font-weight: var(--w-medium);
+  margin-bottom: var(--s-1-5);
+}
+.score-hint {
+  font-size: var(--t-xs);
+  margin-top: var(--s-1-5);
+}
+.tag.miss {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+.tag.main {
+  background: var(--tint);
+  color: var(--primary-strong);
+}
+
+/* Alert noise flags */
+.tag.flag-flapping {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+.tag.flag-unactioned {
+  background: var(--warn-bg);
+  color: var(--warn-text);
+}
+.tag.flag-chronic {
+  background: var(--tint);
+  color: var(--primary-strong);
+}
+.noise-legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1-5);
+  margin-top: var(--s-3);
+  padding-top: var(--s-3);
+  border-top: 1px solid var(--border);
+  font-size: var(--t-sm);
+  line-height: var(--lh-body);
+}
+
+/* Links & WAN */
+.link-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1-5);
+  font-size: var(--t-sm);
+  font-weight: var(--w-semibold);
+  color: var(--s-text, var(--s));
+  white-space: nowrap;
+}
+.link-state .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--s);
+}
+.link-bad {
+  color: var(--danger-text);
+  font-weight: var(--w-semibold);
+}
+
+.path-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--s-3);
+}
+.path-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--s);
+  border-radius: var(--r-md);
+  padding: var(--s-3);
+}
+.path-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s-2-5);
+  margin-bottom: var(--s-2);
+  font-size: var(--t-base);
+}
+.path-leg {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  font-size: var(--t-sm);
+  padding: var(--s-0-5) 0;
+}
+.path-leg .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+.path-leg-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Action aging */
+.aging-bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1-5);
+}
+.aging-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2-5);
+  font-size: var(--t-sm);
+}
+.aging-label {
+  width: 74px;
+  color: var(--muted);
+  flex: none;
+}
+.aging-track {
+  flex: 1;
+  height: 16px;
+  background: var(--neutral-bg);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+.aging-track > span {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-sm);
+  min-width: 2px;
+}
+.aging-count {
+  width: 30px;
+  text-align: right;
+  font-weight: var(--w-semibold);
+  flex: none;
+}
+
+/* Services tree */
+.svc-tree {
+  display: flex;
+  flex-direction: column;
+}
+
+.svc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding-top: var(--s-1-5);
+  padding-bottom: var(--s-1-5);
+  padding-right: var(--s-3);
+  border-bottom: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.svc-row:last-child {
+  border-bottom: none;
+}
+.svc-row:hover {
+  background: var(--surface-2);
+}
+
+.svc-main {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+}
+.svc-right {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2-5);
+  white-space: nowrap;
+}
+
+.svc-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.svc-toggle:not(.placeholder) {
+  /* 24 px is the WCAG 2.2 minimum; the negative margin gives the row back what the box takes. */
+  width: var(--target-min);
+  height: var(--target-min);
+  margin: calc(var(--s-0-5) * -1);
+}
+.svc-toggle.collapsed {
+  transform: rotate(-90deg);
+}
+.svc-toggle.placeholder {
+  cursor: default;
+}
+
+.svc-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: none;
+}
+.svc-name {
+  font-weight: var(--w-medium);
+  font-size: var(--t-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.svc-count {
+  font-size: var(--t-xs);
+}
+
+.svc-sla {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--t-sm);
+  font-weight: var(--w-semibold);
+  padding: var(--s-0-5) var(--s-2);
+  border-radius: var(--r-sm);
+}
+.svc-sla em {
+  font-style: normal;
+  font-weight: var(--w-regular);
+  color: var(--muted);
+}
+.svc-sla.ok {
+  background: var(--good-bg);
+  color: var(--good-text);
+}
+.svc-sla.miss {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.svc-cause {
+  font-size: var(--t-sm);
+  color: var(--muted);
+  padding-right: var(--s-3);
+  padding-bottom: var(--s-2);
+  margin-top: calc(var(--s-0-5) * -1);
+  line-height: var(--lh-body);
+}
+.svc-cause-label {
+  color: var(--danger-text);
+  font-weight: var(--w-semibold);
+}
+
+/* Site view */
+.site-coverage {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--mid);
+  border-radius: var(--r-md);
+  padding: var(--s-2-5) var(--s-3);
+  margin-bottom: var(--s-4);
+  font-size: var(--t-sm);
+  color: var(--muted);
+  line-height: var(--lh-body);
+}
+.site-coverage strong {
+  color: var(--text);
+  font-size: var(--t-md);
+}
+.site-coverage code {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  background: var(--neutral-bg);
+  padding: 0 var(--s-1);
+  border-radius: var(--r-xs);
+  font-size: var(--t-xs);
+}
+
+.site-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--s-3);
+  margin-bottom: var(--s-5);
+}
+
+.site-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2-5);
+  text-align: left;
+  padding: var(--s-4) var(--s-4) var(--s-3);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  overflow: hidden;
+  font-family: inherit;
+}
+/* Status stripe carries the site's worst severity colour. */
+.site-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--site-color);
+}
+.site-card:hover {
+  border-color: var(--mid);
+}
+.site-card.sel {
+  border-color: var(--primary);
+  box-shadow: var(--focus-ring);
+}
+
+.site-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s-2-5);
+}
+.site-name {
+  font-weight: var(--w-semibold);
+  font-size: var(--t-md);
+  color: var(--text);
+}
+.site-hosts {
+  font-size: var(--t-xs);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.site-stat {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s-2);
+  min-height: 34px;
+}
+.site-big {
+  font-size: var(--t-3xl);
+  font-weight: var(--w-bold);
+  line-height: var(--lh-solid);
+  /* The stripe carries the severity (DESIGN.md R-4): Warning yellow as text is 1.54:1. */
+  color: var(--text);
+}
+.site-big-label {
+  font-size: var(--t-sm);
+  color: var(--muted);
+}
+.site-big-label em {
+  font-style: normal;
+  color: var(--danger-text);
+  font-weight: var(--w-semibold);
+}
+.site-ok {
+  font-size: var(--t-lg);
+  font-weight: var(--w-semibold);
+  color: var(--good-text);
+}
+
+.site-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2);
+  flex-wrap: wrap;
+  border-top: 1px solid var(--border);
+  padding-top: var(--s-2-5);
+}
+/* Only the card wraps its severity chips: its width is fixed and it clips. Table cells keep one line. */
+.site-foot .sev-strip {
+  flex-wrap: wrap;
+}
+.site-avail {
+  display: inline-flex;
+  gap: var(--s-2);
+  font-size: var(--t-xs);
+}
+.site-avail .down {
+  color: var(--danger-text);
+  font-weight: var(--w-semibold);
+}
+
+
+/* Maps: a host node is a button that prints its severity in words under the map (UX-38). */
+.map-node {
+  cursor: pointer;
+}
+/* A host with problems already has a 2px outline; the one pressed, or under the keyboard, has a heavier one on every browser. */
+.map-node[aria-pressed='true'] rect,
+.map-node:focus-visible rect {
+  stroke-width: 4px;
+}
+.map-selected {
+  margin: var(--s-3) 0 0;
+  font-size: var(--t-base);
+}

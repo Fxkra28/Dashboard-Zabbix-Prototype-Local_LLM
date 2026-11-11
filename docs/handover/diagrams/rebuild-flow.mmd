@@ -1,0 +1,23 @@
+---
+title: "HCML Monitoring Portal: what the rebuild script does"
+---
+flowchart TD
+    %% deploy/rebuild.sh, in the order it runs. Start with the dry-run option: it prints every command and runs none.
+
+    A["rebuild.sh"] --> B{"A git checkout,<br/>and a clean tree?"}
+    B -->|"not a checkout"| X1["Stop"]
+    B -->|"changed files and no allow-dirty option"| X2["Stop"]
+    B -->|"clean, or dirty allowed:<br/>the build is labelled dirty"| C["Gate: parity check<br/>when both copies are there"]
+    C --> D["Gate: npm run verify<br/>unless skipped"]
+    D --> E["Gate: docker can read<br/>each copy's settings"]
+    E --> F["Tag the images being replaced<br/>rollback-day-month"]
+    F --> G["docker compose up -d --build<br/>with the commit and the time"]
+    G -->|"compose up fails"| K
+    G --> H["Wait for both containers<br/>to be healthy, up to 180 s"]
+    H --> I["Ask as an anonymous caller<br/>health 200, meters 401,<br/>/.env 404, /.git/config 404,<br/>a Content-Security-Policy"]
+    I -->|"all ok"| M["Mark the new images<br/>last-good"]
+    I -->|"any failure"| K["Print the rollback steps,<br/>last-good first, and exit 1"]
+    M -->|"clean tree"| J["Make the local tag live-date<br/>it is never pushed"]
+    M -->|"dirty build"| L
+    J --> L["Print the signed-in check<br/>that only a person can run"]
+%% source-hash: 0b3b223f8f26

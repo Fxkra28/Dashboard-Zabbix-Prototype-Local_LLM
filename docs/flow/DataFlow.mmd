@@ -1,0 +1,144 @@
+---
+title: "HCML Monitoring Portal: Data flow (where a number comes from, and where it goes)"
+---
+flowchart TB
+
+    %%  Data flow: one value's whole path, from the device that
+    %%  produced it to the screen that shows it, plus the three side
+    %%  paths: the live stream, the plain-language layer, and the one
+    %%  write.
+
+    %%  Blue    Zabbix owns it and stores it.
+    %%  Green   the portal derives it. No table exists anywhere: it is
+    %%          built per request, cached for seconds, gone on restart.
+    %%  Amber   lives in the browser.
+    %%  Purple  the portal's single write back to Zabbix.
+    %%  Red     it would leave this machine, and in this copy there
+    %%          is none.
+
+    %%  The write path (lane 5) ends in its own terminal box rather than
+    %%  looping back to lane 1. That arrow would be a cycle, and one
+    %%  cycle is enough to make the layout engine scramble the reading
+    %%  order of every other lane. It is the same Zabbix API.
+
+    %%  Laid out with the default engine, not elk: lanes stack downwards
+    %%  and each lane reads left to right, which needs per-subgraph
+    %%  `direction`, and elk ignores it, flattening the whole chart
+    %%  into a 6:1 strip.
+
+    %%  In this copy the plain-language layer is qwen3:8b, served by
+    %%  Ollama on this host, so there is no red on this diagram at all
+    %%  and no boundary to mark: the estate data never crosses one. The
+    %%  hosted-model copy is hcml-portal, where that one box is red and
+    %%  carries a LEAVES THIS MACHINE warning beside it, and which adds
+    %%  a lane 6, the report by email with its small state file. This
+    %%  copy passes no MAIL_ settings and declares no volume, so it has
+    %%  no such lane. Nothing else on this diagram differs.
+
+    %%  Careful when editing: the subgraph IDs do not match the lane
+    %%  numbers. Lane 3 "Plain language" is `subgraph D4` and lane 4
+    %%  "The browser" is `subgraph D3`. The rendered order is right
+    %%  because Mermaid lays subgraphs out in source order, but anyone
+    %%  reading `style D3` / `style D4` will wire the wrong lane. Go by
+    %%  the quoted titles, never the IDs.
+
+    %%  Two labels were corrected against the code. (1) The answer box
+    %%  describes two features and neither has both properties: Explain
+    %%  is cached 1 h per (eventid, state) and returns one buffered JSON
+    %%  reply; the Assistant chat is streamed token by token and is
+    %%  never cached. (2) The arrow into SNAP carries no tags: the
+    %%  chat snapshot emits severity, host, trigger name, opdata, age
+    %%  and ack state only. Tags cross on /api/explain/problem alone.
+
+    %%  Also note the lane-5 fork runs in sequence, not in parallel:
+    %%  event.acknowledge is awaited first, and only then does the
+    %%  invalidate + push run. Invalidating earlier would let a refetch
+    %%  re-cache the pre-write state. Say "then", not "and".
+
+    %%  One more warning specific to this copy: AI_PROVIDER accepts only
+    %%  `anthropic` or `openai-compatible`, and any other value falls
+    %%  back to `anthropic` with only a startup warning (none at all for
+    %%  an empty value). A typo such as AI_PROVIDER=ollama selects the
+    %%  hosted backend; this copy sets and passes no Anthropic key, so
+    %%  that switches the AI off rather than sending anything. Only with a
+    %%  key added would this green diagram turn back into the red one,
+    %%  with no visible difference in the UI. Going hosted->local also needs two
+    %%  variables, not one: AI_PROVIDER and AI_BASE_URL.
+
+    subgraph D1["1 &middot; Collection: Zabbix, not us"]
+        direction LR
+        DEV["<b>the estate</b><br>139 monitored hosts<br>SNMP &middot; ICMP &middot; agent"]
+        ZSRV["<b>zabbix-server</b><br>polls, evaluates triggers,<br>writes history"]
+        ZDB[("<b>MySQL 8.0</b><br>203 tables<br>history &middot; trends &middot; problem")]
+        ZAPI["<b>Zabbix API</b><br>/api_jsonrpc.php<br>the portal's only door in"]
+
+        DEV --> ZSRV --> ZDB --> ZAPI
+    end
+
+    subgraph D2["2 &middot; The BFF: portal-bff"]
+        direction LR
+        RTOK["<b>read token</b><br>read-only Zabbix user<br>never leaves this process"]
+        CACHE["<b>TTL cache</b><br>problems 5 s &middot; sites 15 s<br>hosts 30 s &middot; SLA 60 s<br>coalesced &middot; LRU 500"]
+        DERIVE["<b>the derived layer</b><br>sites &middot; links &middot; incidents<br>host state &middot; monthly SLA<br><i>no table exists for any of it</i>"]
+        SHAPE["<b>one clean shape</b><br>enriched, typed, compressed"]
+
+        RTOK --> CACHE --> DERIVE --> SHAPE
+    end
+
+    subgraph D4["3 &middot; Plain language: on demand only"]
+        direction LR
+        SNAP["<b>estate snapshot</b><br>built from the same caches<br>frozen 5 min &middot; capped at 20 problems<br>and a character budget per section"]
+        MODEL["<b>qwen3:8b</b><br>served by Ollama on this host<br>native /api/chat &middot; kept loaded 30 min"]
+        LEAVES["<b>STAYS ON THIS MACHINE</b><br>host names, trigger names and problem<br>text reach a process on this host and<br>stop there. No third party, so the<br>Private and Confidential stamp<br>raises no question"]
+        ANSWER["<b>the answer</b><br>Explain: one JSON reply, cached 1 h<br>per problem + state &middot; not streamed<br>Assistant: streamed token by token,<br>never cached"]
+
+        SNAP --> MODEL --> ANSWER
+        MODEL --> LEAVES
+    end
+
+    subgraph D3["4 &middot; The browser"]
+        direction LR
+        NGINX["<b>nginx</b><br>serves the build, proxies /bff,<br>unbuffered for the live stream"]
+        SCREEN["<b>the page</b><br>tables, charts, KPI tiles"]
+        LIVE["<b>live badge</b><br>fed by the stream"]
+
+        NGINX --> SCREEN
+    end
+
+    subgraph D5["5 &middot; The one write to Zabbix"]
+        direction LR
+        WTOK["<b>write token</b><br>separate, write-capable<br>blank &rArr; the portal cannot write"]
+        ZWRITE["<b>event.acknowledge</b><br>back to the same Zabbix API,<br>the only write to Zabbix"]
+        INVAL["<b>invalidate + push</b><br>drop the cached list, then push<br>the new one to every open screen"]
+
+        WTOK --> ZWRITE
+        WTOK --> INVAL
+    end
+
+    ZAPI ==>|"JSON-RPC, read"| RTOK
+    SHAPE ==>|"HTTP + brotli"| NGINX
+    SHAPE -.->|"SSE every 5 s: a frame<br>only when something changed"| LIVE
+    DERIVE -.->|"host, trigger, severity, opdata,<br>plus tags on the Explain path only"| SNAP
+    ANSWER -.-> SCREEN
+    SCREEN -->|"acknowledge / close<br>operator role"| WTOK
+
+    %% Frames must stay unfilled or they paint over the relationship lines.
+
+    classDef zbx      fill:#dbeafe,stroke:#2563eb,color:#14213d
+    classDef derived  fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef browser  fill:#fef3c7,stroke:#d97706,color:#451a03
+    classDef written  fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    classDef external fill:#fee2e2,stroke:#dc2626,color:#450a0a
+
+    style D1 fill:none,stroke:#94a3b8
+    style D2 fill:none,stroke:#94a3b8
+    style D3 fill:none,stroke:#94a3b8
+    style D4 fill:none,stroke:#94a3b8
+    style D5 fill:none,stroke:#94a3b8
+
+    class DEV,ZSRV,ZDB,ZAPI zbx
+    class RTOK,CACHE,DERIVE,SHAPE,SNAP,ANSWER,INVAL derived
+    class NGINX,SCREEN,LIVE browser
+    class WTOK,ZWRITE written
+    class MODEL,LEAVES derived
+%% source-hash: df0d1e9b425e

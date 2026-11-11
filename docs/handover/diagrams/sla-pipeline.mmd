@@ -1,0 +1,17 @@
+---
+title: "HCML Monitoring Portal: how one monthly SLA figure is made"
+---
+flowchart TB
+    %% sli/engine.ts, computeSli. Read-only. The two profiles share the replay and differ in what counts as measured.
+
+    REQ["Request<br/>a month, or a from and to, and a profile:<br/>hcml-report or availability"] --> WIN["Window<br/>a month is cut at midnight in the SLA time zone<br/>and clipped to now"]
+    WIN --> READ["Reads from Zabbix<br/>the ICMP availability triggers first, then at the same time<br/>their events, the ping items, the host templates<br/>and the maintenance windows"]
+    READ --> REPLAY["Replay each trigger<br/>start from the state it held when the window opened,<br/>then PROBLEM and OK events make down intervals"]
+    READ --> COVER["Coverage, availability profile only<br/>an hour counts when at least half the expected<br/>pings reached the trends"]
+    REPLAY --> HOST["One host<br/>its down intervals, less planned maintenance and<br/>the spans declared not measured"]
+    COVER --> HOST
+    HOST --> FIGURE["The figure<br/>downtime against measured time.<br/>With too little data, the availability profile gives no figure"]
+    FIGURE --> GROUPS["Groups<br/>categories, sites and device classes take the plain mean of their hosts.<br/>A WAN path is down only while every leg is down"]
+    GROUPS --> OUT["The report<br/>/api/sli, the availability report, the service tree,<br/>and the workbook, the PDF and the CSV zip"]
+    OUT --> MAIL["Email, when it is on<br/>the same files go to the people chosen, by hand or on the chosen day<br/>of the next month, over SMTP. The list, the schedule and a record<br/>of each send are kept in the small portal-state file"]
+%% source-hash: c9fabfd520ba

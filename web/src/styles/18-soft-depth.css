@@ -1,0 +1,207 @@
+/*
+ * Soft depth and motion, the direction of 26 October 2026 (DESIGN.md section 10).
+ *
+ * The page and its cards are one plane (01-tokens.css). What stands above the page is raised, what
+ * takes input or shows a chosen option is pressed in. Controls keep their 3:1 edge (--border-strong):
+ * a shadow alone measured 1.20 to 1.59:1, which WCAG 1.4.11 does not accept. The navy chrome stays,
+ * with depth of its own.
+ */
+
+/* Shell */
+.sidebar {
+  /* Raised above the page, so its shadow falls onto the content beside it. */
+  box-shadow: 8px 0 18px -6px var(--neu-lo);
+  z-index: var(--z-sidebar);
+}
+.nav-link {
+  border-radius: var(--r-lg);
+}
+.nav-link:hover {
+  background: transparent;
+  box-shadow: var(--chrome-raised);
+}
+.nav-link.active {
+  background: var(--chrome-well);
+  font-weight: var(--w-semibold);
+  box-shadow: var(--chrome-inset);
+}
+.rail-toggle {
+  box-shadow: var(--neu-raised-xs);
+}
+.rail-toggle:hover {
+  box-shadow: var(--neu-raised-sm);
+}
+.topbar {
+  border-bottom: 0;
+  box-shadow: 0 10px 16px -10px var(--neu-lo);
+}
+
+/* Surfaces that stand above the page */
+.panel,
+.kpi {
+  border: 0;
+  border-radius: var(--r-xl);
+  box-shadow: var(--neu-raised);
+}
+.meter {
+  border: 0;
+  border-radius: var(--r-xl);
+  box-shadow: var(--neu-raised-sm);
+}
+.sev-tile {
+  border-color: transparent;
+  box-shadow: var(--neu-raised-xs);
+}
+/* Tiles are controls: they keep the 3:1 edge, raised; the chosen one is pressed in. */
+.kind-tile,
+.type-tile {
+  border-radius: var(--r-lg);
+  box-shadow: var(--neu-raised-xs);
+}
+.type-tile[aria-pressed='true'] {
+  box-shadow: var(--neu-inset-sm);
+}
+
+/* Controls: a place to type is pressed in, a button is raised and presses in when used. */
+select,
+input[type='text'],
+input[type='password'],
+textarea {
+  border-radius: var(--r-lg);
+  box-shadow: var(--neu-inset);
+}
+select:focus,
+input:focus,
+textarea:focus {
+  box-shadow: var(--neu-inset), var(--focus-ring);
+}
+button.btn,
+a.btn {
+  border-radius: var(--r-lg);
+  box-shadow: var(--neu-raised-xs);
+}
+button.btn:hover,
+a.btn:hover {
+  filter: none;
+}
+/* A disabled button neither lifts nor presses in (07-controls-states.css has its look). */
+button.btn:not(:disabled, [aria-disabled='true']):hover,
+a.btn:hover {
+  box-shadow: var(--neu-raised-sm);
+}
+button.btn:not(:disabled, [aria-disabled='true']):active,
+a.btn:active {
+  box-shadow: var(--neu-inset-sm);
+}
+button.btn.ghost,
+a.btn.ghost {
+  border-color: var(--border-strong);
+}
+/* A segmented control is a pressed-in track; the chosen option is raised out of it. */
+.seg {
+  padding: var(--s-1);
+  gap: var(--s-1);
+  border-radius: var(--r-lg);
+  box-shadow: var(--neu-inset-sm);
+  overflow: visible;
+}
+.seg button {
+  border-right: 0;
+  border-radius: var(--r-md);
+}
+.seg button:hover {
+  background: transparent;
+  color: var(--primary);
+}
+.seg button.on {
+  background: var(--surface);
+  color: var(--primary);
+  box-shadow: var(--neu-raised-xs);
+}
+
+/*
+ * Motion (MOTION 2). Each one answers something: a page's content rises in once when it arrives, a
+ * Dashboard view fades in when its tab is chosen, a control lifts under the pointer and presses in
+ * when used, and a theme switch fades the colours instead of flashing them. Only position, opacity,
+ * colour and shadow move, nothing loops, and the reduced-motion rule in 01-tokens.css stops it all.
+ */
+@keyframes soft-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes soft-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.content > * {
+  animation: soft-rise var(--dur-4) var(--ease-out) both;
+}
+.content > *:nth-child(2) {
+  animation-delay: var(--stagger);
+}
+.content > *:nth-child(3) {
+  animation-delay: calc(var(--stagger) * 2);
+}
+.content > *:nth-child(4) {
+  animation-delay: calc(var(--stagger) * 3);
+}
+.content > *:nth-child(n + 5) {
+  animation-delay: calc(var(--stagger) * 4);
+}
+[role='tabpanel'] > * {
+  animation: soft-fade var(--dur-3) ease both;
+}
+body,
+.sidebar,
+.topbar,
+.panel,
+.kpi,
+.meter,
+.kind-tile,
+.type-tile,
+.sev-tile,
+.seg,
+.seg button,
+select,
+input,
+button.btn,
+a.btn,
+.nav-link,
+.rail-toggle {
+  transition:
+    background-color var(--dur-3) ease,
+    color var(--dur-3) ease,
+    box-shadow var(--dur-2) ease,
+    transform var(--dur-2) ease;
+}
+button.btn:not(:disabled, [aria-disabled='true']):hover,
+a.btn:hover,
+a.kind-tile:hover,
+.type-tile:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+button.btn:active,
+a.btn:active,
+.type-tile:active {
+  transform: none;
+}
+/* The wall is read from across a room: nothing rises and nothing lifts there. A problem that appears
+   or clears keeps its own highlight (14-sidebar-wall.css), because that motion is the news. */
+.app.wall .content > *,
+.app.wall [role='tabpanel'] > * {
+  animation: none;
+}
+.app.wall button.btn:hover,
+.app.wall a.kind-tile:hover {
+  transform: none;
+}

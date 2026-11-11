@@ -1,0 +1,106 @@
+# HCML portal: every non-secret setting, with the default docker-compose.yml gives it.
+#
+# This file is versioned, holds no secret, and nothing reads it. The portal reads `.env`
+# (docs/operations/backup-and-restore.md). Copy the lines you want to change into `.env`.
+# Every active line below is compose's own default, so copying the lot changes nothing. The
+# lines that differ between hcml-portal and hcml-portal-ollama are commented out, with both
+# values, so copying the lot cannot give one copy the other's port or cookie.
+#
+# docs/operations/backup-and-restore.md explains why this file exists: your real values
+# belong in the encrypted backup of `.env`, and this is the list to check them against.
+# The meaning of each setting is in the Configuration table of README.md.
+
+# Zabbix
+ZBX_URL=https://zabbix.hcml.co.id/zabbix/api_jsonrpc.php
+ZABBIX_TIMEOUT_MS=300000
+# Only while Zabbix's certificate has expired: its SHA-256 fingerprint and the last day, WIB (docs/operations/tls.md).
+# ZBX_TLS_PIN_SHA256=
+# ZBX_TLS_PIN_UNTIL=
+
+# Where the portal listens. Cookies ignore ports, so the two copies need different cookie names.
+# WEB_PORT=8081 (hcml-portal) or 8082 (hcml-portal-ollama)
+# WEB_ORIGIN=http://localhost:8081 (hcml-portal) or http://localhost:8082 (hcml-portal-ollama)
+# SESSION_COOKIE=hcml_session (hcml-portal) or hcml_session_ollama (hcml-portal-ollama)
+
+# Proxies in front of the BFF. true is one hop, the nginx in the web container.
+# With a TLS proxy in front of that nginx, use 2 and set WEB_ORIGIN to the https address
+# (docs/operations/tls.md).
+TRUST_PROXY=true
+RATE_LIMIT_PER_MINUTE=300
+STREAM_MAX_CLIENTS=100
+STREAM_MAX_PER_USER=5
+
+# Sign-in. true unless this is a local development run.
+AUTH_ENABLED=true
+# How long one sign-in lasts, in hours (2 to 24), and the number that ends every session when raised.
+# The server refuses to start on a length it cannot use.
+SESSION_HOURS=12
+SESSION_EPOCH=1
+
+# Sites, inventory and naming
+NET_GROUP_IDS=
+SITE_TAG=site
+SITE_GROUP_PREFIX=
+OWNER_TAG=owner
+CRITICALITY_TAG=criticality
+HOST_NAME_PATTERN=
+
+# Links, alert noise and the availability report
+LINK_LOSS_WARN=2
+LINK_LOSS_CRIT=10
+# The Zabbix dashboard whose gauge widgets are the internet traffic meters (Dashboard, for the wall, operator and admin roles).
+INTERNET_METERS_DASHBOARD=Global view
+NOISE_SHORT_SECONDS=300
+NOISE_MIN_COUNT=5
+AVAILABILITY_MIN_SEVERITY=2
+
+# The derived monthly SLA
+SLO_TARGET=99
+SLA_TIMEZONE=Asia/Jakarta
+SLI_PROFILE=availability
+SLI_REPORT_TRIGGERS=High ICMP ping loss
+SLI_AVAILABILITY_TRIGGERS=Unavailable by ICMP ping,High ICMP ping loss
+SLI_MIN_COVERAGE=0.5
+SLI_ZBX_PARALLEL=4
+# Spans the SLA figures treat as hours with no data, for a time Zabbix was cut off from the
+# network: start/end in ISO time with its zone, comma-separated. Nothing in Zabbix changes.
+#   SLA_NO_DATA_WINDOWS=2026-10-26T16:10+07:00/2026-10-26T21:03+07:00
+SLA_NO_DATA_WINDOWS=
+
+# The assistant. Empty AI_MODEL and AI_TIMEOUT_MS mean the backend's own default.
+# AI_PROVIDER=anthropic (hcml-portal) or openai-compatible (hcml-portal-ollama, fixed in its compose file)
+# AI_BASE_URL= empty (hcml-portal) or http://host.docker.internal:11434/v1 (hcml-portal-ollama)
+AI_MODEL=
+AI_TIMEOUT_MS=
+AI_MAX_RETRIES=1
+AI_KEEP_ALIVE=30m
+AI_OLLAMA_NATIVE=auto
+AI_NUM_CTX=8192
+AI_TEMPERATURE=0.7
+AI_TOP_P=0.8
+
+# Caps on Explain and the Assistant: calls a minute per signed-in user, calls in flight at once,
+# and tokens a day per user and in all (0 turns a budget off; only the hosted API is counted).
+AI_CHAT_PER_MINUTE=10
+AI_EXPLAIN_PER_MINUTE=10
+AI_MAX_CONCURRENT=4
+AI_DAILY_TOKENS_PER_USER=500000
+AI_DAILY_TOKENS_TOTAL=2000000
+
+# Emailing the SLA report: hcml-portal only. Its compose file passes these, all blank by default, and blank means email
+# is off and the button is not offered. hcml-portal-ollama passes none of them, so that nothing leaves the machine.
+# The password, MAIL_PASS, is a secret and goes in `.env`. MAIL_PROVIDER is gmail, yahoo, zoho, icloud or smtp (README.md).
+# MAIL_PROVIDER=
+# MAIL_HOST=
+# MAIL_PORT=
+# MAIL_SECURITY=
+# MAIL_USER=
+# MAIL_FROM=
+# MAIL_FROM_NAME=
+# MAIL_TO=
+# MAIL_ALLOWED_DOMAINS=
+# MAIL_SCHEDULE=
+
+# Secrets, by name only. They go in `.env` and never in this file, and the encrypted backup
+# is what protects them: JWT_SECRET, ZABBIX_API_TOKEN, ZABBIX_WRITE_TOKEN, PORTAL_PASS,
+# PORTAL_USERS, PORTAL_USER, ANTHROPIC_API_KEY, AI_API_KEY and MAIL_PASS.

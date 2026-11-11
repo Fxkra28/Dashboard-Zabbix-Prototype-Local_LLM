@@ -1,0 +1,30 @@
+---
+title: "HCML Monitoring Portal: the life of one cached answer"
+---
+stateDiagram-v2
+    %% core/cache.ts. A key is Missing, Fresh, in its stale window, or Expired.
+    %% The stale window and the old copy after a failure are asked for by the caller, not always on.
+
+    [*] --> Missing
+    Missing --> Fresh: first call fetches, and callers that arrive meanwhile share that one fetch
+    Fresh --> StaleWindow: lifetime passed, and a stale window was asked for
+    Fresh --> Expired: lifetime passed, no stale window
+    StaleWindow --> Fresh: the one background refresh succeeds
+    StaleWindow --> StaleWindow: a failed refresh is tried again a minute later
+    StaleWindow --> Expired: the window passes
+    Expired --> Fresh: a fetch in the foreground succeeds
+    Expired --> OldCopy: the fetch fails and the caller asked for an old copy
+    OldCopy --> OldCopy: for a minute, calls get the old copy again without a fetch
+    OldCopy --> Expired: after that minute the next call tries again
+    Fresh --> Missing: invalidate drops it, or it is evicted as least recently used
+
+    note right of Fresh
+        Answered at once while its age is under the lifetime.
+    end note
+    note right of StaleWindow
+        Answered at once with the old copy, with a header that says a refresh is running.
+    end note
+    note right of OldCopy
+        Answered with the last copy, with a header that says it is old and how old.
+    end note
+%% source-hash: b6a84743828b

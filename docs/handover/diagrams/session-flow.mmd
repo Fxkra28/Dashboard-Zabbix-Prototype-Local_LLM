@@ -1,0 +1,31 @@
+---
+title: "HCML Monitoring Portal: sign-in, session, renewal and sign-out"
+---
+sequenceDiagram
+    autonumber
+    participant B as Browser
+    participant N as nginx
+    participant S as Server
+
+    %% The token lives in an HttpOnly cookie, so no script on the page can read it.
+    %% Every refusal below is made by the server, whatever the menu shows.
+
+    B->>N: POST /bff/api/auth/login with name, password and the X-HCML-CSRF header
+    N->>S: POST /api/auth/login, with a request id added
+    S->>S: check the header and the Origin, then the per-account limit and any lock
+    S->>S: look the name up and check the scrypt hash, with a decoy check for an unknown name
+    S-->>B: 200 and a session cookie (HttpOnly, SameSite Strict), plus the seconds it lasts
+
+    Note over B,S: every later request carries the cookie
+
+    B->>S: GET /api/problems
+    S->>S: verify the signature, the issuer and the epoch, then look the user up again
+    S->>S: compare the current role with the rule for the route
+    S-->>B: 200 with data, or 401 sign in, or 403 wrong role
+
+    B->>S: POST /api/auth/refresh, an hour before the end
+    S-->>B: a new cookie
+
+    B->>S: POST /api/auth/logout
+    S-->>B: cookie cleared, and the old token is refused from then on
+%% source-hash: 9e81ad2706ba

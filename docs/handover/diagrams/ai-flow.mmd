@@ -1,0 +1,20 @@
+---
+title: "HCML Monitoring Portal: Explain and the Assistant"
+---
+flowchart TD
+    %% One path for both copies. The copy decides which model answers, through settings only.
+    %% The viewer is told a fixed sentence when the model fails. Details go to the log.
+
+    CLICK["Explain button or an Assistant question"] --> GUARD["Guard on the AI routes<br/>calls this minute, tokens today"]
+    GUARD -->|"over a limit"| R429["429 with the time to wait"]
+    GUARD --> BUILD["Build the input from Zabbix data<br/>Explain: one problem or one SLA figure<br/>Assistant: a summary of the estate"]
+    BUILD --> WHICH{"Which copy?"}
+    WHICH -->|"hosted-model copy"| HOSTED["Anthropic SDK<br/>up to 4 calls at once<br/>30 s limit, one retry"]
+    WHICH -->|"local-model copy"| LOCAL["Ollama, one question at a time<br/>its native chat API when it is Ollama<br/>120 s limit, no retry"]
+    HOSTED --> CHECK["Explain: JSON checked against a schema<br/>Assistant: text streamed as it is written"]
+    LOCAL --> CHECK
+    CHECK --> KEEP["Explain answers kept 1 h for a problem<br/>and 5 min for an SLA figure<br/>Assistant answers are never kept"]
+    KEEP --> REPLY["Reply to the browser<br/>with a notice when the text left the machine"]
+    HOSTED -.->|"fails"| FAIL["Fixed sentence for the viewer<br/>details in the log"]
+    LOCAL -.->|"fails, or busy for about 20 s"| FAIL
+%% source-hash: 59699aac8081

@@ -1,0 +1,217 @@
+# HCML Monitoring Portal, deploy next to Zabbix.
+# portal-web (nginx) serves the built React app and reverse-proxies /bff -> portal-bff.
+# The browser only ever talks to portal-web; the Zabbix token stays inside portal-bff.
+
+# The project name is fixed, not taken from the folder: Compose lower-cases a folder name, and deploy/rebuild.sh and
+# deploy/watch.sh build the names of the images and containers from this line.
+name: hcml-portal-ollama
+
+# Container logs are rotated so a chatty BFF cannot fill the disk.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+services:
+  portal-bff:
+    build:
+      context: ./server
+      # Shown by /api/health to a signed-in user. Set them when you build:
+      #   BUILD_COMMIT=$(git rev-parse --short HEAD) BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ) docker compose up -d --build
+      args:
+        BUILD_COMMIT: ${BUILD_COMMIT:-unknown}
+        BUILD_TIME: ${BUILD_TIME:-unknown}
+    # tini as PID 1 hands SIGTERM to node and reaps its children.
+    init: true
+    # Linux has no host.docker.internal of its own: host-gateway makes it the host, which
+    # is how a local AI_BASE_URL reaches what the host publishes. Docker Desktop already
+    # defines the name, so on a Mac or Windows this changes nothing.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # HCML's Zabbix. Where the name does not lead to its LAN address, docker-compose.override.yml
+      # maps it for this machine only, so the certificate is still checked against the name.
+      ZBX_URL: ${ZBX_URL:-https://zabbix.hcml.co.id/zabbix/api_jsonrpc.php}
+      # Canonical name. ZBX_TOKEN is a deprecated alias that trips a startup
+      # warning on every boot, so it is deliberately not what compose passes.
+      ZABBIX_API_TOKEN: ${ZABBIX_API_TOKEN:-}
+      # Without this, acknowledge/close is permanently 503 in Docker no matter
+      # what .env holds: the portal silently loses its only write.
+      ZABBIX_WRITE_TOKEN: ${ZABBIX_WRITE_TOKEN:-}
+      # Several of HCML's item searches at once took up to 256 s (the Capacity report).
+      ZABBIX_TIMEOUT_MS: ${ZABBIX_TIMEOUT_MS:-300000}
+      # An exception for one expired Zabbix certificate, until a set day; blank keeps the normal check (docs/operations/tls.md).
+      ZBX_TLS_PIN_SHA256: ${ZBX_TLS_PIN_SHA256:-}
+      ZBX_TLS_PIN_UNTIL: ${ZBX_TLS_PIN_UNTIL:-}
+      PORT: "4000"
+      # Node sizes its default heap from the container's memory limit and takes only part of
+      # it, so mem_limit alone would leave the biggest report build short of what the limit
+      # allows. 1280 MiB of heap keeps room in the 2g for buffers, /tmp and the runtime.
+      NODE_OPTIONS: "--max-old-space-size=1280"
+      # nginx sits in front, so honour X-Forwarded-For: otherwise every request
+      # looks like it comes from the proxy and all users share one rate limit.
+      # true is one hop (nginx). Set TRUST_PROXY=2 in .env with a TLS proxy in front,
+      # and have that proxy keep the browser's Host (setup.md section 23).
+      TRUST_PROXY: ${TRUST_PROXY:-true}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-300}
+      # Live screens allowed at once, overall and per signed-in user (services/stream.ts).
+      STREAM_MAX_CLIENTS: ${STREAM_MAX_CLIENTS:-100}
+      STREAM_MAX_PER_USER: ${STREAM_MAX_PER_USER:-5}
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8082}
+      NET_GROUP_IDS: ${NET_GROUP_IDS:-}
+      SITE_TAG: ${SITE_TAG:-site}
+      SITE_GROUP_PREFIX: ${SITE_GROUP_PREFIX:-}
+      OWNER_TAG: ${OWNER_TAG:-owner}
+      CRITICALITY_TAG: ${CRITICALITY_TAG:-criticality}
+      HOST_NAME_PATTERN: ${HOST_NAME_PATTERN:-}
+      LINK_LOSS_WARN: ${LINK_LOSS_WARN:-2}
+      LINK_LOSS_CRIT: ${LINK_LOSS_CRIT:-10}
+      # The Zabbix dashboard whose gauge widgets are the internet traffic meters (services/meters.ts).
+      INTERNET_METERS_DASHBOARD: ${INTERNET_METERS_DASHBOARD:-Global view}
+      NOISE_SHORT_SECONDS: ${NOISE_SHORT_SECONDS:-300}
+      NOISE_MIN_COUNT: ${NOISE_MIN_COUNT:-5}
+      AVAILABILITY_MIN_SEVERITY: ${AVAILABILITY_MIN_SEVERITY:-2}
+      # The derived monthly SLA (sli/engine.ts). The BFF reads these but compose
+      # never passed them, so a value in .env changed nothing in Docker.
+      # Each default is config.ts's own; a test keeps the two equal.
+      SLO_TARGET: ${SLO_TARGET:-99}
+      SLA_TIMEZONE: ${SLA_TIMEZONE:-Asia/Jakarta}
+      SLI_PROFILE: ${SLI_PROFILE:-availability}
+      SLI_REPORT_TRIGGERS: ${SLI_REPORT_TRIGGERS:-High ICMP ping loss}
+      SLI_AVAILABILITY_TRIGGERS: ${SLI_AVAILABILITY_TRIGGERS:-Unavailable by ICMP ping,High ICMP ping loss}
+      SLI_MIN_COVERAGE: ${SLI_MIN_COVERAGE:-0.5}
+      SLI_ZBX_PARALLEL: ${SLI_ZBX_PARALLEL:-4}
+      # Spans the SLA figures treat as hours with no data, such as a collector cut off from the network.
+      SLA_NO_DATA_WINDOWS: ${SLA_NO_DATA_WINDOWS:-}
+      # This copy exists so estate data never leaves the machine, so the
+      # provider is fixed rather than a default: a missing or mistyped
+      # AI_PROVIDER in .env used to fall back to "anthropic", and a key exported
+      # in the shell would then have been used. No Anthropic
+      # key is passed at all. Ollama is reached the way Zabbix is above: the
+      # container cannot see the host's localhost. On Linux, Ollama must also listen
+      # beyond loopback (OLLAMA_HOST=0.0.0.0:11434 for the Ollama service, or the Docker
+      # bridge address), or the container gets no answer.
+      AI_PROVIDER: openai-compatible
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_BASE_URL: ${AI_BASE_URL:-http://host.docker.internal:11434/v1}
+      # No defaults for these two on purpose. config.ts picks a different one
+      # per backend (claude-sonnet-4-6 / 30 s hosted, qwen3:8b / 120 s local),
+      # and a default here would override that and silently ask Ollama for a
+      # Claude model. Empty falls through. See the `||` note on zbxUrl.
+      AI_MODEL: ${AI_MODEL:-}
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-}
+      # Documented in both .env.example files but previously never passed here.
+      AI_MAX_RETRIES: ${AI_MAX_RETRIES:-1}
+      # Local-model tuning (config.ts, ai.ts), also never passed before. Same
+      # rule: the defaults are config.ts's, and only a local model reads them.
+      AI_KEEP_ALIVE: ${AI_KEEP_ALIVE:-30m}
+      AI_OLLAMA_NATIVE: ${AI_OLLAMA_NATIVE:-auto}
+      AI_NUM_CTX: ${AI_NUM_CTX:-8192}
+      AI_TEMPERATURE: ${AI_TEMPERATURE:-0.7}
+      AI_TOP_P: ${AI_TOP_P:-0.8}
+      # Caps on Explain and the Assistant (server/src/clients/limits.ts).
+      # Per signed-in user a minute, calls in flight at once, and tokens a day
+      # (0 turns a budget off; only the hosted API is counted).
+      AI_CHAT_PER_MINUTE: ${AI_CHAT_PER_MINUTE:-10}
+      AI_EXPLAIN_PER_MINUTE: ${AI_EXPLAIN_PER_MINUTE:-10}
+      AI_MAX_CONCURRENT: ${AI_MAX_CONCURRENT:-4}
+      AI_DAILY_TOKENS_PER_USER: ${AI_DAILY_TOKENS_PER_USER:-500000}
+      AI_DAILY_TOKENS_TOTAL: ${AI_DAILY_TOKENS_TOTAL:-2000000}
+      # No MAIL_ settings here, on purpose: this copy exists so that nothing leaves the machine, so it never emails a report.
+      # hcml-portal passes them. compose-env.test.ts pins the difference (ADR-0014).
+      # Deployed, not scaffolded: default auth ON here.
+      AUTH_ENABLED: ${AUTH_ENABLED:-true}
+      # No default on purpose. The BFF refuses to start on the placeholder
+      # secret, and handing it one here would defeat that check: an
+      # authenticated portal signing tokens with a value published in this repo
+      # looks perfectly healthy while anyone can forge an admin token.
+      JWT_SECRET: ${JWT_SECRET:?set a strong JWT_SECRET in .env before deploying}
+      PORTAL_USER: ${PORTAL_USER:-admin}
+      # No default: the old one, admin, made admin/admin the sign-in. Unset now
+      # reaches the BFF empty, and it refuses to start without a password
+      # (unless PORTAL_USERS is set).
+      PORTAL_PASS: ${PORTAL_PASS:-}
+      PORTAL_USERS: ${PORTAL_USERS:-}
+      # Cookies ignore ports: without its own name this would share hcml-portal's on 8081.
+      SESSION_COOKIE: ${SESSION_COOKIE:-hcml_session_ollama}
+      # How long one sign-in lasts, in hours, and the number that ends every session when it is
+      # raised. Each default is config.ts's own; a test keeps the two equal.
+      SESSION_HOURS: ${SESSION_HOURS:-12}
+      SESSION_EPOCH: ${SESSION_EPOCH:-1}
+    expose:
+      - "4000"
+    # Healthy means the process answers. Whether Zabbix does too is `ready` in the
+    # reply, and a restart would not fix that, so it never fails
+    # this check. The check sends no sign-in and reads only the status.
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    # Least privilege. This container holds both Zabbix tokens and the AI key, so it
+    # runs as the image's non-root node user, with every Linux capability dropped, a
+    # read-only root filesystem and no way to gain privileges. It writes no files; /tmp
+    # is a small in-memory scratch space.
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    # Room for the biggest month: the cache alone may hold 64 MiB (cache.ts), and an SLA
+    # build keeps a month of events and trends in memory on top of that.
+    mem_limit: 2g
+    # The same as mem_limit, so the container cannot use swap on top of it: Docker's default allows twice the memory.
+    memswap_limit: 2g
+    # Node holds a few dozen processes and threads at most; a runaway fork stops here.
+    pids_limit: 256
+    cpus: 2
+    restart: unless-stopped
+    logging: *default-logging
+
+  portal-web:
+    build: ./web
+    depends_on:
+      portal-bff:
+        condition: service_healthy
+    ports:
+      # 8082 by default so this variant runs next to hcml-portal, which keeps
+      # 8081, with both on 8081 this container could never start ("port is
+      # already allocated"). Overridable; keep WEB_ORIGIN in step.
+      # Bound to 127.0.0.1: the portal shows production monitoring data and must
+      # not be reachable from whatever network the machine joins. Put a real
+      # reverse proxy with TLS in front before exposing it. The container side is
+      # 8080, where the non-root nginx listens (web/nginx.conf); the host side is unchanged.
+      - "127.0.0.1:${WEB_PORT:-8082}:8080"
+    # Same hardening as portal-bff. nginx runs as uid 101, and its pid file and
+    # temp files (a proxied report download is buffered to disk) live in /tmp, which is
+    # in memory and counts against mem_limit.
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    memswap_limit: 256m
+    pids_limit: 128
+    cpus: 1
+    # wget ships with Alpine, so the check adds nothing to the image. 127.0.0.1, not
+    # localhost: nginx listens on IPv4 only. Each check is one line in nginx's access log.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    logging: *default-logging
+
+  # Enable when scaling the cache / SSE fan-out.
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped

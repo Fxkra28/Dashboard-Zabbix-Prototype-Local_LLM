@@ -1,0 +1,85 @@
+/* Login: the card is 360px wide, so the lockup is given a settled width rather
+   than stretching the full card. */
+.login-card .brand-mark {
+  max-width: 208px;
+  margin: 0 auto var(--s-5);
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding: var(--s-2-5) var(--s-3);
+  border-radius: var(--r-md);
+  color: var(--on-chrome-2);
+  font-weight: var(--w-medium);
+  font-size: var(--t-md);
+}
+.nav-link:hover {
+  background: var(--chrome-hover);
+  color: var(--on-chrome);
+}
+.nav-link.active {
+  background: var(--chrome-active);
+  color: var(--on-chrome);
+}
+.nav-link svg {
+  width: 18px;
+  height: 18px;
+  flex: none;
+}
+
+.nav-scroll {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2-5);
+}
+.nav-section {
+  display: flex;
+  flex-direction: column;
+}
+.nav-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--on-chrome-3);
+  font-size: var(--t-xs);
+  font-weight: var(--w-bold);
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  padding: var(--s-2) var(--s-3) var(--s-1);
+  cursor: pointer;
+}
+.nav-section-title:hover {
+  color: var(--on-chrome-2);
+}
+.nav-section-title .chev {
+  display: inline-flex;
+  transition: transform var(--dur-2) var(--ease-out);
+}
+.nav-section-title .chev.collapsed {
+  transform: rotate(-90deg);
+}
+.nav-items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-0-5);
+}
+
+.sidebar .spacer {
+  flex: 1;
+}
+.sidebar .foot {
+  font-size: var(--t-xs);
+  opacity: 0.6;
+  padding: var(--s-2);
+}
+/* Which build is running: a second line of the same footer, set apart by a little space. */
+.sidebar .foot .foot-build {
+  margin-top: var(--s-1);
+}
+

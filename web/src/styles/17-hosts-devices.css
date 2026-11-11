@@ -1,0 +1,176 @@
+/* The Dashboard's Hosts view: a tile for each kind of device, and the busiest hosts as a short list with a bar. */
+.view-updated {
+  margin: 0 0 var(--s-2);
+  text-align: right;
+  font-size: var(--t-sm);
+}
+.kind-tiles {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: var(--s-3);
+}
+.kinds-panel,
+.web-panel {
+  margin-bottom: var(--s-4);
+}
+.kind-tiles > li {
+  display: flex;
+}
+.kind-tile {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  text-decoration: none;
+}
+a.kind-tile:hover {
+  background: var(--surface-2);
+}
+.kind-tile.alert {
+  border-color: var(--danger);
+  box-shadow: inset 5px 0 0 var(--danger);
+}
+.web-failures {
+  list-style: none;
+  margin: var(--s-3) 0 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-2);
+}
+.web-failure {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--s-3);
+  align-items: baseline;
+  font-size: var(--t-base);
+}
+.web-failure .muted {
+  font-size: var(--t-sm);
+}
+.web-failure a {
+  color: inherit;
+}
+.kind-tile.empty {
+  border-color: var(--border);
+  color: var(--muted);
+}
+.kind-name {
+  font-size: var(--t-sm);
+  font-weight: var(--w-semibold);
+}
+.kind-count {
+  font-size: var(--t-2xl);
+  font-weight: var(--w-bold);
+  line-height: var(--lh-solid);
+  font-variant-numeric: tabular-nums;
+}
+.kind-sub {
+  font-size: var(--t-sm);
+  color: var(--muted);
+}
+.top-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s-3);
+}
+.top-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--s-1) var(--s-3);
+  align-items: baseline;
+}
+.top-host {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--t-base);
+}
+.top-host a {
+  color: inherit;
+  text-decoration: none;
+}
+.top-host a:hover {
+  text-decoration: underline;
+}
+.top-value {
+  font-size: var(--t-base);
+  font-weight: var(--w-bold);
+  font-variant-numeric: tabular-nums;
+}
+.top-bar {
+  grid-column: 1 / -1;
+  height: 6px;
+  border-radius: var(--r-pill);
+  background: var(--border);
+  overflow: hidden;
+}
+.top-fill {
+  display: block;
+  height: 100%;
+  background: var(--primary);
+}
+.top-fill.busy {
+  background: var(--warn);
+}
+.top-fill.hot {
+  background: var(--danger);
+}
+
+/* Devices: one tile for each kind of device, which is also the filter of the list under it. */
+.type-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--s-3);
+  margin-bottom: var(--s-4);
+}
+.type-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-1);
+  padding: var(--s-3) var(--s-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.type-tile:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+.type-tile[aria-pressed='true'] {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--on-primary);
+}
+.type-name {
+  font-size: var(--t-sm);
+  font-weight: var(--w-semibold);
+}
+.type-count {
+  font-size: var(--t-3xl);
+  font-weight: var(--w-bold);
+  line-height: var(--lh-solid);
+  font-variant-numeric: tabular-nums;
+}
+.type-sub {
+  font-size: var(--t-xs);
+}
+.type-tile:not([aria-pressed='true']) .type-sub {
+  color: var(--muted);
+}
+.row-actions {
+  display: inline-flex;
+  gap: var(--s-2);
+}

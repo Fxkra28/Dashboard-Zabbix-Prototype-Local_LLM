@@ -1,0 +1,197 @@
+---
+title: "HCML Monitoring Portal: Entity-Relationship Diagram (logical)"
+config:
+  layout: elk
+  elk:
+    mergeEdges: false
+    nodePlacementStrategy: BRANDES_KOEPF
+---
+erDiagram
+    direction TB
+
+    %%  Logical model: the entities the portal actually works with,
+    %%  with their attributes and identifiers. One level below the CDM,
+    %%  one above the PDM.
+
+    %%  Blue   read from Zabbix over JSON-RPC. The header names the
+    %%         MySQL table it comes from, after the dot.
+    %%  Green  derived by the portal: built per request, cached for
+    %%         seconds to minutes, never stored anywhere.
+    %%  Red    leaves this machine. In hcml-portal the explanation is
+    %%         written by qwen3:8b on this host, so the problem, its
+    %%         host and its tags never leave the machine.
+
+    %%  Crow's foot: || exactly one, o| zero or one,
+    %%               o{ zero or many, |{ one or many.
+
+    subgraph L_HOSTS["Hosts, sites and links"]
+        HOST["HOST · hosts"] {
+            string hostid PK
+            string name "the visible name"
+            string status "0 monitored, 1 not monitored"
+            string maintenance_status "1 in maintenance"
+        }
+        HOST_INTERFACE["HOST_INTERFACE · interface"] {
+            string ip
+            string type "1 agent, 2 SNMP, 3 IPMI, 4 JMX"
+            string available "0 unknown, 1 up, 2 down"
+            string main "1 the default interface"
+        }
+        HOST_INVENTORY["HOST_INVENTORY · host_inventory"] {
+            string site_city "site signal, rank 3"
+            string location "site signal, fallback"
+            string poc_1_name "owner signal"
+            string poc_1_email "owner signal"
+        }
+        HOST_TAG["HOST_TAG · host_tag"] {
+            string tag "site, owner, criticality"
+            string value
+        }
+        HOST_GROUP["HOST_GROUP · hstgrp"] {
+            string groupid PK
+            string name
+        }
+        SITE {
+            string name PK "derived, never stored"
+            string code "from the host-name convention"
+            number worst "highest severity, -1 when clear"
+            number total
+        }
+        SITE_HOST {
+            string hostid PK
+            string state "up, down, degraded, nodata, disabled"
+            string reason "why, ping first"
+            string siteSource "tag, name, inventory or group"
+        }
+        LINK {
+            string id PK "hostid:target"
+            string target
+            number loss
+            number latency
+            string state "up, degraded, down, unknown"
+        }
+
+        HOST ||--o{ HOST_INTERFACE : "selectInterfaces"
+        HOST ||--o| HOST_INVENTORY : "selectInventory, [] when disabled"
+        HOST ||--o{ HOST_TAG : "selectTags"
+        HOST }o--o{ HOST_GROUP : "selectHostGroups"
+        SITE ||--|{ SITE_HOST : "resolveSite(), a total function"
+        HOST ||--|| SITE_HOST : "derives"
+    end
+
+    subgraph L_METRICS["Metrics"]
+        ITEM["ITEM · items"] {
+            string itemid PK
+            string key_ "parsed for icmpping targets"
+            string name
+            string value_type "picks the history and trend table"
+            string lastvalue "not a column, taken from history"
+            string lastclock "blank beyond the history period"
+        }
+        HISTORY["HISTORY · five history tables"] {
+            string itemid FK "no constraint in MySQL"
+            number clock
+            number value
+        }
+        TREND["TREND · trends, trends_uint"] {
+            string itemid FK "no constraint in MySQL"
+            number num "samples in that hour"
+            number value_avg
+            number value_max
+        }
+
+        ITEM ||--o{ HISTORY : "itemids"
+        ITEM ||--o{ TREND : "itemids"
+        ITEM }|--|| LINK : "1 to 3 icmpping items collapse into one link"
+    end
+
+    subgraph L_EVENTS["Alerting and availability"]
+        TRIGGER["TRIGGER · triggers"] {
+            string triggerid PK
+            string manual_close "1 Close permitted"
+        }
+        PROBLEM["PROBLEM · problem"] {
+            string eventid PK
+            string objectid FK "the trigger, no constraint in MySQL"
+            string name "the notification text"
+            string severity "0 to 5"
+            number clock
+            string r_eventid "0 means still open"
+            string acknowledged
+        }
+        INCIDENT {
+            string eventid PK
+            number start "clipped to the window"
+            number end "recovery clock, or now"
+            boolean resolved
+        }
+        HOST_AVAILABILITY {
+            string hostid PK
+            number availability "percent, overlaps merged"
+            number downtime
+            number incidents
+            boolean measured "false when nothing was collected"
+        }
+        AI_EXPLANATION {
+            string summary
+            string businessImpact
+            string recommendation
+        }
+
+        TRIGGER ||--o{ PROBLEM : "objectid when object=0"
+        PROBLEM ||--|| INCIDENT : "derives, clipped to the window"
+        INCIDENT }|--|| HOST_AVAILABILITY : "merged intervals"
+        PROBLEM ||--o| AI_EXPLANATION : "one call per problem, cached"
+    end
+
+    subgraph L_SERVICES["Services and SLA"]
+        SERVICE["SERVICE · services"] {
+            string serviceid PK
+            string name
+            number status "-1 OK, else severity"
+            string description
+        }
+        SLA["SLA · sla"] {
+            string slaid PK
+            string name
+            number slo "target percent"
+            string period "0 daily to 4 annually"
+        }
+        SLI["SLI · computed, no table"] {
+            number sli "achieved percent"
+            number uptime
+            number downtime
+            number error_budget "seconds, negative means missed"
+        }
+
+        SERVICE ||--o{ SERVICE : "selectChildren, a DAG not a tree"
+        SLA ||--o{ SLI : "sla.getsli, positional"
+        SLI }o--|| SERVICE : "serviceids index"
+    end
+
+    HOST ||--o{ ITEM : "hostids"
+    TRIGGER }o--|| HOST : "selectHosts, the portal keeps the first"
+    PROBLEM }o--o{ SERVICE : "selectProblemEvents, the root causes"
+    HOST_AVAILABILITY }o--|| SITE : "rolled up per site"
+
+    %% Frames must stay unfilled or they paint over the relationship lines.
+
+    classDef zbx      fill:#dbeafe,stroke:#2563eb,color:#14213d
+    classDef derived  fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef external fill:#fee2e2,stroke:#dc2626,color:#450a0a
+
+    style L_EVENTS fill:none,stroke:#94a3b8
+    style L_HOSTS fill:none,stroke:#94a3b8
+    style L_METRICS fill:none,stroke:#94a3b8
+    style L_SERVICES fill:none,stroke:#94a3b8
+
+    class HISTORY,HOST,HOST_GROUP,HOST_INTERFACE zbx
+    class HOST_INVENTORY,HOST_TAG,ITEM,PROBLEM zbx
+    class SERVICE,SLA,SLI,TREND zbx
+    class TRIGGER zbx
+
+    class HOST_AVAILABILITY,INCIDENT,LINK,SITE derived
+    class SITE_HOST derived
+
+    class AI_EXPLANATION derived
+%% source-hash: e0c691794255

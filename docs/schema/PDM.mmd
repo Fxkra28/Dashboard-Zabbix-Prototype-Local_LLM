@@ -1,0 +1,273 @@
+---
+title: "HCML Monitoring Portal: Physical Data Model (PDM), MySQL 8.0"
+config:
+  layout: elk
+  elk:
+    mergeEdges: false
+    nodePlacementStrategy: BRANDES_KOEPF
+---
+erDiagram
+    direction TB
+
+    %%  Physical model: real MySQL tables, real column types, real
+    %%  keys. Read from information_schema of the running database
+    %%  (Zabbix 7.0.30 on MySQL 8.0), metadata only, no rows.
+
+    %%  The portal owns no database of its own. Every table here
+    %%  belongs to Zabbix and is reached over the JSON-RPC API, never
+    %%  by SQL. 26 of the schema's 203 tables are shown: the ones whose
+    %%  rows reach the portal, plus the one write path. The full 45
+    %%  the portal touches are in erd/database/ERD-Database.pdf.
+
+    %%  Solid line  a real FOREIGN KEY, labelled with its column, and
+    %%              "cascade" when deleting the parent deletes these.
+    %%  Dashed line a relationship that exists only in the data:
+    %%              MySQL enforces nothing. History has no foreign key
+    %%              on purpose: the cost per inserted row is too high.
+    %%  Blue        rows come back to the portal.
+    %%  Purple      written by event.acknowledge, the portal's one write.
+    %%  Every bigint is bigint unsigned.
+
+    %%  Where the rows go afterwards: in this copy the explanation
+    %%  layer summarises a problem on this machine and nothing about
+    %%  API. The local-model copy is hcml-portal-ollama/schema/PDM.pdf.
+
+    subgraph P_HOSTS["Hosts &amp; inventory"]
+        hosts {
+            bigint hostid PK
+            varchar(128) host "technical name"
+            varchar(128) name "visible name"
+            int status "0 monitored, 1 not monitored, 3 template"
+            int maintenance_status "1 in maintenance"
+        }
+        interface {
+            bigint interfaceid PK
+            bigint hostid FK
+            int main "1 the default interface"
+            int type "1 agent, 2 SNMP, 3 IPMI, 4 JMX"
+            varchar(64) ip
+            int available "0 unknown, 1 up, 2 down"
+        }
+        host_inventory {
+            bigint hostid PK,FK "no row when inventory is disabled"
+            varchar(128) site_city
+            text location
+            varchar(128) poc_1_name
+            varchar(128) poc_1_email
+        }
+        host_tag {
+            bigint hosttagid PK
+            bigint hostid FK
+            varchar(255) tag "site, owner, criticality"
+            varchar(255) value
+        }
+        hosts_groups {
+            bigint hostgroupid PK
+            bigint hostid FK
+            bigint groupid FK
+        }
+        hstgrp {
+            bigint groupid PK
+            varchar(255) name
+            int type "0 host group, 1 template group"
+        }
+
+        hosts ||--o{ interface : "hostid, cascade"
+        hosts ||--o| host_inventory : "hostid, cascade"
+        hosts ||--o{ host_tag : "hostid"
+        hosts ||--o{ hosts_groups : "hostid, cascade"
+        hstgrp ||--o{ hosts_groups : "groupid, cascade"
+    end
+
+    subgraph P_ITEMS["Items &amp; stored values"]
+        items {
+            bigint itemid PK
+            bigint hostid FK
+            bigint interfaceid FK
+            varchar(255) name
+            varchar(2048) key_
+            int value_type "picks the history and trend table"
+            varchar(255) units
+            int status "0 enabled, 1 disabled"
+        }
+        item_rtdata {
+            bigint itemid PK,FK
+            int state "0 normal, 1 not supported"
+            varchar(2048) error
+        }
+        item_tag {
+            bigint itemtagid PK
+            bigint itemid FK
+            varchar(255) tag "link_group, link_role"
+            varchar(255) value
+        }
+        history {
+            bigint itemid PK "no FK to items"
+            int clock PK
+            int ns PK
+            double value
+        }
+        history_uint {
+            bigint itemid PK "no FK to items"
+            int clock PK
+            int ns PK
+            bigint value
+        }
+        trends {
+            bigint itemid PK "no FK to items"
+            int clock PK "start of the hour"
+            int num "values in that hour"
+            double value_avg
+            double value_max
+        }
+        trends_uint {
+            bigint itemid PK "no FK to items"
+            int clock PK "start of the hour"
+            int num
+            bigint value_avg
+            bigint value_max
+        }
+
+        items ||--o| item_rtdata : "itemid, cascade"
+        items ||--o{ item_tag : "itemid"
+        items ||..o{ history : "itemid, value_type 0, no FK"
+        items ||..o{ history_uint : "itemid, value_type 3, no FK"
+        items ||..o{ trends : "itemid, value_type 0, no FK"
+        items ||..o{ trends_uint : "itemid, value_type 3, no FK"
+    end
+
+    subgraph P_EVENTS["Triggers, events &amp; problems"]
+        triggers {
+            bigint triggerid PK
+            varchar(2048) expression "reaches items through functions"
+            int manual_close "1 Close permitted"
+            varchar(255) opdata
+        }
+        functions {
+            bigint functionid PK
+            bigint itemid FK
+            bigint triggerid FK
+        }
+        events {
+            bigint eventid PK
+            int source "0 triggers, 4 services"
+            int object "0 trigger, 4 item, 5 LLD, 6 service"
+            bigint objectid "no FK, object says what it points at"
+            int clock
+            int value "1 problem, 0 recovery"
+            int acknowledged "set by event.acknowledge"
+            varchar(2048) name
+            int severity "0 to 5"
+        }
+        event_recovery {
+            bigint eventid PK,FK "the problem event"
+            bigint r_eventid FK "the event that resolved it"
+        }
+        problem {
+            bigint eventid PK,FK
+            bigint objectid "no FK"
+            int clock
+            bigint r_eventid FK "NULL while open"
+            varchar(2048) name
+            int acknowledged
+            int severity
+        }
+        problem_tag {
+            bigint problemtagid PK
+            bigint eventid FK
+            varchar(255) tag
+            varchar(255) value
+        }
+        acknowledges {
+            bigint acknowledgeid PK
+            bigint userid FK "the API token user"
+            bigint eventid FK
+            int clock
+            varchar(2048) message
+            int action "bitmask 1 close, 2 ack, 4 message"
+        }
+
+        triggers ||--o{ functions : "triggerid"
+        events ||--o| event_recovery : "eventid, cascade"
+        events ||--o| problem : "eventid, cascade"
+        problem ||--o{ problem_tag : "eventid, cascade"
+        events ||--o{ acknowledges : "eventid, cascade"
+        triggers |o..o{ problem : "objectid when object=0, no FK"
+    end
+
+    subgraph P_SERVICES["Services &amp; SLA"]
+        services {
+            bigint serviceid PK
+            varchar(128) name
+            int status "-1 OK, else a severity"
+            int algorithm
+            text description
+        }
+        services_links {
+            bigint linkid PK
+            bigint serviceupid FK "the parent"
+            bigint servicedownid FK "the child"
+        }
+        service_tag {
+            bigint servicetagid PK
+            bigint serviceid FK
+            varchar(255) tag
+            varchar(255) value
+        }
+        service_problem {
+            bigint service_problemid PK
+            bigint eventid FK "a problem row, not an event"
+            bigint serviceid FK
+            int severity
+        }
+        sla {
+            bigint slaid PK
+            varchar(255) name UK
+            int period "0 daily to 4 annually"
+            double slo "target percent"
+            varchar(50) timezone
+            int status "0 disabled, 1 enabled"
+        }
+        sla_service_tag {
+            bigint sla_service_tagid PK
+            bigint slaid FK
+            varchar(255) tag
+            int operator
+            varchar(255) value
+        }
+
+        services ||--o{ services_links : "serviceupid, cascade"
+        services ||--o{ services_links : "servicedownid, cascade"
+        services ||--o{ service_tag : "serviceid, cascade"
+        services ||--o{ service_problem : "serviceid, cascade"
+        sla ||--o{ sla_service_tag : "slaid, cascade"
+        service_tag }o..o{ sla_service_tag : "matched on tag and value, no key"
+    end
+
+    hosts ||--o{ items : "hostid, cascade"
+    interface |o--o{ items : "interfaceid"
+    items ||--o{ functions : "itemid"
+    problem ||--o{ service_problem : "eventid, cascade"
+
+    %% Frames must stay unfilled or they paint over the relationship lines.
+
+    classDef returned fill:#dbeafe,stroke:#2563eb,color:#14213d
+    classDef written  fill:#ede9fe,stroke:#7c3aed,color:#2e1065
+    classDef internal fill:#e2e8f0,stroke:#475569,color:#0f172a
+
+    style P_EVENTS fill:none,stroke:#94a3b8
+    style P_HOSTS fill:none,stroke:#94a3b8
+    style P_ITEMS fill:none,stroke:#94a3b8
+    style P_SERVICES fill:none,stroke:#94a3b8
+
+    class events,history,history_uint,host_inventory returned
+    class host_tag,hosts,hosts_groups,hstgrp returned
+    class interface,item_rtdata,item_tag,items returned
+    class problem,problem_tag,service_problem,service_tag returned
+    class services,services_links,sla,sla_service_tag returned
+    class trends,trends_uint,triggers returned
+
+    class acknowledges written
+
+    class event_recovery,functions internal
+%% source-hash: a3744c936f6e

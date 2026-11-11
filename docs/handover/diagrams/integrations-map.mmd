@@ -1,0 +1,48 @@
+---
+title: "HCML Monitoring Portal: what it talks to"
+---
+flowchart LR
+    %% Integration map. Solid arrows carry data, dotted arrows are operations, checks and the optional path through a TLS proxy.
+    %% The browser reaches nginx over plain HTTP on the same machine (tracker IN-26). A TLS proxy is optional
+    %% and not in the repository. Only the hosted-model copy calls Anthropic, and only the local-model copy calls Ollama.
+    %% The mail server is called only while the MAIL_ settings are usable, and the state volume is the hosted-model copy's alone.
+
+    PEOPLE["Browsers<br/>viewers, wall screens,<br/>operators, admins"]
+
+    subgraph HOST["The host machine, under Docker"]
+        direction LR
+        TLS["TLS proxy<br/>optional, not in the repository"]
+        WEB["portal-web<br/>nginx, port 8080 inside<br/>serves the build, passes /bff"]
+        BFF["portal-bff<br/>Fastify server, port 4000 inside<br/>tokens, copies in memory, sums"]
+        OPS["rebuild.sh and watch.sh<br/>run by the operator"]
+        STATE[("portal-state volume<br/>recipients, schedule and<br/>a record of the sends<br/>hosted-model copy only")]
+        TLS -.-> WEB
+        WEB --> BFF
+        STATE <-->|"read at start,<br/>saved on a change"| BFF
+    end
+
+    subgraph OUT["What the server asks"]
+        direction TB
+        ZBX["HCML Zabbix API<br/>JSON-RPC, a read token<br/>and a separate write token"]
+        ANT["Anthropic API<br/>hosted-model copy, only when asked"]
+        OLL["Ollama on the host<br/>local-model copy, only when asked"]
+        MAIL["Mail server<br/>hosted-model copy, only<br/>when email is on"]
+    end
+
+    subgraph REPO["The repository"]
+        direction TB
+        GH["GitHub<br/>repository, CI, Dependabot"]
+        DEV["Developers"]
+    end
+
+    PEOPLE -->|"HTTP, on the same machine"| WEB
+    PEOPLE -.->|"from other machines, over TLS"| TLS
+    BFF -->|"JSON-RPC over TLS"| ZBX
+    BFF -->|"over TLS"| ANT
+    BFF -->|HTTP| OLL
+    BFF -->|"SMTP, report attached"| MAIL
+    OPS -.->|"docker compose and health checks"| WEB
+    OPS -.-> BFF
+    DEV -->|push| GH
+    GH -.->|"runs the checks"| DEV
+%% source-hash: fd5ef547d2db

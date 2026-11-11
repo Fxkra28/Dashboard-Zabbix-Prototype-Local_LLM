@@ -1,0 +1,28 @@
+/*
+ * The portal's stylesheet, in cascade order.
+ *
+ * The parts are slices of one file and their order is the cascade: a rule that beats an earlier one
+ * stays after it, so a new rule goes into the part it belongs to, and a new part takes the next number.
+ * The list below and the files beside it must agree (stylesheet.test.ts); a build serves them as one sheet.
+ * 01-tokens.css holds the design tokens, and web/scripts/tokens.check.mjs reads the parts as one.
+ */
+@import './00-fonts.css';
+@import './01-tokens.css';
+@import './02-base.css';
+@import './03-shell.css';
+@import './04-login.css';
+@import './05-layout-chips-tags.css';
+@import './06-cards-tables-badges.css';
+@import './07-controls-states.css';
+@import './08-explain-modal-notices.css';
+@import './09-reports-sites.css';
+@import './10-assistant.css';
+@import './11-graphs-network.css';
+@import './12-sla-services-links.css';
+@import './13-second-pass.css';
+@import './14-sidebar-wall.css';
+@import './15-report-download.css';
+@import './16-meters.css';
+@import './17-hosts-devices.css';
+@import './18-soft-depth.css';
+@import './19-touch.css';

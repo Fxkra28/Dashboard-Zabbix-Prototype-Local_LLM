@@ -1,0 +1,181 @@
+// HCML Monitoring Portal design tokens, generated from web/src/styles/01-tokens.css. Do not edit: run npm run tokens:export.
+// The light theme as variables; $hcml-dark holds the values the dark theme changes.
+
+$hcml-chrome: #0a2540;
+$hcml-chrome-2: #123152;
+$hcml-primary: #2b5584;
+$hcml-primary-strong: #1e3b5c;
+$hcml-mid: #4681c3;
+$hcml-tint: #d8e2ee;
+$hcml-tint-line: #c1d5eb;
+$hcml-bg: #e3e9f1;
+$hcml-surface: #e3e9f1;
+$hcml-surface-2: #dae2ed;
+$hcml-text: #1b2733;
+$hcml-muted: #566577;
+$hcml-on-chrome: #ffffff;
+$hcml-on-chrome-2: rgba(255, 255, 255, 0.84);
+$hcml-on-chrome-3: rgba(255, 255, 255, 0.6);
+$hcml-chrome-hover: rgba(255, 255, 255, 0.1);
+$hcml-chrome-active: rgba(255, 255, 255, 0.2);
+$hcml-good-glow: rgba(46, 158, 91, 0.2);
+$hcml-on-primary: #ffffff;
+$hcml-on-severity: #08182a;
+$hcml-logo-plate: #ffffff;
+$hcml-logo-ink: #2b5584;
+$hcml-good: #2e9e5b;
+$hcml-good-bg: #ecfdf3;
+$hcml-good-line: #b7e4c7;
+$hcml-good-text: #207146;
+$hcml-warn: #e8a33d;
+$hcml-warn-bg: #fff7ec;
+$hcml-warn-line: #f2ddbb;
+$hcml-warn-text: #875a17;
+$hcml-danger: #e45959;
+$hcml-danger-bg: #fef2f2;
+$hcml-danger-line: #f5c2c2;
+$hcml-danger-text: #b4352d;
+$hcml-neutral-bg: #eef2f7;
+$hcml-neutral-text: #475569;
+$hcml-border: rgba(150, 166, 190, 0.4);
+$hcml-border-strong: #748496;
+$hcml-series-1: #2b5584;
+$hcml-series-2: #0f766e;
+$hcml-series-3: #6d4aa8;
+$hcml-series-4: #4a5d75;
+$hcml-focus: #2b5584;
+$hcml-focus-ring: 0 0 0 3px rgba(43, 85, 132, 0.28);
+$hcml-r-xs: 4px;
+$hcml-r-sm: 6px;
+$hcml-r-md: 10px;
+$hcml-r-lg: 14px;
+$hcml-r-xl: 22px;
+$hcml-r-pill: 999px;
+$hcml-s-0-5: 2px;
+$hcml-s-1: 4px;
+$hcml-s-1-5: 6px;
+$hcml-s-2: 8px;
+$hcml-s-2-5: 10px;
+$hcml-s-3: 12px;
+$hcml-s-4: 16px;
+$hcml-s-5: 20px;
+$hcml-s-6: 24px;
+$hcml-s-7: 28px;
+$hcml-s-8: 32px;
+$hcml-s-10: 40px;
+$hcml-s-12: 48px;
+$hcml-t-xs: 11px;
+$hcml-t-sm: 12px;
+$hcml-t-base: 13px;
+$hcml-t-md: 14px;
+$hcml-t-lg: 15px;
+$hcml-t-xl: 18px;
+$hcml-t-2xl: 24px;
+$hcml-t-3xl: 30px;
+$hcml-t-4xl: 44px;
+$hcml-w-regular: 400;
+$hcml-w-medium: 500;
+$hcml-w-semibold: 600;
+$hcml-w-bold: 700;
+$hcml-lh-solid: 1;
+$hcml-lh-tight: 1.2;
+$hcml-lh-body: 1.5;
+$hcml-lh-loose: 1.6;
+$hcml-track-caps: 0.05em;
+$hcml-control-sm: 28px;
+$hcml-control-md: 36px;
+$hcml-target-min: 24px;
+$hcml-target-touch: 44px;
+$hcml-disabled-opacity: 0.5;
+$hcml-z-raise: 1;
+$hcml-z-head: 2;
+$hcml-z-corner: 3;
+$hcml-z-topbar: 5;
+$hcml-z-sidebar: 7;
+$hcml-z-overlay: 50;
+$hcml-z-skip: 1000;
+$hcml-bp-sm: 640px;
+$hcml-bp-md: 720px;
+$hcml-bp-lg: 900px;
+$hcml-bp-xl: 1100px;
+$hcml-e-1: 0 1px 2px rgba(16, 42, 67, 0.06), 0 6px 20px rgba(16, 42, 67, 0.06);
+$hcml-e-2: 0 8px 24px rgba(16, 42, 67, 0.12);
+$hcml-e-3: 0 24px 60px rgba(16, 42, 67, 0.28);
+$hcml-e-drawer: -12px 0 40px rgba(16, 42, 67, 0.18);
+$hcml-scrim: rgba(16, 42, 67, 0.35);
+$hcml-neu-hi: rgba(255, 255, 255, 0.95);
+$hcml-neu-lo: rgba(150, 166, 190, 0.62);
+$hcml-neu-raised: 8px 8px 16px rgba(150, 166, 190, 0.62), -8px -8px 16px rgba(255, 255, 255, 0.95);
+$hcml-neu-raised-sm: 4px 4px 9px rgba(150, 166, 190, 0.62), -4px -4px 9px rgba(255, 255, 255, 0.95);
+$hcml-neu-raised-xs: 2px 2px 5px rgba(150, 166, 190, 0.62), -2px -2px 5px rgba(255, 255, 255, 0.95);
+$hcml-neu-inset: inset 5px 5px 10px rgba(150, 166, 190, 0.62), inset -5px -5px 10px rgba(255, 255, 255, 0.95);
+$hcml-neu-inset-sm: inset 3px 3px 6px rgba(150, 166, 190, 0.62), inset -3px -3px 6px rgba(255, 255, 255, 0.95);
+$hcml-chrome-raised: 3px 3px 8px rgba(0, 0, 0, 0.42), -3px -3px 8px rgba(255, 255, 255, 0.05);
+$hcml-chrome-inset: inset 3px 3px 7px rgba(0, 0, 0, 0.5), inset -3px -3px 7px rgba(255, 255, 255, 0.06);
+$hcml-chrome-well: rgba(0, 0, 0, 0.22);
+$hcml-sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+$hcml-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+$hcml-dur-1: 120ms;
+$hcml-dur-2: 180ms;
+$hcml-dur-3: 240ms;
+$hcml-dur-4: 340ms;
+$hcml-stagger: 50ms;
+$hcml-ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+$hcml-dur-spin: 800ms;
+$hcml-dur-blink: 1s;
+$hcml-dur-highlight: 10s;
+$hcml-radius: 22px;
+$hcml-shadow: 8px 8px 16px rgba(150, 166, 190, 0.62), -8px -8px 16px rgba(255, 255, 255, 0.95);
+
+$hcml-dark: (
+  'chrome': #081320,
+  'chrome-2': #102a41,
+  'primary': #6d9bcf,
+  'primary-strong': #84abd7,
+  'mid': #84abd7,
+  'tint': #19324d,
+  'tint-line': #23456c,
+  'bg': #14263a,
+  'surface': #14263a,
+  'surface-2': #0f1f31,
+  'text': #e6edf3,
+  'muted': #94a9bc,
+  'chrome-hover': rgba(255, 255, 255, 0.08),
+  'chrome-active': rgba(255, 255, 255, 0.16),
+  'good-glow': rgba(75, 189, 122, 0.25),
+  'on-primary': #061320,
+  'good': #4bbd7a,
+  'good-bg': #0f2c1e,
+  'good-line': #1f5537,
+  'good-text': #6fd196,
+  'warn-bg': #2e2312,
+  'warn-line': #59431c,
+  'warn-text': #e5b871,
+  'danger': #f08080,
+  'danger-bg': #331717,
+  'danger-line': #6b2b2b,
+  'danger-text': #f3a0a0,
+  'neutral-bg': #1a2c3e,
+  'neutral-text': #b3c3d1,
+  'border': rgba(120, 152, 190, 0.2),
+  'border-strong': #517492,
+  'series-1': #6d9bcf,
+  'series-2': #4bb8a8,
+  'series-3': #a98ae0,
+  'series-4': #93a8bf,
+  'focus': #84abd7,
+  'focus-ring': 0 0 0 3px rgba(132, 171, 215, 0.35),
+  'e-1': (0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 20px rgba(0, 0, 0, 0.35)),
+  'e-2': 0 8px 24px rgba(0, 0, 0, 0.5),
+  'e-3': 0 24px 60px rgba(0, 0, 0, 0.6),
+  'e-drawer': -12px 0 40px rgba(0, 0, 0, 0.5),
+  'scrim': rgba(3, 9, 16, 0.6),
+  'neu-hi': rgba(92, 132, 178, 0.22),
+  'neu-lo': rgba(2, 8, 16, 0.72),
+  'neu-raised': (8px 8px 16px rgba(2, 8, 16, 0.72), -8px -8px 16px rgba(92, 132, 178, 0.22)),
+  'neu-raised-sm': (4px 4px 9px rgba(2, 8, 16, 0.72), -4px -4px 9px rgba(92, 132, 178, 0.22)),
+  'neu-raised-xs': (2px 2px 5px rgba(2, 8, 16, 0.72), -2px -2px 5px rgba(92, 132, 178, 0.22)),
+  'neu-inset': (inset 5px 5px 10px rgba(2, 8, 16, 0.72), inset -5px -5px 10px rgba(92, 132, 178, 0.22)),
+  'neu-inset-sm': (inset 3px 3px 6px rgba(2, 8, 16, 0.72), inset -3px -3px 6px rgba(92, 132, 178, 0.22)),
+  'shadow': (8px 8px 16px rgba(2, 8, 16, 0.72), -8px -8px 16px rgba(92, 132, 178, 0.22)),
+);

@@ -1,0 +1,337 @@
+/*
+ * Design tokens. The direction these implement is in ../../../DESIGN.md, and the contrast figures are
+ * its sections 7 and 10. scripts/tokens.check.mjs re-derives them from these values on every run, so a
+ * token edited to an illegible colour fails the check rather than shipping.
+ *
+ * Two rules govern this block. Every colour used below comes from here, which is what makes dark
+ * mode a matter of redefining tokens and nothing else. And every space, size, weight, layer and
+ * duration comes from a scale here; tokens.check fails a value between steps.
+ */
+:root {
+  color-scheme: light;
+
+  /* One hue, five roles. Never a second hue: severity owns the loud colours. */
+  --chrome: #0a2540;
+  --chrome-2: #123152;
+  --primary: #2b5584;
+  --primary-strong: #1e3b5c;
+  --mid: #4681c3;
+  /* 5.86:1 for --primary and 4.55:1 for --muted on it, so a selected row stays readable on the soft plane. */
+  --tint: #d8e2ee;
+  --tint-line: #c1d5eb;
+
+  /* One soft plane for the page and its cards since 26 October 2026: depth separates them, not a
+     colour step (DESIGN.md section 10). --surface-2 is the pressed-in well. */
+  --bg: #e3e9f1;
+  --surface: #e3e9f1;
+  --surface-2: #dae2ed;
+
+  --text: #1b2733;
+  /* 4.88:1 on the plane and 4.56:1 in the well. The old #64748b missed AA by 0.07. */
+  --muted: #566577;
+  --on-chrome: #ffffff;
+  --on-chrome-2: rgba(255, 255, 255, 0.84);
+  --on-chrome-3: rgba(255, 255, 255, 0.6);
+  --chrome-hover: rgba(255, 255, 255, 0.1);
+  --chrome-active: rgba(255, 255, 255, 0.2);
+  --good-glow: rgba(46, 158, 91, 0.2);
+  --on-primary: #ffffff;
+  /* Ink for severity chips. Zabbix's six hues all fail as text and all pass
+     behind this. DESIGN.md R-4. */
+  --on-severity: #08182a;
+  /* The logo is dark blue on white and stays that way in both themes, so its
+     plate is a fixed white rather than a surface token. DESIGN.md section 8. */
+  --logo-plate: #ffffff;
+  /* The logo's own ink, for the monogram shown when the image fails. Fixed like
+     the plate it sits on: --primary lightens in dark mode, 2.90:1 on white. */
+  --logo-ink: #2b5584;
+
+  /* The status texts went one step darker with the soft plane, and another on 11 November 2026 so that they also
+     clear 4.5:1 on the hover and selected planes of a row: 4.57 to 4.61:1 there, 4.90 to 4.93:1 on the page plane. */
+  --good: #2e9e5b;
+  --good-bg: #ecfdf3;
+  --good-line: #b7e4c7;
+  --good-text: #207146;
+  --warn: #e8a33d;
+  --warn-bg: #fff7ec;
+  --warn-line: #f2ddbb;
+  --warn-text: #875a17;
+  --danger: #e45959;
+  --danger-bg: #fef2f2;
+  --danger-line: #f5c2c2;
+  --danger-text: #b4352d;
+  --neutral-bg: #eef2f7;
+  --neutral-text: #475569;
+
+  /* --border draws dividers, where nothing depends on seeing it. Anything
+     whose edge identifies it as a control uses --border-strong, which clears
+     the 3:1 that WCAG 1.4.11 asks of a component boundary. */
+  --border: rgba(150, 166, 190, 0.4);
+  /* 3.14:1 on the soft plane. A shadow alone measured 1.20 to 1.59:1, so controls keep this edge. */
+  --border-strong: #748496;
+
+  --series-1: #2b5584;
+  --series-2: #0f766e;
+  --series-3: #6d4aa8;
+  --series-4: #4a5d75;
+
+  --focus: #2b5584;
+  --focus-ring: 0 0 0 3px rgba(43, 85, 132, 0.28);
+
+  --r-xs: 4px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 22px;
+  --r-pill: 999px;
+
+  /* The 4 px grid, with half steps under 12 px, where 2 px is a large share of a gap. */
+  --s-0-5: 2px;
+  --s-1: 4px;
+  --s-1-5: 6px;
+  --s-2: 8px;
+  --s-2-5: 10px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 28px;
+  --s-8: 32px;
+  --s-10: 40px;
+  --s-12: 48px;
+
+  /* No fractional sizes. 12.5px and 13.5px rounded differently per browser and
+     per zoom, so baselines drifted between adjacent panels on one page. */
+  --t-xs: 11px;
+  --t-sm: 12px;
+  --t-base: 13px;
+  --t-md: 14px;
+  --t-lg: 15px;
+  --t-xl: 18px;
+  --t-2xl: 24px;
+  --t-3xl: 30px;
+  --t-4xl: 44px;
+
+  /* Inter is served from 400 to 700, so a heavier weight would draw as 700 anyway. */
+  --w-regular: 400;
+  --w-medium: 500;
+  --w-semibold: 600;
+  --w-bold: 700;
+
+  /* A figure set solid, a short label, running text, and text read at length. */
+  --lh-solid: 1;
+  --lh-tight: 1.2;
+  --lh-body: 1.5;
+  --lh-loose: 1.6;
+
+  /* Uppercase labels, spaced in em so the spacing follows the size. */
+  --track-caps: 0.05em;
+
+  /* No target is under 24 px (WCAG 2.5.8), and none under 44 px for a finger (19-touch.css). */
+  --control-sm: 28px;
+  --control-md: 36px;
+  --target-min: 24px;
+  --target-touch: 44px;
+  --disabled-opacity: 0.5;
+
+  /* Lowest first. The first three count only inside their own box: sticky table cells, the rail toggle. */
+  --z-raise: 1;
+  --z-head: 2;
+  --z-corner: 3;
+  --z-topbar: 5;
+  --z-sidebar: 7;
+  --z-overlay: 50;
+  --z-skip: 1000;
+
+  /* A media query cannot read these, so queries write the number, max-width 0.02 px under it;
+     tokens.check holds every query to this list. */
+  --bp-sm: 640px;
+  --bp-md: 720px;
+  --bp-lg: 900px;
+  --bp-xl: 1100px;
+
+  --e-1: 0 1px 2px rgba(16, 42, 67, 0.06), 0 6px 20px rgba(16, 42, 67, 0.06);
+  --e-2: 0 8px 24px rgba(16, 42, 67, 0.12);
+  --e-3: 0 24px 60px rgba(16, 42, 67, 0.28);
+  --e-drawer: -12px 0 40px rgba(16, 42, 67, 0.18);
+  --scrim: rgba(16, 42, 67, 0.35);
+
+  /* Soft depth, lit from the top left: a raised surface casts its shadow down and right and catches
+     the light up and left, and a pressed one does the reverse. The dark blocks redefine the two lights. */
+  --neu-hi: rgba(255, 255, 255, 0.95);
+  --neu-lo: rgba(150, 166, 190, 0.62);
+  --neu-raised: 8px 8px 16px var(--neu-lo), -8px -8px 16px var(--neu-hi);
+  --neu-raised-sm: 4px 4px 9px var(--neu-lo), -4px -4px 9px var(--neu-hi);
+  --neu-raised-xs: 2px 2px 5px var(--neu-lo), -2px -2px 5px var(--neu-hi);
+  --neu-inset: inset 5px 5px 10px var(--neu-lo), inset -5px -5px 10px var(--neu-hi);
+  --neu-inset-sm: inset 3px 3px 6px var(--neu-lo), inset -3px -3px 6px var(--neu-hi);
+  /* The same depth on the navy chrome, which is navy in both themes. */
+  --chrome-raised: 3px 3px 8px rgba(0, 0, 0, 0.42), -3px -3px 8px rgba(255, 255, 255, 0.05);
+  --chrome-inset: inset 3px 3px 7px rgba(0, 0, 0, 0.5), inset -3px -3px 7px rgba(255, 255, 255, 0.06);
+  --chrome-well: rgba(0, 0, 0, 0.22);
+
+  --sans: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* IBM Plex Mono for anything scanned down a column: host IDs, IPs, SLA
+     figures, timestamps. Slashed zero, and tabular figures that align. */
+  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* MOTION 2 since 26 October 2026 (DESIGN.md section 10): short transitions for a state change
+     someone caused, and one rise as a page's content arrives. The reduced-motion rule below stops all of it. */
+  --dur-1: 120ms;
+  --dur-2: 180ms;
+  --dur-3: 240ms;
+  --dur-4: 340ms;
+  --stagger: 50ms;
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  /* State, not decoration: a spinner's turn, the streaming cursor's blink, the wall's highlight. */
+  --dur-spin: 800ms;
+  --dur-blink: 1s;
+  --dur-highlight: 10s;
+
+  --radius: var(--r-xl);
+  --shadow: var(--neu-raised);
+}
+
+/*
+ * Dark mode. Two near-blacks cannot be told apart by contrast ratio: the WCAG
+ * formula adds 0.05 to both luminances, so every pair in this navy family
+ * lands between 1.05 and 1.14 however far apart they look. Planes are
+ * separated by --border here, not by a luminance step. DESIGN.md R-1.
+ * Since 26 October 2026 the page and its cards are one plane separated by
+ * depth, and controls keep a 3:1 edge (DESIGN.md section 10).
+ */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+
+  --chrome: #081320;
+  --chrome-2: #102a41;
+  --primary: #6d9bcf;
+  --primary-strong: #84abd7;
+  --mid: #84abd7;
+  --tint: #19324d;
+  --tint-line: #23456c;
+
+  --bg: #14263a;
+  --surface: #14263a;
+  --surface-2: #0f1f31;
+  --neu-hi: rgba(92, 132, 178, 0.22);
+  --neu-lo: rgba(2, 8, 16, 0.72);
+
+  --text: #e6edf3;
+  --muted: #94a9bc;
+  --on-primary: #061320;
+  --on-severity: #08182a;
+
+  --good: #4bbd7a;
+  --good-bg: #0f2c1e;
+  --good-line: #1f5537;
+  --good-text: #6fd196;
+  --warn: #e8a33d;
+  --warn-bg: #2e2312;
+  --warn-line: #59431c;
+  --warn-text: #e5b871;
+  --danger: #f08080;
+  --danger-bg: #331717;
+  --danger-line: #6b2b2b;
+  --danger-text: #f3a0a0;
+  --neutral-bg: #1a2c3e;
+  --neutral-text: #b3c3d1;
+  --chrome-hover: rgba(255, 255, 255, 0.08);
+  --chrome-active: rgba(255, 255, 255, 0.16);
+  --good-glow: rgba(75, 189, 122, 0.25);
+
+  --border: rgba(120, 152, 190, 0.2);
+  --border-strong: #517492;
+
+  --series-1: #6d9bcf;
+  --series-2: #4bb8a8;
+  --series-3: #a98ae0;
+  --series-4: #93a8bf;
+
+  --focus: #84abd7;
+  --focus-ring: 0 0 0 3px rgba(132, 171, 215, 0.35);
+
+  --e-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 20px rgba(0, 0, 0, 0.35);
+  --e-2: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --e-3: 0 24px 60px rgba(0, 0, 0, 0.6);
+  --e-drawer: -12px 0 40px rgba(0, 0, 0, 0.5);
+  --scrim: rgba(3, 9, 16, 0.6);
+}
+
+/* Follow the system until someone picks a side, which Layout.tsx records. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --chrome: #081320;
+    --chrome-2: #102a41;
+    --primary: #6d9bcf;
+    --primary-strong: #84abd7;
+    --mid: #84abd7;
+    --tint: #19324d;
+    --tint-line: #23456c;
+
+    --bg: #14263a;
+    --surface: #14263a;
+    --surface-2: #0f1f31;
+    --neu-hi: rgba(92, 132, 178, 0.22);
+    --neu-lo: rgba(2, 8, 16, 0.72);
+
+    --text: #e6edf3;
+    --muted: #94a9bc;
+    --on-primary: #061320;
+    --on-severity: #08182a;
+
+    --good: #4bbd7a;
+    --good-bg: #0f2c1e;
+    --good-line: #1f5537;
+    --good-text: #6fd196;
+    --warn: #e8a33d;
+    --warn-bg: #2e2312;
+    --warn-line: #59431c;
+    --warn-text: #e5b871;
+    --danger: #f08080;
+    --danger-bg: #331717;
+    --danger-line: #6b2b2b;
+    --danger-text: #f3a0a0;
+    --neutral-bg: #1a2c3e;
+    --neutral-text: #b3c3d1;
+  --chrome-hover: rgba(255, 255, 255, 0.08);
+  --chrome-active: rgba(255, 255, 255, 0.16);
+  --good-glow: rgba(75, 189, 122, 0.25);
+
+    --border: rgba(120, 152, 190, 0.2);
+    --border-strong: #517492;
+
+    --series-1: #6d9bcf;
+  --series-2: #4bb8a8;
+  --series-3: #a98ae0;
+  --series-4: #93a8bf;
+
+  --focus: #84abd7;
+    --focus-ring: 0 0 0 3px rgba(132, 171, 215, 0.35);
+
+    --e-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 6px 20px rgba(0, 0, 0, 0.35);
+    --e-2: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --e-3: 0 24px 60px rgba(0, 0, 0, 0.6);
+    --e-drawer: -12px 0 40px rgba(0, 0, 0, 0.5);
+    --scrim: rgba(3, 9, 16, 0.6);
+  }
+}
+
+/*
+ * Someone who has asked their system to stop animating things is not asking
+ * for a shorter animation. The one exception is the SSE cursor and the problem
+ * feed, which are state, not decoration, and are handled at their own rules.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+

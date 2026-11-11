@@ -1,0 +1,245 @@
+---
+title: "HCML Monitoring Portal: conceptual model"
+config:
+  layout: elk
+  elk:
+    mergeEdges: false
+    nodePlacementStrategy: BRANDES_KOEPF
+---
+flowchart LR
+    %%  Conceptual model (Merise MCD): 27 entities, 34 associations.
+    %%  The top of three levels. Below it: erd/vanilla (logical, what
+    %%  the portal reads and derives) and erd/database (physical, what
+    %%  MySQL stores). The levels index is in erd.md.
+
+    %%  Mermaid has no MCD diagram type, so this is a flowchart:
+    %%    rectangle   an entity and its properties. No keys, no foreign
+    %%                keys, no types: those belong to the two levels
+    %%                below, and a conceptual model has none of them.
+    %%    diamond     a named association, read in the verb's direction
+    %%    (min,max)   how many times one occurrence of the entity on
+    %%                that leg takes part in the association
+
+    %%  Colour marks where a concept comes from, as in the other ERDs:
+    %%    blue    observed: Zabbix holds it
+    %%    green   derived: the portal computes it, nothing stores it
+    %%    amber   local: the portal's own, never in Zabbix
+    %%    grey    the association diamonds
+
+    %%  The approximation: the diamonds are decorative. Nothing checks
+    %%  that one has exactly two legs, identifying relationships and
+    %%  generalisation cannot be drawn, and map links (R30) are drawn
+    %%  device-to-device because Merise cannot associate an association.
+
+    %%  LR, not TB: at 26 entities with a diamond on every edge (27 now), TB gave a
+    %%  1:4.5 tower (3712 x 16590). LR is 5168 x 1286.
+
+    %%  Per-domain views, and the reasoning behind every cardinality:
+    %%  ERD-Conceptual.md. Keep this file and that one in step.
+
+    subgraph EST["Estate"]
+        DEVICE["<b>DEVICE</b><br>visible name<br>technical name<br>monitored<br>in maintenance<br>network addresses<br>address kinds<br>site city<br>location<br>owner name<br>owner e-mail<br>labels<br>reporting category"]
+        DEVICE_GROUP["<b>DEVICE GROUP</b><br>group name"]
+        DEVICE_CLASS["<b>DEVICE CLASS</b><br>class name<br>display label"]
+        HOST_STATE["<b>HOST STATE</b><br>state<br>reason<br>ping verdict<br>packet loss<br>latency<br>value freshness<br>ICMP present<br>ICMP unsupported"]
+
+        R_BELONGS{"belongs to"}
+        R_CLASSES{"classes"}
+        R_REACHES{"reaches"}
+    end
+
+    subgraph MEAS["Measurement"]
+        MEASUREMENT["<b>MEASUREMENT</b><br>what is measured<br>collection interval<br>unit<br>newest value<br>when last collected<br>collecting or unsupported<br>labels"]
+        OBSERVATION["<b>OBSERVATION</b><br>moment<br>value<br>minimum<br>mean<br>maximum<br>sample count"]
+        INTERFACE_READING["<b>INTERFACE READING</b><br>port index<br>port name<br>alias<br>operational status<br>speed<br>bits in<br>bits out<br>utilisation<br>errors<br>discards<br>last collected"]
+        CAPACITY_READING["<b>CAPACITY READING</b><br>metric<br>average<br>maximum<br>unit"]
+        INTERNET_METER["<b>INTERNET METER</b><br>title<br>direction<br>capacity<br>colour zones<br>current reading<br>when read<br>share of capacity<br>zone<br>link up or down<br>reading state"]
+
+        R_CARRIES{"carries"}
+        R_RECORDS{"records"}
+        R_EXPOSES{"exposes"}
+        R_SUMS{"sums up"}
+        R_EVIDENCE{"derives from"}
+        R_READS{"reads"}
+    end
+
+    subgraph ALERTING["Alerting"]
+        ALERT_RULE["<b>ALERT RULE</b><br>description<br>severity<br>currently firing<br>last change<br>closable by hand"]
+        ALERT["<b>ALERT</b><br>moment raised<br>moment cleared<br>severity<br>name<br>acknowledged<br>operational data<br>labels"]
+        INCIDENT["<b>INCIDENT</b><br>start<br>end<br>resolved<br>acknowledged"]
+        NOISY_RULE["<b>NOISY ALERT RULE</b><br>firing count<br>median duration<br>short-lived firings<br>acknowledgement rate<br>total duration<br>longest<br>still open<br>noise flags"]
+
+        R_WATCHES{"watches"}
+        R_RAISES{"raises"}
+        R_HITS{"hits"}
+        R_CLIPS{"clips into"}
+        R_WITHIN{"falls within"}
+        R_COUNTS{"counts in"}
+        R_RANKS{"ranks as"}
+    end
+
+    subgraph SITES["Sites &amp; paths"]
+        SITE["<b>SITE</b><br>site name<br>site code<br>naming aliases<br>worst severity now<br>device counts by state<br>declaration coverage"]
+        LINK["<b>LINK</b><br>label<br>ping target<br>up<br>packet loss<br>latency<br>jitter<br>state<br>group<br>role"]
+        WAN_PATH["<b>WAN PATH</b><br>path name<br>provider<br>path state"]
+
+        R_STATIONS{"stations"}
+        R_TERMINATES{"terminates"}
+        R_LEG{"is a leg of"}
+        R_SERVES{"serves"}
+    end
+
+    subgraph LEVELS["Service levels"]
+        BUSINESS_SERVICE["<b>BUSINESS SERVICE</b><br>name<br>status rule<br>current status<br>description<br>labels"]
+        SERVICE_AGREEMENT["<b>SERVICE AGREEMENT</b><br>name<br>promised percentage<br>period length<br>enabled<br>timezone<br>working schedule<br>excluded downtime"]
+        AVAILABILITY_PERIOD["<b>AVAILABILITY PERIOD</b><br>profile<br>month<br>window start<br>window end<br>measured up to<br>closed<br>timezone<br>target percentage<br>gap policy<br>no-data policy<br>data gaps<br>when generated"]
+        AVAILABILITY_RESULT["<b>AVAILABILITY RESULT</b><br>scope<br>achieved percentage<br>downtime<br>uptime<br>window seconds<br>measured seconds<br>coverage<br>incidents<br>longest outage<br>data status<br>measured<br>meeting target<br>error budget"]
+        DERIVED_NODE["<b>DERIVED SERVICE NODE</b><br>kind<br>name<br>current status<br>worst in subtree<br>descendant count<br>data status<br>coverage"]
+
+        R_COMPOSES{"composes"}
+        R_COMMITS{"commits to"}
+        R_CAUSES{"causes"}
+        R_YIELDS{"yields"}
+        R_SCORES{"scores"}
+        R_ROLLS{"rolls up"}
+        R_NESTS{"nests"}
+        R_STANDS{"stands for"}
+    end
+
+    subgraph GOV["Governance, maps &amp; assistant"]
+        GOVERNANCE_DIM["<b>GOVERNANCE DIMENSION</b><br>dimension name<br>hint<br>devices answering<br>devices total<br>percentage<br>scored"]
+        TOPOLOGY_MAP["<b>TOPOLOGY MAP</b><br>map name<br>canvas size<br>background"]
+        SNAPSHOT["<b>ASSISTANT SNAPSHOT</b><br>moment taken<br>rendered text<br>section sizes<br>fingerprint<br>complete<br>truncated<br>devices counted<br>sites counted<br>problems counted<br>unacknowledged counted<br>agreements counted<br>degraded counted"]
+        TURN["<b>CONVERSATION TURN</b><br>role<br>content"]
+        EXPLANATION["<b>EXPLANATION</b><br>summary<br>business impact<br>recommendation<br>label meanings<br>status<br>meeting target"]
+        PORTAL_USER["<b>PORTAL USER</b><br>name<br>password<br>role"]
+
+        R_LACKS{"lacks"}
+        R_SHOWS{"shows"}
+        R_MAPLINK{"is linked to"}
+        R_SUMMARISES{"summarises"}
+        R_ANSWERS{"answers from"}
+        R_EXPLAINS{"explains"}
+    end
+
+    %% Estate
+    DEVICE          ---|"(1,n)"| R_BELONGS
+    R_BELONGS       ---|"(0,n)"| DEVICE_GROUP
+    DEVICE_CLASS    ---|"(0,n)"| R_CLASSES
+    R_CLASSES       ---|"(1,1)"| DEVICE
+    DEVICE          ---|"(1,1)"| R_REACHES
+    R_REACHES       ---|"(1,1)"| HOST_STATE
+
+    %% Measurement
+    DEVICE          ---|"(0,n)"| R_CARRIES
+    R_CARRIES       ---|"(1,1)"| MEASUREMENT
+    MEASUREMENT     ---|"(0,n)"| R_RECORDS
+    R_RECORDS       ---|"(1,1)"| OBSERVATION
+    DEVICE          ---|"(0,n)"| R_EXPOSES
+    R_EXPOSES       ---|"(1,1)"| INTERFACE_READING
+    MEASUREMENT     ---|"(0,1)"| R_SUMS
+    R_SUMS          ---|"(1,1)"| CAPACITY_READING
+    CAPACITY_READING ---|"(1,1)"| R_EVIDENCE
+    R_EVIDENCE      ---|"(0,n)"| OBSERVATION
+    INTERNET_METER  ---|"(0,n)"| R_READS
+    R_READS         ---|"(0,n)"| MEASUREMENT
+
+    %% Alerting
+    ALERT_RULE      ---|"(1,n)"| R_WATCHES
+    R_WATCHES       ---|"(0,n)"| DEVICE
+    ALERT_RULE      ---|"(0,n)"| R_RAISES
+    R_RAISES        ---|"(1,1)"| ALERT
+    ALERT           ---|"(1,1)"| R_HITS
+    R_HITS          ---|"(0,n)"| DEVICE
+    ALERT           ---|"(1,1)"| R_CLIPS
+    R_CLIPS         ---|"(0,n)"| INCIDENT
+    INCIDENT        ---|"(1,1)"| R_WITHIN
+    R_WITHIN        ---|"(0,n)"| AVAILABILITY_PERIOD
+    INCIDENT        ---|"(0,1)"| R_COUNTS
+    R_COUNTS        ---|"(1,n)"| NOISY_RULE
+    ALERT_RULE      ---|"(1,1)"| R_RANKS
+    R_RANKS         ---|"(0,1)"| NOISY_RULE
+
+    %% Sites and paths
+    SITE            ---|"(1,n)"| R_STATIONS
+    R_STATIONS      ---|"(1,1)"| DEVICE
+    DEVICE          ---|"(0,n)"| R_TERMINATES
+    R_TERMINATES    ---|"(1,1)"| LINK
+    LINK            ---|"(0,1)"| R_LEG
+    R_LEG           ---|"(1,n)"| WAN_PATH
+    WAN_PATH        ---|"(0,1)"| R_SERVES
+    R_SERVES        ---|"(0,n)"| SITE
+
+    %% Service levels
+    BUSINESS_SERVICE ---|"(0,n)"| R_COMPOSES
+    R_COMPOSES      ---|"(0,n)"| BUSINESS_SERVICE
+    BUSINESS_SERVICE ---|"(0,n)"| R_COMMITS
+    R_COMMITS       ---|"(0,n)"| SERVICE_AGREEMENT
+    ALERT           ---|"(0,n)"| R_CAUSES
+    R_CAUSES        ---|"(0,n)"| BUSINESS_SERVICE
+    AVAILABILITY_PERIOD ---|"(1,n)"| R_YIELDS
+    R_YIELDS        ---|"(1,1)"| AVAILABILITY_RESULT
+    AVAILABILITY_RESULT ---|"(0,1)"| R_SCORES
+    R_SCORES        ---|"(0,n)"| DEVICE
+    AVAILABILITY_RESULT ---|"(0,n)"| R_ROLLS
+    R_ROLLS         ---|"(0,n)"| AVAILABILITY_RESULT
+    DERIVED_NODE    ---|"(0,n)"| R_NESTS
+    R_NESTS         ---|"(1,1)"| DERIVED_NODE
+    DERIVED_NODE    ---|"(1,1)"| R_STANDS
+    R_STANDS        ---|"(0,1)"| DEVICE
+
+    %% Governance, maps and assistant
+    DEVICE          ---|"(0,n)"| R_LACKS
+    R_LACKS         ---|"(0,n)"| GOVERNANCE_DIM
+    TOPOLOGY_MAP    ---|"(0,n)"| R_SHOWS
+    R_SHOWS         ---|"(0,n)"| DEVICE
+    DEVICE          ---|"(0,n)"| R_MAPLINK
+    R_MAPLINK       ---|"(0,n)"| DEVICE
+    SNAPSHOT        ---|"(0,n)"| R_SUMMARISES
+    R_SUMMARISES    ---|"(0,n)"| SITE
+    R_SUMMARISES    ---|"(0,n)"| ALERT
+    R_SUMMARISES    ---|"(0,n)"| DERIVED_NODE
+    TURN            ---|"(1,1)"| R_ANSWERS
+    R_ANSWERS       ---|"(0,n)"| SNAPSHOT
+    EXPLANATION     ---|"(1,1)"| R_EXPLAINS
+    R_EXPLAINS      ---|"(0,1)"| ALERT
+    R_EXPLAINS      ---|"(0,1)"| SERVICE_AGREEMENT
+
+    %% Frames must stay unfilled: a filled frame paints over the edges
+    %% under it. That once hid 33 of 46 edges, see erd.md.
+
+    classDef zbx     fill:#dbeafe,stroke:#2563eb,color:#14213d
+    classDef derived fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef local   fill:#fef3c7,stroke:#d97706,color:#451a03
+    classDef assoc   fill:#f1f5f9,stroke:#94a3b8,color:#475569
+
+    style ALERTING fill:none,stroke:#94a3b8
+    style EST fill:none,stroke:#94a3b8
+    style GOV fill:none,stroke:#94a3b8
+    style LEVELS fill:none,stroke:#94a3b8
+    style MEAS fill:none,stroke:#94a3b8
+    style SITES fill:none,stroke:#94a3b8
+
+    class ALERT,ALERT_RULE,BUSINESS_SERVICE,DEVICE zbx
+    class DEVICE_GROUP,MEASUREMENT,OBSERVATION,SERVICE_AGREEMENT zbx
+    class TOPOLOGY_MAP zbx
+
+    class AVAILABILITY_PERIOD,AVAILABILITY_RESULT,CAPACITY_READING,DERIVED_NODE derived
+    class DEVICE_CLASS,EXPLANATION,GOVERNANCE_DIM,HOST_STATE derived
+    class INCIDENT,INTERFACE_READING,INTERNET_METER,LINK derived
+    class NOISY_RULE derived
+    class SITE,SNAPSHOT,TURN,WAN_PATH derived
+
+    class PORTAL_USER local
+
+    class R_ANSWERS,R_BELONGS,R_CARRIES,R_CAUSES assoc
+    class R_CLASSES,R_CLIPS,R_COMMITS,R_COMPOSES assoc
+    class R_COUNTS,R_EVIDENCE,R_EXPLAINS,R_EXPOSES assoc
+    class R_HITS,R_LACKS,R_LEG,R_MAPLINK assoc
+    class R_NESTS,R_RAISES,R_RANKS,R_REACHES assoc
+    class R_READS,R_RECORDS,R_ROLLS,R_SCORES assoc
+    class R_SERVES assoc
+    class R_SHOWS,R_STANDS,R_STATIONS,R_SUMMARISES assoc
+    class R_SUMS,R_TERMINATES,R_WATCHES,R_WITHIN assoc
+    class R_YIELDS assoc
+%% source-hash: aab355c5f308

@@ -1,0 +1,225 @@
+# Continuous integration: the typechecks, lint, tests and builds of both packages, the checks of the repository
+# against itself, a secret scan, and the two Docker builds. Nothing here pushes, comments or deploys.
+#
+# Five jobs, run side by side so a failure names its package:
+#   server   install from the lockfile, audit, typecheck, lint, test, build
+#   web      install from the lockfile, audit, typecheck, lint, test, build
+#   checks   what tools/check and the package scripts verify: the API contract, the ERD, the stylesheet and its tokens,
+#            the assistant's markdown parser, the unit formatters, the links, the numbers the docs state, the diagrams, the handover handbook
+#   secrets  a scan of what is pushed
+#   images   both Dockerfiles build, and nginx accepts its config
+# Locally, `npm run verify` (package.json) runs every step but the install, the audit, the secret scan and the image builds.
+#
+# server/scripts/validate-sli.ts is deliberately absent: it reads HCML's real Availability Report spreadsheets and needs a
+# running BFF, and must not run here.
+#
+# Where it runs: hcml-portal is the git repository, so CI runs from it. hcml-portal-ollama is not under git and has
+# no CI of its own. The file is kept in both trees so that they stay identical, and tools/check/parity.check.mjs is how
+# that is checked, on a machine that has both. With one tree it runs its own checks and skips the comparison.
+#
+# There is no workspace: server/ and web/ are separate npm projects with separate lockfiles. The two checkers written
+# in TypeScript run through server/node_modules/.bin/tsx rather than npx, which would fetch a package that is in
+# neither lockfile.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push to a branch makes the older run pointless. On main it does not: the secret scan reads only the
+# commits of its own push. GitHub also drops a run that is waiting when another arrives in its group, so each push to
+# main is a group of its own, named by its commit.
+concurrency:
+  group: ci-${{ github.ref == 'refs/heads/main' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# Nothing here pushes, comments or deploys, so the token only ever reads.
+# Every action is pinned to a full commit SHA, with the tag it was taken from in the comment
+# after it: a tag can be moved to other code, a SHA cannot. Dependabot (.github/dependabot.yml)
+# proposes the new SHA when a release comes, and a test refuses an action pinned any other way.
+permissions:
+  contents: read
+
+jobs:
+  server:
+    name: Server
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: '.nvmrc' # Node 24 LTS, as in both Dockerfiles; the server pins @types/node ^24
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install the server's dependencies
+        run: npm ci
+        working-directory: server
+
+      # Fails on a high or critical advisory in what ships; dev-only tools are
+      # left out, as they never reach an image.
+      - name: Audit the server's production dependencies
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: server
+
+      - name: Typecheck the server
+        run: npm run typecheck
+        working-directory: server
+
+      - name: Lint the server
+        run: npm run lint # eslint: typescript-eslint
+        working-directory: server
+
+      - name: Test the server
+        run: npm test
+        working-directory: server
+
+      - name: Build the server
+        run: npm run build
+        working-directory: server
+
+  web:
+    name: Web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install the web app's dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Audit the web app's production dependencies
+        run: npm audit --omit=dev --audit-level=high
+        working-directory: web
+
+      - name: Typecheck the web app
+        run: npm run typecheck
+        working-directory: web
+
+      - name: Lint the web app
+        run: npm run lint # eslint: typescript-eslint, react-hooks, jsx-a11y
+        working-directory: web
+
+      - name: Test the web app
+        run: npm test # in jsdom
+        working-directory: web
+
+      # `tsc -b` also typechecks vite.config.ts, which `npm run typecheck` never reaches.
+      - name: Build the web app
+        run: npm run build
+        working-directory: web
+
+  checks:
+    name: Checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: '.nvmrc'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      # Only the server is installed: it holds the tsx that runs the checkers written in TypeScript.
+      - name: Install the server's dependencies
+        run: npm ci
+        working-directory: server
+
+      - name: The API contract matches the code
+        run: ./server/node_modules/.bin/tsx tools/check/openapi.check.ts
+
+      - name: The database ERD and its .erd model agree
+        run: ./server/node_modules/.bin/tsx tools/check/erd.check.ts
+
+      - name: The stylesheet is structurally sound
+        run: node web/scripts/css.check.mjs
+
+      - name: The design tokens are legible and nothing reaches past them
+        run: node web/scripts/tokens.check.mjs
+
+      - name: The assistant's markdown parser
+        run: ./server/node_modules/.bin/tsx web/scripts/markdown.check.ts
+
+      - name: The unit and duration formatters
+        run: ./server/node_modules/.bin/tsx web/scripts/units.check.ts
+
+      - name: Every relative link in the docs resolves, spelled exactly
+        run: node tools/check/links.check.mjs
+
+      - name: The counts the docs state are the ones the code has
+        run: node tools/check/facts.check.mjs
+
+      - name: Every diagram source still matches its stamp, and has its PDF
+        run: node tools/check/diagrams.check.mjs
+
+      - name: The handover handbook matches the code and follows its rules
+        run: node tools/check/handover.check.mjs
+
+      # CI holds one tree, so this runs the script's own checks and skips the comparison.
+      # The comparison needs the sibling copy and is run on the machine that has both.
+      - name: The parity checker's own checks
+        run: node tools/check/parity.check.mjs
+
+  # A secret scan of what is pushed. It reads the commits of the push or
+  # the pull request, not the whole history, so a leak already in history (the token in
+  # cb97069) does not fail every run: revoking that token is the fix, and rewriting history is
+  # the repository owner's call. A manual run has no commit range and would read everything, so it
+  # skips this job. Comments on pull requests and the findings artifact are off: on a public
+  # repository either would publish the very thing the scan found. A repository owned by an
+  # organisation needs a GITLEAKS_LICENSE secret; a personal one does not. Not run before the
+  # first push, like the image builds.
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    if: github.event_name != 'workflow_dispatch'
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+
+      - name: Scan the pushed commits for secrets
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: false
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: false
+
+  images:
+    name: Docker images
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      # Built, never pushed: a Dockerfile that stops building should fail here, not on a deploy.
+      - name: Build the BFF image
+        run: docker build --tag hcml-portal-bff:ci server
+
+      - name: Build the web image
+        run: docker build --tag hcml-portal-web:ci web
+
+      # nginx cannot run outside Docker where this was written, so its own syntax check runs
+      # here, in the image that ships it. Needs no portal-bff host: /bff resolves at request time.
+      - name: The nginx config is valid
+        run: docker run --rm hcml-portal-web:ci nginx -t

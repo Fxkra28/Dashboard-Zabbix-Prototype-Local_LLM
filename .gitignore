@@ -1,0 +1,36 @@
+node_modules/
+dist/
+build/
+.env
+server/.env
+web/.env
+*.log
+.DS_Store
+__pycache__/
+*.pyc
+.vite/
+*.tsbuildinfo
+web/vite.config.js
+web/vite.config.d.ts
+
+# The local override holds the address of HCML's Zabbix: never commit it. Keep it out here, not only in one clone's
+# .git/info/exclude, which a fresh clone or another machine does not have.
+docker-compose.override.yml
+
+# A downloaded SLA report names every device in the estate: never commit one.
+HCML_SLA_Report_*
+
+# Screenshots of the live portal show real host and site names: never commit them (docs/contributing.md).
+/pic/
+
+# What tools/live/api-timing.py writes where it is run.
+api-timing.json
+
+# What `npm test` writes in server/ and web/: how many tests ran, which tools/check/facts.check.mjs holds the documents' counts to.
+.test-counts.json
+
+# A copy or variant of a secret file, and the portal's state file (saved recipient addresses): never commit them.
+.env.*
+!.env.example
+portal-state.json
+*.bak

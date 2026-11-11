@@ -1,0 +1,109 @@
+{
+  "title": "HCML Monitoring Portal: handover handbook",
+  "parts": [
+    {
+      "id": "start",
+      "dir": "",
+      "state": "complete",
+      "pages": [
+        "README.md"
+      ]
+    },
+    {
+      "id": "everyone",
+      "dir": "0-everyone",
+      "state": "complete",
+      "pages": [
+        "what-it-is.md",
+        "the-pages.md",
+        "who-can-do-what.md",
+        "can-i-trust-it.md",
+        "data-in-and-out.md",
+        "what-hcml-provides.md",
+        "risks-limits-costs.md",
+        "faq-glossary.md",
+        "one-page-ops-card.md"
+      ]
+    },
+    {
+      "id": "folders",
+      "dir": "1-folders",
+      "state": "complete",
+      "pages": [
+        "repository-map.md",
+        "server.md",
+        "web.md",
+        "tools-deploy-docs.md",
+        "the-two-copies.md",
+        "where-to-change-x.md"
+      ]
+    },
+    {
+      "id": "code",
+      "dir": "2-code",
+      "state": "complete",
+      "pages": [
+        "one-request.md",
+        "server-core-and-clients.md",
+        "server-security-and-http.md",
+        "server-domain-and-hosts.md",
+        "server-network-and-capacity.md",
+        "server-sla-and-reports.md",
+        "server-live-and-assistant.md",
+        "server-export.md",
+        "server-routes.md",
+        "web-shell-and-shared.md",
+        "web-api-types-guards.md",
+        "web-features.md",
+        "web-styles.md",
+        "tests-and-checkers.md",
+        "files-server.md",
+        "files-web.md",
+        "files-tools.md",
+        "symbols.md",
+        "tests-map.md"
+      ]
+    },
+    {
+      "id": "integrations",
+      "dir": "3-integrations",
+      "state": "complete",
+      "pages": [
+        "map.md",
+        "zabbix.md",
+        "ai-providers.md",
+        "nginx-docker-tls.md",
+        "sign-in.md",
+        "reports-exports.md",
+        "operations.md",
+        "github-ci.md"
+      ]
+    },
+    {
+      "id": "working",
+      "dir": "4-working",
+      "state": "complete",
+      "pages": [
+        "run-it.md",
+        "deploy-rebuild-rollback.md",
+        "change-recipes.md",
+        "troubleshooting.md",
+        "traps.md",
+        "exercises.md"
+      ]
+    },
+    {
+      "id": "reference",
+      "dir": "5-reference",
+      "state": "complete",
+      "pages": [
+        "decisions.md",
+        "choices-compared.md",
+        "history.md",
+        "open-items.md",
+        "glossary.md",
+        "how-the-handbook-is-kept-true.md"
+      ]
+    }
+  ]
+}

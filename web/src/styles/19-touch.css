@@ -1,0 +1,78 @@
+/* Where the pointer is a finger, no control is under 44 px; desktops and the wall keep their density.
+   A query adds no specificity, so each selector is as specific as the rule that sized the control. */
+@media (pointer: coarse) {
+  button.btn,
+  a.btn,
+  button.btn.sm,
+  a.btn.sm,
+  select,
+  .theme-pick select,
+  input[type='text'],
+  input[type='password'],
+  input[type='datetime-local'],
+  .seg button,
+  .nav-link,
+  .nav-section-title,
+  .skip-link,
+  .chat-suggest,
+  .item-row,
+  .sla-item,
+  .check,
+  .filter-check {
+    min-height: var(--target-touch);
+  }
+  .seg button {
+    min-width: var(--target-touch);
+  }
+
+  /* WebKit keeps its own height for a dropdown in its native look, so a finger gets one drawn here. */
+  select,
+  .theme-pick select {
+    appearance: none;
+    padding-right: calc(var(--s-3) + 16px);
+    background-image:
+      linear-gradient(45deg, transparent 50%, currentColor 50%),
+      linear-gradient(135deg, currentColor 50%, transparent 50%);
+    background-position:
+      calc(100% - 18px) 50%,
+      calc(100% - 13px) 50%;
+    background-size: 5px 5px;
+    background-repeat: no-repeat;
+  }
+  /* Forced colours drop background images, and with them the drawn arrow. */
+  @media (forced-colors: active) {
+    select,
+    .theme-pick select {
+      appearance: auto;
+    }
+  }
+
+  /* Square controls grow both ways; the ones sized by their line height keep their text centred. */
+  .rail-toggle,
+  .drawer-close,
+  .chip button {
+    min-width: var(--target-touch);
+    min-height: var(--target-touch);
+  }
+  .rail-toggle {
+    right: calc(var(--target-touch) / -2);
+  }
+  table.data.ports button.port-open,
+  .th-sort,
+  .sli-unmeasured summary {
+    min-height: var(--target-touch);
+    line-height: var(--target-touch);
+  }
+  .th-sort,
+  table.data.ports button.port-open {
+    min-width: var(--target-touch);
+  }
+
+  /* A toggle and the blank that stands in for one keep one width, so the rows line up. */
+  .svc-toggle,
+  .svc-toggle:not(.placeholder) {
+    width: var(--target-touch);
+    height: var(--target-touch);
+    margin: 0;
+  }
+}

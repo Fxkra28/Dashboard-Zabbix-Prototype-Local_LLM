@@ -1,0 +1,16 @@
+---
+title: "HCML Monitoring Portal: how a setting reaches the server"
+---
+flowchart LR
+    %% The real .env and the override file are on the machine only. The two examples are in git and hold no secret.
+
+    ENV[".env in the repository root<br/>not in git"] --> COMPOSE["docker-compose.yml<br/>fills the defaults and refuses to start<br/>without a signing secret"]
+    OVR["docker-compose.override.yml<br/>this machine only, not in git"] --> COMPOSE
+    COMPOSE -->|"the container's environment,<br/>the MAIL_ settings included"| CONFIG["core/config.ts<br/>reads it once, at start.<br/>A MAIL_ setting that<br/>cannot be used leaves<br/>email off, not the server"]
+    CONFIG --> ASSERT["assertConfig and assertUsers<br/>refuse an unsafe start"]
+    ASSERT --> RUN["the server runs"]
+    COMPOSE -.->|"mounts the volume at<br/>/data, hosted-model<br/>copy only"| STATE[("portal-state.json<br/>recipients, schedule<br/>and a record of the sends")]
+    RUN <-->|"read at start,<br/>saved on a change"| STATE
+    DIALOGS["Email report and<br/>Schedule dialogs<br/>an administrator types<br/>the recipients and the<br/>monthly schedule here"] -->|"saved by the server"| RUN
+    EX[".env.example and deploy/settings.example<br/>in git, no secret"] -.->|"the list to check .env against"| ENV
+%% source-hash: 845fbc879474

@@ -1,0 +1,11 @@
+{
+  // The build config deliberately excludes src/__tests__ so tests never ship.
+  // This one puts them back, for typechecking only, vitest transpiles without
+  // type errors, so without this the tests would drift out of sync silently.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["src"],
+  "exclude": []
+}

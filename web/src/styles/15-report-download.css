@@ -1,0 +1,42 @@
+/* SLA report download (ReportDownload): the PDF, Excel and CSV buttons, and why one failed. */
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+/* Both labels share one grid cell and only the real one shows, so the button is as wide as the longer
+   of the two and keeps its place when it starts to work. */
+.report-label {
+  display: inline-grid;
+  justify-items: center;
+}
+.report-label > span {
+  grid-area: 1 / 1;
+}
+.report-label-twin {
+  visibility: hidden;
+}
+/* The button at work keeps its full colour: its label is the only sign of progress, and at the
+   50% a disabled button gets it reads 2.4:1. */
+.report-actions button.btn[aria-busy='true'] {
+  opacity: 1;
+  cursor: progress;
+}
+/* A row of its own in the controls row, so the buttons stay where they were when a failure appears. */
+.report-error-row {
+  display: flex;
+  flex: 0 0 100%;
+}
+.report-error {
+  min-width: 0;
+  padding: var(--s-1) var(--s-3);
+  border: 1px solid var(--danger-line);
+  border-radius: var(--r-md);
+  background: var(--danger-bg);
+  color: var(--danger-text);
+  font-size: var(--t-sm);
+  /* A long server message wraps in the row instead of widening the page. */
+  overflow-wrap: anywhere;
+}
+

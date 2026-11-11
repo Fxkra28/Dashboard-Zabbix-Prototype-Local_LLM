@@ -1,0 +1,123 @@
+/* Freshness, errors, links and focus (second pass) */
+
+/* Links styled as buttons (Graph, Graphs) get the button's box too */
+a.btn {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--t-md);
+  line-height: normal;
+  white-space: nowrap;
+}
+
+/* Links in tables read as links; the global reset (a { color: inherit }) is for the chrome */
+table.data a:not(.btn) {
+  color: var(--primary);
+}
+table.data a:not(.btn):hover {
+  text-decoration: underline;
+}
+
+/* The previous selection's data, dimmed and inert while the new one loads.
+   The delay keeps a fast load from flickering. */
+.stale {
+  opacity: 0.5;
+  pointer-events: none;
+  transition: opacity var(--dur-2) var(--ease-out) var(--dur-2);
+}
+.refresh-failed {
+  display: inline-block;
+  margin-bottom: var(--s-2-5);
+  padding: var(--s-0-5) var(--s-2-5);
+  border: 1px solid var(--warn-line);
+  border-radius: var(--r-md);
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  font-size: var(--t-sm);
+}
+
+/* An older copy shown while a newer one is read: news, not a warning. */
+.data-age {
+  margin-bottom: var(--s-2-5);
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+
+/* A problem inside a planned maintenance window: neutral, like "no data", because it counts nowhere */
+.pill.maintenance {
+  color: var(--muted);
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+  font-weight: var(--w-semibold);
+}
+
+/* Host state: answers ping, but SNMP or the agent is silent */
+.pill.degraded {
+  color: var(--warn-text);
+  border-color: var(--warn-line);
+  background: var(--warn-bg);
+}
+.site-avail .degraded {
+  color: var(--warn-text);
+  font-weight: var(--w-semibold);
+}
+
+/* Problems: "Show 100 more" under a long list */
+.show-more {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--s-3);
+  margin-top: var(--s-3);
+  font-size: var(--t-sm);
+}
+
+/* SLA: per-device average under a group's summed downtime */
+.sli-sub {
+  display: block;
+  font-size: var(--t-xs);
+  color: var(--muted);
+}
+/* SLA and Links: every path with no data on any leg, on one line */
+.nodata-paths {
+  margin-top: var(--s-3);
+  font-size: var(--t-sm);
+  line-height: var(--lh-loose);
+  color: var(--muted);
+}
+.nodata-paths .link-state {
+  font-size: var(--t-sm);
+}
+/* SLA: devices never measured, listed on demand */
+.sli-unmeasured summary {
+  cursor: pointer;
+  min-height: var(--target-min);
+  line-height: var(--target-min);
+}
+.sli-unmeasured p {
+  margin: var(--s-2) 0;
+}
+.sli-unmeasured .table-wrap {
+  max-height: 320px;
+  overflow: auto;
+  background: var(--surface);
+  border-radius: var(--r-md);
+}
+
+/* Services: how many devices below a node missed the target */
+.svc-below {
+  color: var(--danger-text);
+}
+
+/* Alert noise: "top 100 of 342" beside the heading */
+.noise-top {
+  font-size: var(--t-sm);
+  font-weight: var(--w-regular);
+}
+
+/* A dialog is focused by script so tabbing starts inside it. A ring around
+   the whole panel would mark nothing, so only a real keyboard visit draws one. */
+.drawer:focus:not(:focus-visible),
+.modal:focus:not(:focus-visible) {
+  outline: none;
+}
+

@@ -1,0 +1,108 @@
+---
+title: "HCML Monitoring Portal: Conceptual Data Model (CDM)"
+config:
+  layout: elk
+  elk:
+    mergeEdges: false
+    nodePlacementStrategy: BRANDES_KOEPF
+---
+flowchart TB
+    %%  Conceptual data model (Merise MCD)
+    %%  What the business talks about. No keys, no foreign keys, no
+    %%  data types: those are the ERD and the PDM.
+    %%    rectangle   an entity and the properties a manager would name
+    %%    diamond     a named association, read in the verb's direction
+    %%    (min,max)   how many times one occurrence of that entity
+    %%                takes part in the association
+    %%  Blue   Zabbix stores it.   Green  the portal computes it.
+    %%  Amber  the portal's own.   Red    it leaves this machine.
+    %%  This copy is hcml-portal-ollama: explanations are written by a
+    %%  Claude, so estate data crosses the network. The local-model
+    %%  copy of this diagram is in hcml-portal-ollama/schema/CDM.pdf.
+
+    SITE["<b>SITE</b><br>name<br>code<br>worst severity now<br>device counts by state"]
+    DEVICE["<b>DEVICE</b><br>visible name<br>monitored<br>in maintenance<br>network address<br>owner<br>criticality"]
+    DEVICE_GROUP["<b>DEVICE GROUP</b><br>name"]
+    MEASUREMENT["<b>MEASUREMENT</b><br>what is measured<br>collection interval<br>unit<br>latest value"]
+    OBSERVATION["<b>OBSERVATION</b><br>moment<br>value<br>hourly min, mean, max"]
+    LINK["<b>LINK</b><br>label<br>ping target<br>packet loss<br>latency<br>state"]
+    ALERT_RULE["<b>ALERT RULE</b><br>description<br>severity<br>closable by hand"]
+    ALERT["<b>ALERT</b><br>raised at<br>cleared at<br>severity<br>name<br>acknowledged"]
+    INCIDENT["<b>INCIDENT</b><br>start<br>end<br>resolved<br>acknowledged"]
+    AVAILABILITY["<b>AVAILABILITY RESULT</b><br>scope<br>achieved percentage<br>downtime<br>coverage<br>meets target<br>error budget"]
+    SERVICE["<b>BUSINESS SERVICE</b><br>name<br>current status<br>description"]
+    AGREEMENT["<b>SERVICE AGREEMENT</b><br>name<br>promised percentage<br>period<br>timezone"]
+    USER["<b>PORTAL USER</b><br>name<br>role"]
+    ANSWER["<b>AI EXPLANATION</b><br>summary<br>business impact<br>recommendation<br>written by qwen3:8b on this host"]
+
+    R_STATIONS{"stations"}
+    R_BELONGS{"belongs to"}
+    R_CARRIES{"carries"}
+    R_RECORDS{"records"}
+    R_TERMINATES{"terminates"}
+    R_WATCHES{"watches"}
+    R_RAISES{"raises"}
+    R_HITS{"hits"}
+    R_CLIPS{"clips into"}
+    R_COUNTS{"counts"}
+    R_SCORES{"scores"}
+    R_COMPOSES{"composes"}
+    R_COMMITS{"commits to"}
+    R_CAUSES{"causes"}
+    R_EXPLAINS{"explains"}
+    R_ACKS{"acknowledges"}
+
+    SITE         ---|"(1,n)"| R_STATIONS
+    R_STATIONS   ---|"(1,1)"| DEVICE
+    DEVICE       ---|"(1,n)"| R_BELONGS
+    R_BELONGS    ---|"(0,n)"| DEVICE_GROUP
+    DEVICE       ---|"(0,n)"| R_CARRIES
+    R_CARRIES    ---|"(1,1)"| MEASUREMENT
+    MEASUREMENT  ---|"(0,n)"| R_RECORDS
+    R_RECORDS    ---|"(1,1)"| OBSERVATION
+    DEVICE       ---|"(0,n)"| R_TERMINATES
+    R_TERMINATES ---|"(1,1)"| LINK
+
+    ALERT_RULE   ---|"(1,n)"| R_WATCHES
+    R_WATCHES    ---|"(0,n)"| DEVICE
+    ALERT_RULE   ---|"(0,n)"| R_RAISES
+    R_RAISES     ---|"(1,1)"| ALERT
+    ALERT        ---|"(1,1)"| R_HITS
+    R_HITS       ---|"(0,n)"| DEVICE
+    ALERT        ---|"(1,1)"| R_CLIPS
+    R_CLIPS      ---|"(0,n)"| INCIDENT
+
+    AVAILABILITY ---|"(1,1)"| R_COUNTS
+    R_COUNTS     ---|"(0,n)"| INCIDENT
+    AVAILABILITY ---|"(0,1)"| R_SCORES
+    R_SCORES     ---|"(0,n)"| DEVICE
+
+    SERVICE      ---|"(0,n)"| R_COMPOSES
+    R_COMPOSES   ---|"(0,n)"| SERVICE
+    SERVICE      ---|"(0,n)"| R_COMMITS
+    R_COMMITS    ---|"(0,n)"| AGREEMENT
+    ALERT        ---|"(0,n)"| R_CAUSES
+    R_CAUSES     ---|"(0,n)"| SERVICE
+
+    ANSWER       ---|"(1,1)"| R_EXPLAINS
+    R_EXPLAINS   ---|"(0,1)"| ALERT
+    USER         ---|"(0,n)"| R_ACKS
+    R_ACKS       ---|"(0,n)"| ALERT
+
+    classDef zbx      fill:#dbeafe,stroke:#2563eb,color:#14213d
+    classDef derived  fill:#dcfce7,stroke:#16a34a,color:#052e16
+    classDef local    fill:#fef3c7,stroke:#d97706,color:#451a03
+    classDef external fill:#fee2e2,stroke:#dc2626,color:#450a0a
+    classDef assoc    fill:#f1f5f9,stroke:#94a3b8,color:#475569
+
+    class ALERT,ALERT_RULE,AGREEMENT,DEVICE zbx
+    class DEVICE_GROUP,MEASUREMENT,OBSERVATION,SERVICE zbx
+    class AVAILABILITY,INCIDENT,LINK,SITE derived
+    class USER local
+    class ANSWER derived
+
+    class R_ACKS,R_BELONGS,R_CARRIES,R_CAUSES assoc
+    class R_CLIPS,R_COMMITS,R_COMPOSES,R_COUNTS assoc
+    class R_EXPLAINS,R_HITS,R_RAISES,R_RECORDS assoc
+    class R_SCORES,R_STATIONS,R_TERMINATES,R_WATCHES assoc
+%% source-hash: 573dd6ba2270

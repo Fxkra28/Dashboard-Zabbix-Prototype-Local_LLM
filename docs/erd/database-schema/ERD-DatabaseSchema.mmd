@@ -1,0 +1,165 @@
+---
+title: "HCML Monitoring Portal: database schema map"
+config:
+  layout: elk
+  elk:
+    mergeEdges: false
+    nodePlacementStrategy: BRANDES_KOEPF
+---
+flowchart LR
+    %%  How the two ERDs connect: the 19 blue ZBX_* entities of
+    %%  ERD-Mermaid.mmd, each pointing at the ERD-Database.mmd tables it
+    %%  uses. One frame per ERD-Mermaid.mmd domain; a table sits in the
+    %%  frame of the entity that reads it.
+    %%  Lines:   solid   the entity's rows or fields are read from the table
+    %%           dashed  walked through, or used to compute a field; no row
+    %%                   of the entity itself is stored there
+    %%  Colour:  entities in the logical ERD's blue; each table keeps its
+    %%           colour from ERD-Database.mmd, blue returned, grey internal
+    %%  34 of the 45 tables are drawn. The ones that back no entity
+    %%  are listed in ERD-DatabaseSchema.md, with this map as a table.
+
+    subgraph M_HOSTS["Hosts &amp; Inventory"]
+        ZBX_HOST("ZBX_HOST")
+        ZBX_HOST_INTERFACE("ZBX_HOST_INTERFACE")
+        ZBX_HOST_INVENTORY("ZBX_HOST_INVENTORY")
+        ZBX_HOST_TAG("ZBX_HOST_TAG")
+        ZBX_HOST_GROUP("ZBX_HOST_GROUP")
+        t_hosts[("hosts")]
+        t_interface[("interface")]
+        t_host_inventory[("host_inventory")]
+        t_host_tag[("host_tag")]
+        t_hosts_groups[("hosts_groups")]
+        t_hstgrp[("hstgrp")]
+    end
+
+    subgraph M_METRICS["Metrics &amp; Items"]
+        ZBX_ITEM("ZBX_ITEM")
+        ZBX_ITEM_TAG("ZBX_ITEM_TAG")
+        ZBX_HISTORY("ZBX_HISTORY")
+        ZBX_TREND("ZBX_TREND")
+        t_items[("items")]
+        t_item_rtdata[("item_rtdata")]
+        t_item_tag[("item_tag")]
+        t_history[("history")]
+        t_history_uint[("history_uint")]
+        t_history_str[("history_str")]
+        t_history_log[("history_log")]
+        t_history_text[("history_text")]
+        t_trends[("trends")]
+        t_trends_uint[("trends_uint")]
+    end
+
+    subgraph M_EVENTS["Events &amp; Incidents"]
+        ZBX_TRIGGER("ZBX_TRIGGER")
+        ZBX_EVENT("ZBX_EVENT")
+        ZBX_EVENT_TAG("ZBX_EVENT_TAG")
+        t_triggers[("triggers")]
+        t_functions[("functions")]
+        t_events[("events")]
+        t_event_recovery[("event_recovery")]
+        t_problem[("problem")]
+        t_problem_tag[("problem_tag")]
+    end
+
+    subgraph M_SERVICES["Services &amp; SLA"]
+        ZBX_SERVICE("ZBX_SERVICE")
+        ZBX_SERVICE_TAG("ZBX_SERVICE_TAG")
+        ZBX_SLA("ZBX_SLA")
+        ZBX_SLI("ZBX_SLI")
+        t_services[("services")]
+        t_services_links[("services_links")]
+        t_service_tag[("service_tag")]
+        t_service_problem[("service_problem")]
+        t_service_alarms[("service_alarms")]
+        t_sla[("sla")]
+        t_sla_service_tag[("sla_service_tag")]
+        t_sla_schedule[("sla_schedule")]
+        t_sla_excluded_downtime[("sla_excluded_downtime")]
+    end
+
+    subgraph M_MAPS["Maps"]
+        ZBX_MAP("ZBX_MAP")
+        ZBX_MAP_SELEMENT("ZBX_MAP_SELEMENT")
+        ZBX_MAP_LINK("ZBX_MAP_LINK")
+        t_sysmaps[("sysmaps")]
+        t_sysmaps_elements[("sysmaps_elements")]
+        t_sysmaps_links[("sysmaps_links")]
+    end
+
+    %% solid: read from · dashed: walked through or computed from
+    ZBX_HOST --> t_hosts
+    ZBX_HOST_INTERFACE --> t_interface
+    ZBX_HOST_INVENTORY --> t_host_inventory
+    ZBX_HOST_TAG --> t_host_tag
+    ZBX_HOST_GROUP --> t_hstgrp
+    ZBX_HOST_GROUP -.-> t_hosts_groups
+    ZBX_ITEM --> t_items
+    ZBX_ITEM --> t_item_rtdata
+    ZBX_ITEM -.-> t_history
+    ZBX_ITEM -.-> t_history_str
+    ZBX_ITEM -.-> t_history_log
+    ZBX_ITEM -.-> t_history_uint
+    ZBX_ITEM -.-> t_history_text
+    ZBX_ITEM_TAG --> t_item_tag
+    ZBX_HISTORY --> t_history
+    ZBX_HISTORY --> t_history_str
+    ZBX_HISTORY --> t_history_log
+    ZBX_HISTORY --> t_history_uint
+    ZBX_HISTORY --> t_history_text
+    ZBX_TREND --> t_trends
+    ZBX_TREND --> t_trends_uint
+    ZBX_TRIGGER --> t_triggers
+    ZBX_TRIGGER -.-> t_functions
+    ZBX_TRIGGER -.-> t_items
+    ZBX_EVENT --> t_problem
+    ZBX_EVENT --> t_events
+    ZBX_EVENT --> t_event_recovery
+    ZBX_EVENT -.-> t_triggers
+    ZBX_EVENT -.-> t_functions
+    ZBX_EVENT -.-> t_items
+    ZBX_EVENT_TAG --> t_problem_tag
+    ZBX_SERVICE --> t_services
+    ZBX_SERVICE --> t_services_links
+    ZBX_SERVICE --> t_service_problem
+    ZBX_SERVICE -.-> t_events
+    ZBX_SERVICE_TAG --> t_service_tag
+    ZBX_SLA --> t_sla
+    ZBX_SLI -.-> t_sla
+    ZBX_SLI -.-> t_sla_schedule
+    ZBX_SLI -.-> t_sla_excluded_downtime
+    ZBX_SLI -.-> t_sla_service_tag
+    ZBX_SLI -.-> t_service_tag
+    ZBX_SLI -.-> t_services
+    ZBX_SLI -.-> t_service_alarms
+    ZBX_MAP --> t_sysmaps
+    ZBX_MAP_SELEMENT --> t_sysmaps_elements
+    ZBX_MAP_LINK --> t_sysmaps_links
+
+    %% Frames must stay unfilled, as in the other ERDs (see erd.md)
+
+    classDef entity   fill:#dbeafe,stroke:#2563eb,color:#14213d
+    classDef returned fill:#dbeafe,stroke:#2563eb,color:#14213d
+    classDef internal fill:#e2e8f0,stroke:#475569,color:#0f172a
+
+    style M_HOSTS fill:none,stroke:#94a3b8
+    style M_METRICS fill:none,stroke:#94a3b8
+    style M_EVENTS fill:none,stroke:#94a3b8
+    style M_SERVICES fill:none,stroke:#94a3b8
+    style M_MAPS fill:none,stroke:#94a3b8
+
+    class ZBX_EVENT,ZBX_EVENT_TAG,ZBX_HISTORY,ZBX_HOST entity
+    class ZBX_HOST_GROUP,ZBX_HOST_INTERFACE,ZBX_HOST_INVENTORY,ZBX_HOST_TAG entity
+    class ZBX_ITEM,ZBX_ITEM_TAG,ZBX_MAP,ZBX_MAP_LINK entity
+    class ZBX_MAP_SELEMENT,ZBX_SERVICE,ZBX_SERVICE_TAG,ZBX_SLA entity
+    class ZBX_SLI,ZBX_TREND,ZBX_TRIGGER entity
+    class t_event_recovery,t_events,t_history,t_history_log returned
+    class t_history_str,t_history_text,t_history_uint,t_host_inventory returned
+    class t_host_tag,t_hosts,t_hstgrp,t_interface returned
+    class t_item_rtdata,t_item_tag,t_items,t_problem returned
+    class t_problem_tag,t_service_problem,t_service_tag,t_services returned
+    class t_services_links,t_sla,t_sysmaps,t_sysmaps_elements returned
+    class t_sysmaps_links,t_trends,t_trends_uint,t_triggers returned
+    class t_functions,t_hosts_groups,t_service_alarms,t_sla_excluded_downtime internal
+    class t_sla_schedule,t_sla_service_tag internal
+%% source-hash: f93059cda67e

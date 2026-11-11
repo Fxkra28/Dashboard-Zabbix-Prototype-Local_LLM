@@ -1,0 +1,89 @@
+# What is still open
+
+| Who it is for | Reading time | Read first | Read next |
+|---|---|---|---|
+| Everyone | about 15 min | [History](history.md) | [Glossary](glossary.md) |
+
+The tracker, `tracker.md` at the root of `hcml-portal`, holds every row of work with its reason, its size and its state. On 11 November 2026 it has 318 rows. 264 are done, 10 are done in part and 44 are not done. This page lists the 54 that are not finished (the 44 and the 10), in plain words, then the things that were never checked, then two things this handbook found itself. When this page and the tracker differ, the tracker is right.
+
+## The rows not finished
+
+| Row | Risk | State | What it is, and who can close it |
+|---|---|---|---|
+| SC-01 | High | Done in part | The hosted copy sends HCML production data to Anthropic on every Explain click and every Assistant question: host names, trigger text, tags, and a summary of the estate. The page says so, and the local-model copy keeps everything on the machine. Whether the hosted copy's outside model stays on is the owner's decision |
+| SC-23 | High | Not done | The tokens of HCML's Zabbix, the one that reads and the one that writes, belong to users whose role is Super admin, which allows every method (read again on 3 November: all three tokens that exist have such an owner). The portal's code uses the read token only to read, but the credential itself could write. The fix is in Zabbix and is HCML's: a user whose role allows only the read methods. It was tried on a local copy, and none of the 14 read methods is refused by such a role |
+| IN-41 | High | Done in part | HCML's Zabbix is slow on large reads, because its database has little memory to work with. The portal's side is done: lighter reads, kept copies, and a warm-up. The size of Zabbix's database memory is for HCML IT |
+| SC-06 | Medium | Not done | The repository's public history holds a secret from its first commit. History cannot be unpublished, so the fix is to revoke the secret where it was issued. The tracker row has the detail |
+| IN-08 | Medium | Not done | The local-model copy has no version control. The shared code is in the first copy's git, but the files that belong to this copy alone exist in one place only |
+| IN-13 | Medium | Done in part | The two copies are one source tree, and every fix costs two edits, two builds and two deployments. The parity check lowers the risk, and does not remove the cost |
+| IN-30 | Medium | Not done | CI has never run on GitHub, because the account has a billing lock, and 15 Dependabot pull requests are open. The image builds, `nginx -t`, the audit and the secret scan are untested on GitHub until the lock is lifted |
+| SC-30 | Low | Done in part | The repository is public with a licence of all rights reserved, which is the safe default. GitHub's private vulnerability reporting still has to be switched on, which only the owner can do |
+| IN-43 | Medium | Not done | After the Mac restarted on 31 October, Docker Desktop did not open and both portals were down for about 37 hours. The watcher said so at once. Whether Docker is set to open at sign-in is for the owner to check |
+| SC-33 | Low | Not done | HCML's real Zabbix host name is written in 14 files that are not committed yet. It is public DNS, and it is not in the public history. Whether it goes into the public repository is a decision for the owner and HCML |
+| IN-25 | Low | Done in part | The tests and the checks of the whole round were run on Linux (a Debian 12 container with GNU bash and coreutils) and found one fault, now fixed; the compose files have not run on a Linux server yet. The compose files map `host.docker.internal` to the host, which is how the local-model copy reaches Ollama, so Ollama has to listen where the container can reach it (`OLLAMA_HOST`). Ollama has no sign-in: bind it to the Docker bridge address and firewall port 11434, and do not open it to the whole network with `0.0.0.0`. HCML's Zabbix is read by its name, mapped to its LAN address on that machine. A trial run on Linux comes first |
+| SC-41 | Medium | Not done | There is no second sign-in factor: users are names and passwords in the settings file. HCML's own gateway or directory may already do it; if not, an authenticator-app step can be built |
+| SC-42 | Medium | Done in part | Every use of the AI and every report download now writes one line to the log: who, which kind, how it ended and how many tokens, never the question, the answer or the file. The rebuild script also keeps a private copy of the logs of the running containers before it replaces them, and the backup page says how to keep them longer. Where the container logs go afterwards, and for how long they are kept, is a decision for the owner and HCML; a note for HCML IT puts the question |
+| IN-50 | Medium | Done in part | A copy of both trees without the settings files is in `myown/backups`, one folder for each, on this Mac's own disk. Nothing backs up the Mac itself: Time Machine has no drive, and the local-model copy is not under git, so a lost disk loses both. A place on another machine or drive is the owner's to give |
+| IN-56 | Low | Not done | No Zabbix upgrade has been tried, and there is no test Zabbix to try one on; the portal reads names that an upgrade can change. HCML would have to give a test Zabbix |
+| IN-57 | Low | Not done | The load of a normal day on HCML's network has not been measured; the figures that exist are from one Mac on 29 and 30 October |
+| IN-58 | Medium | Not done | The portal can email the monthly report, but not through HCML's own mail. That mail is on Microsoft 365, which turns off the login by name and password by default at the end of December 2026, and the portal can only log in that way. What it needs is HCML's Microsoft 365 administrator: a sending mailbox and an application registered for it and limited to that one mailbox, and a way for the portal to use it, which is not built. Until then the report can go out through another account, such as a Gmail account made for the portal, which is the owner's choice because the report names every device |
+| IN-60 | Low | Not done | The saved recipients, the schedule and the record of sends are one small file on a Docker volume on this Mac, which no backup holds, and the monthly send depends on a laptop that sleeps and is often off HCML's network. When the portal moves to HCML's server, the file has to be copied there (or the schedule set again), the allowed domains set, and only one copy left sending |
+| IN-24 | Medium | Done in part | The settings files hold the sign-in password, the signing secret, both Zabbix tokens, the Anthropic key and the Gmail login, and no encrypted copy of them exists. The source of both portals is archived on this Mac in `~/hcml-backup/source-20261109/`, without any secret, and a helper script, encrypt-env-copies.sh, in the notes folder of the owner's documents, encrypts the settings files when the owner types a passphrase. Nothing is encrypted yet and nothing is outside this Mac, so whoever holds this Mac holds the only copy |
+| IN-61 | Low | Not done | The monthly email of the SLA report is built and is not switched on in the live portal: no schedule is saved and no list of people. Nothing goes on 1 December until an administrator sets it, and the owner says who gets it |
+| IN-62 | Medium | Done in part | The first two reports, sent through a new personal Gmail account, landed in the recipient's spam folder. The sender's name is now a setting, which helps a little. Each recipient can allow the sender; for good, the reports need a sender on HCML's own domain or a mail service, which is a choice for the owner and HCML |
+| BK-46 | Low | Done in part | Three narrow cases where the SLA engine and an independent reference differed by minutes or hours of one host. Two are fixed, and no figure below 100 percent is printed as 100.00; the third, nested host groups in a maintenance window, stays a documented limit by the owner's decision |
+| SC-49 | Low | Not done | With sign-in off and no mail settings, anyone who reaches the portal can save or delete the list of recipients |
+| SC-50 | Low | Not done | Every recipient of a report sees every other recipient's address, and no document says so |
+| BK-49 | Low | Not done | A start-up log line stops in the middle of a sentence |
+| BK-50 | Medium | Not done | One low-privilege token can start the SLA report of every month at once, because the gate for heavy reports does not cover it; the reader measured 1,056 MB of memory against a heap cap of 1,280 MB |
+| BK-51 | Medium | Not done | An empty report, with no device measured, is mailed as a success and the month is recorded as sent, with no retry and no notice |
+| BK-52 | Low | Not done | After a mail timeout the notice says both that the report may have gone and that nobody has received it, and the planner tries again after an ambiguous timeout |
+| BK-53 | Low | Not done | When Zabbix answers a write with a server error or a page that is not JSON, the operator still reads that the data source is not answering |
+| BK-54 | Low | Not done | The edges of the ten-minute rule for a manual send, and the type of the history read of the trend tail, are held by no test |
+| BK-55 | Low | Not done | A month that the monthly planner skipped is logged as a failed email |
+| BK-56 | Low | Not done | The sentence of the figure in Explain can print 100, or the target, for a value just below it |
+| BK-57 | Low | Not done | The sender name setting accepts invisible and right-to-left characters that addresses refuse |
+| FR-37 | Medium | Not done | The Saved list of the Email dialog can save an old list over the server's list when a refresh fails or is slow, so a removed address can come back |
+| FR-38 | Low | Not done | The Assistant prints "HTTP 502" in its own words where the dialogs say that the portal did not answer |
+| FR-39 | Low | Not done | A value outside the range of dates under a unixtime unit makes the page fail |
+| UX-41 | Low | Not done | The graph tooltip stays white in the dark theme, with text of 2.42 to 1 contrast |
+| UX-42 | Low | Not done | In forced-colours mode, cards and dialogs lose their edges |
+| UX-43 | Low | Not done | No dialog locks the page behind it |
+| UX-44 | Low | Not done | A long name with no break runs out of the Acknowledge dialog and the Explain drawer |
+| UX-45 | Low | Not done | The dialogs put the dialog role on a form, which HTML does not allow |
+| UX-46 | Low | Not done | A dialog nested inside a page wrapper would be laid out against the wrapper and not the window |
+| IN-72 | Medium | Not done | The secret scan of CI will fail on the first push, on a made-up password list in a test that the scanner takes for a key |
+| IN-73 | Medium | Not done | The time limit on the watcher's notification stops the shell and not what it started, so a mail command that hangs leaves one stuck process a minute while the relay is down |
+| IN-74 | Medium | Not done | Three production packages of the server (fastify, @fastify/jwt and @fastify/cors) are behind releases that their maintainers call security releases, in a Dependabot pull request that nobody had read; the details are not public yet |
+| IN-75 | Low | Not done | The operating-system packages of the web image (curl, libexpat, libxslt, brotli, musl and zlib) are older than Alpine's own fixes; nginx uses two of them |
+| IN-76 | Low | Not done | The closing help of the rebuild script does not say which copy runs the new build when the second fails to start, and the mark-good option marks the tag latest, not the image that runs |
+| IN-77 | Low | Not done | The documented restore of the state volume works only for an operator whose user id is 1000, and there is no page for a full disk |
+| IN-78 | Low | Not done | The sign-in check script stops with a Python error when its variables are not set, and three helpers of the handbook tooling are used nowhere |
+| DC-23 | Medium | Not done | The handbook's picture of the rebuild script says that a folder with no git is refused and that a plain run marks the new images last-good; the script does neither, and two sentences repeat the picture |
+| DC-24 | Low | Not done | The public screenshots show the name of one web check, host group names, template names and the real totals of the estate, and the README does not say so; keeping them or hiding the names is the owner's word |
+| DC-26 | Low | Not done | The flow pictures carry labels that disagree with the code: a refresh of 5 seconds that is 15, a stream said to have one user that has two, three roles that are four |
+| DC-28 | Low | Not done | The spoken note of slide 5 of the handover deck still says the build of 9 November, and the deck gives the editions' old page counts |
+| DC-29 | Low | Not done | The private set of screenshots, pic/10, was taken on 9 November and does not show the pages changed on 11 November |
+
+## What was never checked
+
+The tracker's "Not checked" list is the honest account, and it is long. These are the parts of it that matter most to someone taking over.
+
+- Signed-in behaviour on the live portals is checked by the script `tools/live/signedin_check.py`, which needs a person's own password. On the night of 2 November the computer that runs the portals was off HCML's network, so the checks of the build of 20:36 on real data are still to do. It passed on both portals on 27 October, and it has to be run again after each rebuild. After the rebuild of 2 November it passed 7 of 7 on a throwaway made from the live image, with a test account; the live portals themselves have not been checked with a real password since. Its stream step could not fail after the first quiet five seconds until 2 November (IN-46); it now fails when the stream is closed, goes quiet or never starts.
+- The `.env` files hold the settings and the secrets, and were deliberately not read when the checks were made, so whether a given setting is right in the live file is known only by its effect. On 9 November a program read their key names and the shape of two values, and copied and replaced the mail lines, and no value was printed.
+- A real mail server has been reached once: Gmail accepted the login and two reports on 9 November, and both landed in the recipient's spam folder. Yahoo, Zoho, iCloud and HCML's own mail were not reached, and no monthly send has run on a real first of the month.
+- HCML's side was read on 3 November, with read calls only. Zabbix's own certificate, at the LAN address the portal uses, is the renewed one: valid to 19 March 2027, sent with its intermediate, and it verifies against the name. The gateway on the public address still sends the old one (it ended on 1 August) and answers 403 without a client certificate, and the only DNS server of the computer sends the name there. The database has not changed: its history writer and its housekeeper were at 100 percent busy, its disk 91 percent, and counting 33,217 monitored items took 30 to 37 seconds. The sizes of MySQL itself only HCML IT can read. Zabbix lists three API tokens, each owned by a Super admin: the portal's has no end date.
+- The two decks open in LibreOffice 7.4, charts included. In Keynote on this computer every chart is an empty box, even one that PowerPoint saved itself. PowerPoint for Windows, PowerPoint on the web and Google Slides were not tried.
+- How a downloaded SLA workbook looks in the owner's own Excel, and whether people at HCML want the portal in Indonesian, are things only a reader can say.
+- What the meters show for a link that is genuinely down was checked against stored data and not against a live fault.
+- CI on GitHub, as above.
+
+## The questions that wait for an answer
+
+The tracker keeps its questions in a table headed "Raised by", one table for each round of work. The ones that matter now are these: whether to keep the hosted copy's outside model on (SC-01), whether the wall screen gets an account of its own with the write token left off (MT-06: the wall role exists, and the account that uses it is still to be made), whether HCML's internet links are the same size in both directions (MT-05), where the logs go and for how long they are kept (SC-42), whether HCML has a gateway or a directory that can ask for a second factor at sign-in (SC-41), and two interfaces behind the meters that were down for long and may be standby (MT-04). The names of those two are in the owner's notes, and not in the repository.
+
+## What this handbook found
+
+- The Capacity report is open to a viewer, and its last panel names the busiest interface ports of each host. The viewer policy keeps interface items away from a viewer on `/api/items`, `/api/latest`, `/api/graph` and the maps, and `/api/reports/capacity` does not apply it. The owner decided on 11 November 2026 that every role may see it (SC-45), and the sign-in page of the setup guide says so. The place to change it is the route and `server/src/security/viewerPolicy.ts`.
+- A comment in `server/src/routes/problems.ts` said the problem list was cached for 5 seconds, and it is cached for 15. The comment is corrected.
+- Two comments and one row of the backend part of the guide said that no report is read at start-up. The Capacity report is, last in the list, and it is the slowest of them: about two and a half of the four minutes the round took on 30 October 2026. The three places are corrected.
