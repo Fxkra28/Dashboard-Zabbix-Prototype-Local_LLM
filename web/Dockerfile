@@ -1,5 +1,5 @@
 # Explicit minor tags and digests, as in server/Dockerfile: keep the Node one the same.
-FROM node:24.22-alpine@sha256:a34ab6d7f6f4813f4d0c5469d74685604b962fbdbf5793a7bc7b4998ecb867c8 AS build
+FROM node:26.12-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS build
 WORKDIR /app
 # Copy the lockfile too and use `npm ci`: `npm install` resolves fresh versions
 # at build time, so two builds of the same commit can ship different code.
