@@ -113,8 +113,8 @@ export function maintenanceWindows(m: ZMaintenance, from: number, to: number, tz
 
 /**
  * Maintenance windows per host in `[from, to)`: hosts named in a maintenance
- * directly and hosts in its host groups. One `maintenance.get`, plus one
- * `hostgroup.get` only when a maintenance names groups.
+ * directly and hosts in its host groups, the groups nested under them included. One `maintenance.get`, plus one
+ * `hostgroup.get` only when a maintenance names groups, and a second to find the groups nested under those.
  */
 export async function maintenanceByHost(
   from: number,
@@ -133,13 +133,29 @@ export async function maintenanceByHost(
   const groupids = [...new Set(relevant.flatMap((m) => (m.hostgroups ?? []).map((g) => g.groupid)))];
   const hostsByGroup = new Map<string, string[]>();
   if (groupids.length) {
+    type ZGroup = { groupid: string; name?: string; hosts?: { hostid: string }[] };
+    const idsOf = (g: ZGroup) => (g.hosts ?? []).map((h) => h.hostid);
     onCall();
-    const groups = await zbx<{ groupid: string; hosts?: { hostid: string }[] }[]>('hostgroup.get', {
-      groupids,
-      output: ['groupid'],
-      selectHosts: ['hostid'],
-    });
-    for (const g of groups) hostsByGroup.set(g.groupid, (g.hosts ?? []).map((h) => h.hostid));
+    const named = await zbx<ZGroup[]>('hostgroup.get', { groupids, output: ['groupid', 'name'], selectHosts: ['hostid'] });
+    for (const g of named) hostsByGroup.set(g.groupid, idsOf(g));
+    // Zabbix selects the groups nested under a group a maintenance names ("Parent/Child"), with their hosts (BK-46).
+    const parents = named.filter((g) => typeof g.name === 'string' && g.name !== '');
+    if (parents.length) {
+      onCall();
+      const below = await zbx<ZGroup[]>('hostgroup.get', {
+        search: { name: parents.map((g) => `${g.name}/`) },
+        searchByAny: true,
+        startSearch: true,
+        output: ['groupid', 'name'],
+        selectHosts: ['hostid'],
+      });
+      // Zabbix's search ignores case; a group name does not.
+      for (const parent of parents) {
+        for (const g of below) {
+          if (g.name?.startsWith(`${parent.name}/`)) hostsByGroup.set(parent.groupid, [...(hostsByGroup.get(parent.groupid) ?? []), ...idsOf(g)]);
+        }
+      }
+    }
   }
 
   const byHost = new Map<string, Interval[]>();

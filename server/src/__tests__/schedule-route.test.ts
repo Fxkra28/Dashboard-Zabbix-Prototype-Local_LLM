@@ -183,7 +183,7 @@ describe('what the page is told', () => {
 
   it('lists what was sent, newest first, twelve at most, with counts and no address or internal field', async () => {
     await portalState().change((d) => {
-      for (let i = 0; i < 15; i++) d.mail.sends.push(send({ month: `2025-${String((i % 12) + 1).padStart(2, '0')}`, at: NOW_S + i, attempts: i + 1, nextAt: NOW_S + 99, noticed: 1, reason: i === 14 ? 'login' : undefined }));
+      for (let i = 0; i < 15; i++) d.mail.sends.push(send({ month: `2025-${String((i % 12) + 1).padStart(2, '0')}`, at: NOW_S + i, attempts: i + 1, nextAt: NOW_S + 99, noticed: 1, unsure: true, reason: i === 14 ? 'login' : undefined }));
     });
     const { sends } = (await get()).json();
     expect(sends).toHaveLength(12);
@@ -191,7 +191,7 @@ describe('what the page is told', () => {
     expect(sends[11].attempts).toBe(4);
     expect(Object.keys(sends[0]).sort()).toEqual(['at', 'attempts', 'by', 'bytes', 'formats', 'month', 'outcome', 'reason', 'recipients', 'refused', 'trigger']);
     expect(Object.keys(sends[1]).sort()).toEqual(['at', 'attempts', 'by', 'bytes', 'formats', 'month', 'outcome', 'recipients', 'refused', 'trigger']);
-    expect(JSON.stringify(sends)).not.toMatch(/@|nextAt|noticed/);
+    expect(JSON.stringify(sends)).not.toMatch(/@|nextAt|noticed|unsure/);
   });
 
   it('names the domains a report may go to', async () => {

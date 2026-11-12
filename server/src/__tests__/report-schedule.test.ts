@@ -602,12 +602,15 @@ describe('when something stops it', () => {
       expect(notices[0]!.text).toContain('stopped trying');
     });
 
-    it('writes a log line for each month it gives up, with no address in it', async () => {
+    it('writes a log line for each month it skips, as a skipped month and not as a failed send, with no address in it (BK-55)', async () => {
       await fromAugust();
       now = DEC;
       await build().tick();
-      const lines = logged.filter((l) => l.line.event === 'report_email' && l.line.outcome === 'failed');
+      const lines = logged.filter((l) => l.line.event === 'report_skipped');
       expect(lines.map((l) => l.line.month)).toEqual(['2026-08', '2026-09', '2026-10']);
+      expect(lines.every((l) => l.line.outcome === 'missed' && /skipped/.test(l.msg) && !/failed/.test(l.msg))).toBe(true);
+      // Nothing was tried for any of the three months, so none of them is a line of a send that failed (the newest month was sent, and that line is a success).
+      expect(logged.filter((l) => l.line.event === 'report_email' && l.line.outcome !== 'sent')).toEqual([]);
       expect(JSON.stringify(lines)).not.toMatch(/ana@|budi@|boss@/);
     });
 
@@ -1212,5 +1215,151 @@ describe('closing the portal', () => {
     const t0 = performance.now();
     await job.stop();
     expect(performance.now() - t0).toBeLessThan(200);
+  });
+});
+
+describe('a report with no device in it (BK-51)', () => {
+  it('counts as a failed try with its own reason, and is tried again', async () => {
+    const { EmptyReportError } = await import('../core/validate.js');
+    sendResult = new EmptyReportError('The report has no device in it.');
+    const job = build();
+    await job.tick();
+    expect(own()[0]).toMatchObject({ outcome: 'sending', attempts: 1, reason: 'empty', nextAt: READY + 900 });
+    // The log says how this try ended; the record says that another one is planned.
+    expect(logged.some((l) => l.line.event === 'report_email' && l.line.outcome === 'failed' && l.line.reason === 'empty')).toBe(true);
+  });
+
+  it('tells the people after the third try, in words that say what was empty', async () => {
+    const { EmptyReportError } = await import('../core/validate.js');
+    sendResult = new EmptyReportError('The report has no device in it.');
+    const job = build();
+    await job.tick();
+    now = READY + 900;
+    await job.tick();
+    now = READY + 900 + 3600;
+    await job.tick();
+    expect(notices).toHaveLength(1);
+    expect(notices[0]!.text).toMatch(/no device/i);
+    expect(notices[0]!.text).toContain('SLA triggers');
+  });
+
+  it('is never recorded as sent', async () => {
+    const { EmptyReportError } = await import('../core/validate.js');
+    sendResult = new EmptyReportError('The report has no device in it.');
+    await build().tick();
+    expect(own().some((r) => r.outcome === 'sent')).toBe(false);
+  });
+});
+
+describe('what the people are told when the last try may have gone through (BK-52)', () => {
+  const giveUp = async () => {
+    const job = build();
+    await job.tick();
+    for (let guard = 0; guard < 80 && own()[0]?.outcome === 'sending'; guard++) {
+      now = own()[0]!.nextAt!;
+      await job.tick();
+    }
+  };
+
+  it('does not say that nobody has received a report whose last try timed out', async () => {
+    sendResult = new MailError('timeout', 'ETIMEDOUT');
+    await giveUp();
+    const last = notices[notices.length - 1]!;
+    expect(last.subject).toBe('HCML SLA report for October 2026 was not sent');
+    expect(last.text).not.toContain('Nobody has received it');
+    expect(last.text).toContain('may or may not');
+    expect(last.text).toContain('ask the people');
+    expect(last.text).toContain('It may have reached some or all of the people.');
+  });
+
+  it('keeps the doubt of an earlier timeout through later tries that failed for certain', async () => {
+    const job = build();
+    sendResult = new MailError('timeout', 'ETIMEDOUT');
+    await job.tick();
+    expect(own()[0]).toMatchObject({ outcome: 'sending', reason: 'timeout', unsure: true });
+    sendResult = new MailError('connect', 'ECONNREFUSED');
+    for (let guard = 0; guard < 80 && own()[0]?.outcome === 'sending'; guard++) {
+      now = own()[0]!.nextAt!;
+      await job.tick();
+    }
+    const last = notices[notices.length - 1]!;
+    expect(last.subject).toBe('HCML SLA report for October 2026 was not sent');
+    expect(last.text).not.toContain('Nobody has received it');
+    expect(last.text).toContain('It may have reached some or all of the people.');
+    // The page and the log say how the last try ended; the doubt is the scheduler's own.
+    expect(own()[0]).toMatchObject({ outcome: 'failed', reason: 'connect', unsure: true });
+  });
+
+  it('does not mark a month that only ever failed for certain', async () => {
+    sendResult = new MailError('connect', 'ECONNREFUSED');
+    await giveUp();
+    expect(own()[0]!.unsure).toBeUndefined();
+    expect(notices[notices.length - 1]!.text).toContain('Nobody has received it');
+  });
+
+  it('forgets the doubt once a try gets through', async () => {
+    const job = build();
+    sendResult = new MailError('timeout', 'ETIMEDOUT');
+    await job.tick();
+    expect(own()[0]!.unsure).toBe(true);
+    sendResult = null;
+    now = own()[0]!.nextAt!;
+    await job.tick();
+    expect(own()[0]).toMatchObject({ outcome: 'sent' });
+    expect(own()[0]!.unsure).toBeUndefined();
+  });
+
+  it('does not say that nobody has it when the last try never ended, as when the portal stopped in the middle of a send', async () => {
+    await state.change((d) =>
+      d.mail.sends.push({ month: '2026-10', trigger: 'schedule', by: 'schedule', at: SLOT + 30, outcome: 'sending', attempts: 1, formats: ['pdf'], recipients: 0, refused: 0, bytes: 0 }),
+    );
+    now = SLOT + CATCH_UP_SECONDS + 1;
+    await build().tick();
+    const last = notices[notices.length - 1]!;
+    expect(last.subject).toBe('HCML SLA report for October 2026 was not sent');
+    expect(last.text).not.toContain('Nobody has received it');
+    expect(last.text).toContain('It may have reached some or all of the people.');
+  });
+
+  describe('when several months went by', () => {
+    const DEC = at('2026-12-04T10:00:00+07:00');
+    const fromAugust = () => state.change((d) => void (d.mail.schedule = schedule({ enabledAt: at('2026-08-20T00:00:00+07:00') })));
+
+    it('says that nobody has received them when no try was made for any month', async () => {
+      await fromAugust();
+      now = DEC;
+      await build().tick();
+      const text = notices[0]!.text;
+      expect(text).toContain('Nobody has received them.');
+      expect(text).not.toContain('may have reached');
+    });
+
+    it('names the month whose last try timed out as one that may have reached the people, and still says the others were not sent', async () => {
+      await fromAugust();
+      await state.change((d) =>
+        d.mail.sends.push({ month: '2026-09', trigger: 'schedule', by: 'schedule', at: at('2026-10-01T00:30:00+07:00'), outcome: 'sending', attempts: 2, nextAt: at('2026-10-01T01:30:00+07:00'), reason: 'timeout', unsure: true, formats: ['pdf'], recipients: 0, refused: 0, bytes: 0 }),
+      );
+      now = DEC;
+      await build().tick();
+      const text = notices[0]!.text;
+      expect(text).not.toContain('Nobody has received them.');
+      expect(text).toContain('The report for September 2026 may have reached some or all of the people; the others were not sent.');
+    });
+
+    it('says the same for a month whose try never ended', async () => {
+      await fromAugust();
+      await state.change((d) =>
+        d.mail.sends.push({ month: '2026-10', trigger: 'schedule', by: 'schedule', at: at('2026-11-01T00:30:00+07:00'), outcome: 'sending', attempts: 1, formats: ['pdf'], recipients: 0, refused: 0, bytes: 0 }),
+      );
+      now = DEC;
+      await build().tick();
+      expect(notices[0]!.text).toContain('The report for October 2026 may have reached some or all of the people; the others were not sent.');
+    });
+  });
+
+  it('still says that nobody has received it when the mail server refused the login', async () => {
+    sendResult = new MailError('login', '535');
+    await giveUp();
+    expect(notices[notices.length - 1]!.text).toContain('Nobody has received it');
   });
 });

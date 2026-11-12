@@ -32,6 +32,7 @@ cache, auth, where a number comes from, both AI paths and the one write) in
 | Back it up, or restore it | [`operations/backup-and-restore.md`](operations/backup-and-restore.md) |
 | Reach it from another machine | [`operations/tls.md`](operations/tls.md): TLS in front, with HSTS |
 | Know what comes back after a restart | [`operations/after-a-restart.md`](operations/after-a-restart.md): the restart policies, the order, the check |
+| Find out what filled a disk, and what is safe to remove | [`operations/full-disk.md`](operations/full-disk.md) |
 | Call it | [`api/openapi.yaml`](api/openapi.yaml), 51 endpoints · [how to view it](api/README.md) |
 | Download the monthly SLA report | [`setup/18-automated-reporting.md`](setup/18-automated-reporting.md) for the buttons, the endpoint and how the files are built |
 | Understand why it is shaped this way | [`architecture/adr/`](architecture/adr/): fifteen decisions |
@@ -90,7 +91,7 @@ docs/
   api/openapi.yaml         the contract: 51 endpoints
   architecture/adr/        why it is the way it is: 15 decisions
   schema/  flow/  erd/     the diagrams; erd/erd.md is the data model in prose
-  screenshots/             the main pages as images, with host names, addresses and interface descriptions replaced
+  screenshots/             the main pages as images, with host names, addresses, interface descriptions and web check names replaced
   ux/                      who uses it: the four roles and the acknowledge journey (derived, not interviewed)
   operations/              backing up and restoring the .env files; TLS beyond localhost; what comes back after a restart
   handover/                the handover handbook: folders, code, integrations and working; start at its README

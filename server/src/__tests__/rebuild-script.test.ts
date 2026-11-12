@@ -53,16 +53,24 @@ fi
 if [ "$1" = tag ]; then exit 0; fi
 if [ "$1" = compose ] && [ "$2" = --project-directory ] && [ "$4" = up ]; then
   [ -n "\${FAKE_UP_FAILS:-}" ] && { echo "build failed" >&2; exit 17; }
+  # Only the copy whose folder matches: the second copy failing after the first one came up.
+  if [ -n "\${FAKE_UP_FAILS_FOR:-}" ] && printf '%s' "$3" | grep -Eq "$FAKE_UP_FAILS_FOR"; then echo "build failed" >&2; exit 17; fi
   exit 0
 fi
 if [ "$1" = inspect ] && [ "$2" = -f ]; then
-  case "$3" in *Config.Env*) echo "BUILD_COMMIT=test" ;; *) echo healthy ;; esac
+  [ -n "\${FAKE_NO_CONTAINER:-}" ] && exit 1
+  # What a container runs is told by its image id, which is not what the tag :latest names once something has moved it.
+  case "$3" in *Config.Env*) echo "BUILD_COMMIT=test" ;; *.Image*) echo "sha256:image-of-$4" ;; *) echo healthy ;; esac
   exit 0
 fi
 if [ "$1" = port ]; then
   # docker port exits 1 for a container that is stopped or restarting, which publishes nothing.
   [ -n "\${FAKE_PORT_FAILS:-}" ] && exit 1
+  # Only the container whose name matches: the second copy not running after the first one passed.
+  if [ -n "\${FAKE_PORT_FAILS_FOR:-}" ] && printf '%s' "$2" | grep -Eq "$FAKE_PORT_FAILS_FOR"; then exit 1; fi
   [ -n "\${FAKE_PORT_ODD:-}" ] && { echo "[::]:abc"; exit 0; }
+  # With FAKE_PORT_BY_COPY the local-model copy publishes 8082, so that a curl can answer for one copy and not the other.
+  if [ -n "\${FAKE_PORT_BY_COPY:-}" ]; then case "$2" in hcml-portal-ollama*) echo "0.0.0.0:8082"; exit 0 ;; esac; fi
   echo "0.0.0.0:8081"; exit 0
 fi
 echo "unexpected docker call: $*" >&2
@@ -89,6 +97,21 @@ exit 0
 );
 chmodSync(join(goodBin, 'curl'), 0o755);
 const healthy = { PATH: `${goodBin}:${bin}:${process.env.PATH ?? ''}` };
+// The same, except that whatever is asked at port 8082 gets a 500: the second copy fails its checks after the first passed.
+const halfBin = join(scratch, 'half-bin');
+mkdirSync(halfBin);
+writeFileSync(
+  join(halfBin, 'curl'),
+  `#!/usr/bin/env bash
+case "$*" in
+  *http_code*) case "$*" in *":8082"*) printf 500 ;; *"/bff/api/health"*) printf 200 ;; *"/bff/api/net/meters"*) printf 401 ;; *) printf 404 ;; esac ;;
+  *-sI*) printf 'HTTP/1.1 200 OK\\r\\nContent-Security-Policy: default-src self\\r\\n\\r\\n' ;;
+  *) printf '<script src="/assets/index-abc123.js"></script>' ;;
+esac
+exit 0
+`,
+);
+chmodSync(join(halfBin, 'curl'), 0o755);
 
 const git = (cwd: string, ...args: string[]) => spawnSync('git', args, { cwd, encoding: 'utf8' });
 
@@ -347,13 +370,15 @@ describe('deploy/rebuild.sh, as a dry run', () => {
   });
 
   describe('--mark-good (IN-52)', () => {
-    it('marks the running images of every copy last-good, and nothing else', () => {
+    it('marks the image each running container uses, by its id, for every copy, and nothing else (IN-76)', () => {
       const root = tree('mark', 'hcml-portal', ['hcml-portal-ollama']);
       const r = rebuild(root, ['--mark-good']);
       expect(r.status).toBe(0);
       for (const image of ['hcml-portal-portal-bff', 'hcml-portal-portal-web', 'hcml-portal-ollama-portal-bff', 'hcml-portal-ollama-portal-web']) {
-        expect(r.stdout).toContain(`+ docker tag ${image}:latest ${image}:last-good\n`);
+        expect(r.stdout).toContain(`+ docker tag sha256:image-of-${image}-1 ${image}:last-good\n`);
       }
+      // :latest is only where the last build went; after a build by hand, or a rollback tag moved without `up`, it is not what runs.
+      expect(r.stdout).not.toContain(':latest');
       expect(r.stdout).not.toContain('up -d --build');
       expect(r.stdout).not.toContain('rollback-');
       expect(r.stdout).not.toContain('npm');
@@ -363,14 +388,24 @@ describe('deploy/rebuild.sh, as a dry run', () => {
     it('plans the tags and runs none of them on a dry run', () => {
       const r = rebuild(tree('mark-dry'), ['--mark-good', '--dry-run']);
       expect(r.status).toBe(0);
-      expect(r.stdout).toContain('+ docker tag hcml-portal-portal-bff:latest hcml-portal-portal-bff:last-good');
+      expect(r.stdout).toContain('+ docker tag sha256:image-of-hcml-portal-portal-bff-1 hcml-portal-portal-bff:last-good');
       expect(r.stdout.trimEnd().endsWith('Dry run: nothing was changed.')).toBe(true);
     });
 
-    it('says so for an image that does not exist, instead of failing', () => {
-      const r = rebuild(tree('mark-none'), ['--mark-good'], { FAKE_NO_IMAGES: '1' });
+    it('marks :latest, and says that it does, for a container that is not there, as after docker compose down, since nothing runs to name an image (IN-76)', () => {
+      const r = rebuild(tree('mark-none'), ['--mark-good'], { FAKE_NO_CONTAINER: '1' });
       expect(r.status).toBe(0);
+      expect(r.stdout).toContain('no container hcml-portal-portal-bff-1: marking the image :latest, which is what `docker compose up` would start');
+      expect(r.stdout).toContain('+ docker tag hcml-portal-portal-bff:latest hcml-portal-portal-bff:last-good\n');
+      expect(r.stdout).not.toContain('sha256:image-of');
+    });
+
+    it('marks nothing, and says so with a failure, when there is neither a container nor an image', () => {
+      const r = rebuild(tree('mark-nothing'), ['--mark-good'], { FAKE_NO_CONTAINER: '1', FAKE_NO_IMAGES: '1' });
+      expect(r.status).toBe(1);
       expect(r.stdout).toContain('no hcml-portal-portal-bff:latest to mark');
+      expect(r.stdout).toContain('Nothing was marked');
+      expect(r.stdout).not.toContain('Marked. A later run that fails');
       expect(r.stdout).not.toContain('+ docker tag');
     });
 
@@ -482,6 +517,55 @@ describe('deploy/rebuild.sh and the names of the project (IN-51)', () => {
     const text = readFileSync(fileURLToPath(new URL('../../../docker-compose.yml', import.meta.url)), 'utf8');
     const ollama = /\$\{WEB_PORT:-8082\}/.test(text);
     expect(/^name: (\S+)$/m.exec(text)?.[1]).toBe(ollama ? 'hcml-portal-ollama' : 'hcml-portal');
+  });
+});
+
+describe('deploy/rebuild.sh when the second copy fails after the first came up (IN-76)', () => {
+  const second = (label: string, extra: Record<string, string>) => {
+    const root = tree(label, 'hcml-portal', ['hcml-portal-ollama']);
+    return rebuild(root, ['--skip-verify'], { ...healthy, ...extra });
+  };
+
+  it('says that the first copy already runs the new build, so that nobody rolls back a copy that is fine', () => {
+    const r = second('second-up-fails', { FAKE_UP_FAILS_FOR: 'hcml-portal-ollama$' });
+    expect(r.status).toBe(1);
+    const help = after(r.stdout, 'could not bring hcml-portal-ollama up');
+    expect(help).toContain('hcml-portal already runs the new build and passed its checks');
+    expect(help).toContain('Leave it as it is unless you mean to go back with it');
+    expect(help).toContain('hcml-portal-ollama is the one that failed');
+  });
+
+  it('says the same when the second copy came up and failed its checks', () => {
+    const r = second('second-checks-fail', { FAKE_PORT_FAILS_FOR: 'hcml-portal-ollama' });
+    expect(r.status).toBe(1);
+    expect(after(r.stdout, 'Something above failed.')).toContain('hcml-portal already runs the new build and passed its checks');
+  });
+
+  it('says the same when the last copy came up, published its port and then failed what an anonymous caller is asked', () => {
+    const r = second('second-answers-badly', { PATH: `${halfBin}:${bin}:${process.env.PATH ?? ''}`, FAKE_PORT_BY_COPY: '1' });
+    expect(r.status).toBe(1);
+    expect(r.stdout).toContain('== hcml-portal-ollama\n');
+    const help = after(r.stdout, 'Something above failed.');
+    expect(help).toContain('hcml-portal already runs the new build and passed its checks');
+    expect(help).toContain('hcml-portal-ollama is the one that failed');
+  });
+
+  it('says nothing of another copy when the first copy is the one that failed, or when there is only one', () => {
+    const first = rebuild(tree('first-up-fails', 'hcml-portal', ['hcml-portal-ollama']), ['--skip-verify'], { FAKE_UP_FAILS: '1' });
+    expect(first.status).toBe(1);
+    expect(first.stdout).toContain('docker compose could not bring hcml-portal up');
+    expect(first.stdout).not.toContain('already runs the new build');
+    const alone = rebuild(tree('alone-up-fails'), ['--skip-verify'], { FAKE_UP_FAILS: '1' });
+    expect(alone.status).toBe(1);
+    expect(alone.stdout).toContain('docker compose could not bring hcml-portal up');
+    expect(alone.stdout).not.toContain('already runs the new build');
+  });
+});
+
+describe('deploy/rebuild.sh and the upgrade of the web image\u2019s system packages (IN-75)', () => {
+  it('gives the build a new APK_ROUND each month, so that a month later `apk upgrade` is not served from the layer cache', () => {
+    const r = rebuild(tree('apk-round'), ['--skip-verify', '--dry-run']);
+    expect(r.stdout).toMatch(/\+ env BUILD_COMMIT=\S+ BUILD_TIME=\S+ APK_ROUND=\d{4}-\d{2} docker compose /);
   });
 });
 

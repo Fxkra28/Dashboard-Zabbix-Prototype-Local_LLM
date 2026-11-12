@@ -4,8 +4,8 @@
  * Pure functions over a directory tree, shared by the generator (tools/handover/build.mjs) and the checker
  * (tools/check/handover.check.mjs), so the two cannot disagree about the set they count.
  */
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join, posix } from 'node:path';
+import { existsSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
 /** Never entered or listed: dependencies, build output, version control, and each copy's own screenshots. */
 export const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.git', '.vite', '__pycache__']);
@@ -126,14 +126,3 @@ export function folderCards(root) {
   }
   return [...set].sort();
 }
-
-/** `a/b/c.ts` -> `a/b`. */
-export const dirOf = (rel) => posix.dirname(rel);
-
-export const isDir = (abs) => {
-  try {
-    return statSync(abs).isDirectory();
-  } catch {
-    return false;
-  }
-};

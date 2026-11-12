@@ -329,7 +329,7 @@ export const WARM_UP: readonly (readonly [string, () => Promise<unknown>])[] = [
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/warmUp.ts#warmUp sha=65e6539e0475 -->
+<!-- gen:snippet server/src/services/warmUp.ts#warmUp sha=a15e1549935a -->
 `server/src/services/warmUp.ts:37-49`
 
 ```ts
@@ -341,7 +341,7 @@ export async function warmUp(log: Pick<FastifyBaseLogger, 'info' | 'warn'>, step
       await read();
       log.info({ view, ms: Date.now() - t0 }, 'warm-up: read');
     } catch (err) {
-      log.warn({ view, reason: err instanceof Error ? err.message : String(err) }, 'warm-up: could not read it; its first visit will');
+      log.warn({ view, reason: err instanceof Error ? err.message : String(err) }, 'warm-up: could not read it; its first visit will be slow');
     }
   }
   log.info({ ms: Date.now() - started }, 'warm-up: done');
@@ -350,7 +350,7 @@ export async function warmUp(log: Pick<FastifyBaseLogger, 'info' | 'warn'>, step
 <!-- /gen -->
 
 1. The list runs in order, one at a time: the parts that other views share first (the problem list, the counts, the data clock, the sites), then the links, the hosts overview, the devices, the meters, the busiest hosts, web monitoring, the services and the SLA list, and the Capacity report last, because it takes the longest.
-2. Each read fills the cache entry that the route uses, so the route finds it ready. A view that fails is logged as "warm-up: could not read it; its first visit will", and the next goes on.
+2. Each read fills the cache entry that the route uses, so the route finds it ready. A view that fails is logged as "warm-up: could not read it; its first visit will be slow", and the next goes on.
 3. The other reports, the SLA figures, the Graphs item list and the network interfaces are not in the list, so their first visit waits. The Capacity report is in it, last.
 4. `index.ts` starts it after the server is listening, as `void warmUp(app.log)`. A start is therefore never held up by it. On 30 October 2026 the whole round took about four minutes on HCML's Zabbix, the Capacity report two and a half of them.
 
@@ -363,7 +363,7 @@ Tests: `light-reads.test.ts`.
 ### explainProblem
 
 <!-- gen:snippet server/src/services/explain.ts#explainProblem sha=8cab4be92087 -->
-`server/src/services/explain.ts:93-118`
+`server/src/services/explain.ts:97-122`
 
 ```ts
 export async function explainProblem(eventid: string, onUsage: OnUsage): Promise<ProblemExplanation | NotFound> {
@@ -420,7 +420,7 @@ export function noDataExplanation(what: string, why: string, recommendation: str
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/explain.ts#pickScope sha=b0f41dec7272 -->
-`server/src/services/explain.ts:54-69`
+`server/src/services/explain.ts:58-73`
 
 ```ts
 export function pickScope(report: SliReport, scope: string): { group: SliGroup; hosts: SliHost[] } | null {

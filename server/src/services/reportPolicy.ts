@@ -30,3 +30,7 @@ export const staleReport = (ttlMs: number) => ({ staleMs: ttlMs, staleIfError: t
 export const HEAVY_REPORTS_AT_ONCE = 2;
 
 export const heavy = createGate(HEAVY_REPORTS_AT_ONCE);
+
+/** A cold month of the derived SLA is about 19 trend reads of 35 items, and a viewer can ask for every month in both profiles at once (BK-50). */
+export const SLI_AT_ONCE = 2;
+export const sliReads = createGate(SLI_AT_ONCE);

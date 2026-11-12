@@ -68,7 +68,8 @@ export interface Mailer {
 export interface MailerOptions {
   /** Added to the TLS settings; the tests use it to trust their own certificate. */
   tls?: ConnectionOptions;
-  timeoutsMs?: { connect: number; greeting: number; socket: number };
+  /** `verify` limits the silence the check before a send waits through; it defaults to 15 seconds or `socket`, whichever is less. */
+  timeoutsMs?: { connect: number; greeting: number; socket: number; verify?: number };
 }
 
 const LOG_MAX = 300;
@@ -117,31 +118,42 @@ function toMailError(err: unknown, secrets: readonly string[]): MailError {
   return new MailError(kindOf(e), scrub(detail, secrets));
 }
 
+/** How much silence the check before a send waits through: its own setting, else 15 seconds, and never more than the socket timeout. */
+export function verifyLimit(timeouts: { socket: number; verify?: number }): number {
+  return timeouts.verify ?? Math.min(timeouts.socket, 15_000);
+}
+
 export function createMailer(settings: MailSettings, options: MailerOptions = {}): Mailer {
   const timeouts = options.timeoutsMs ?? { connect: 10_000, greeting: 10_000, socket: 60_000 };
-  const transport = createTransport({
-    host: settings.host,
-    port: settings.port,
-    secure: settings.security === 'tls',
-    requireTLS: settings.security === 'starttls',
-    ignoreTLS: settings.security === 'none',
-    auth: settings.user ? { user: settings.user, pass: settings.pass } : undefined,
-    connectionTimeout: timeouts.connect,
-    greetingTimeout: timeouts.greeting,
-    socketTimeout: timeouts.socket,
-    dnsTimeout: timeouts.connect,
-    disableFileAccess: true,
-    disableUrlAccess: true,
-    tls: { minVersion: 'TLSv1.2', ...options.tls },
-  });
+  // The check before a send waits through less silence than a send, which may carry a large file: a server that greets and then says nothing is found out in seconds.
+  const verifyMs = verifyLimit(timeouts);
+  const connection = (socketTimeout: number) =>
+    createTransport({
+      host: settings.host,
+      port: settings.port,
+      secure: settings.security === 'tls',
+      requireTLS: settings.security === 'starttls',
+      ignoreTLS: settings.security === 'none',
+      auth: settings.user ? { user: settings.user, pass: settings.pass } : undefined,
+      connectionTimeout: timeouts.connect,
+      greetingTimeout: timeouts.greeting,
+      socketTimeout,
+      dnsTimeout: timeouts.connect,
+      disableFileAccess: true,
+      disableUrlAccess: true,
+      tls: { minVersion: 'TLSv1.2', ...options.tls },
+    });
+  const transport = connection(timeouts.socket);
   const secrets = [settings.pass, settings.user];
 
   return {
     async verify() {
       try {
-        await transport.verify();
+        await connection(verifyMs).verify();
       } catch (err) {
-        throw toMailError(err, secrets);
+        const failure = toMailError(err, secrets);
+        // Nothing has been handed over yet, so a silent server is one that could not be reached, not one that may have taken the report.
+        throw failure.kind === 'timeout' ? new MailError('connect', failure.detail) : failure;
       }
     },
     async send(message) {

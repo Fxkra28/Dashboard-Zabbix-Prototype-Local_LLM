@@ -2450,7 +2450,7 @@
     "/api/sli/email": {
       "get": {
         "summary": "Whether the SLA report can be emailed, from where, to whom by default, and how far a list may go",
-        "description": "**admin.** Lets the screen offer the \"Email report\" button only where it works, and say who a report goes to unless\nthe person names others. It answers `enabled: false`, with no address, until the `MAIL_` settings are present and usable.\n`recipients` is the list the portal has saved; until it has saved one, it is the list in `MAIL_TO`, which may be empty.\n`max` is the most addresses a list may hold, `allowedDomains` the only domains an address may be in (empty: any), and\n`kept` whether the saved list survives a restart of the portal (it does when `PORTAL_STATE_DIR` names a folder that outlives the container).\nThe saved list is changed with `PUT` and `DELETE /api/sli/recipients`. While sign-in is off, email is off too (`enabled: false`) unless `ALLOW_EMAIL_WITHOUT_AUTH=true`.\n",
+        "description": "**admin.** Lets the screen offer the \"Email report\" button only where it works, and say who a report goes to unless\nthe person names others. It answers `enabled: false`, with no address, until the `MAIL_` settings are present and usable.\n`recipients` is the list the portal has saved; until it has saved one, it is the list in `MAIL_TO`, which may be empty.\n`max` is the most addresses a list may hold, `allowedDomains` the only domains an address may be in (empty: any), and\n`kept` whether the saved list survives a restart of the portal (it does when `PORTAL_STATE_DIR` names a folder that outlives the container).\nThe saved list is changed with `PUT` and `DELETE /api/sli/recipients`. While sign-in is off, email is off too (`enabled: false`) unless `ALLOW_EMAIL_WITHOUT_AUTH=true`, and `PUT` and `DELETE /api/sli/recipients` answer 503 then, with or without mail settings.\n",
         "operationId": "getSliEmail",
         "tags": [
           "SLA"
@@ -2515,7 +2515,7 @@
       },
       "post": {
         "summary": "Email one month's SLA report",
-        "description": "**admin.** Builds the files `/api/sli/export` gives for the month, one to three formats, and sends them as attachments\nto one message, with the four figures of the report's first page in its text, through the SMTP server the `MAIL_`\nsettings name. `to` is who it goes to: one to ten plain addresses, each in `allowedDomains` when that list is not empty.\nLeft out, the saved list is used (`GET`), and with `remember: true` the list that was given is saved once the report has gone.\n`style` is written as `/api/sli/export` writes it. Any other field, in the body or in `style`, is a 400: there is no subject\nand no message to set, and no copy or blind copy.\n\nChecked in this order: the shape of the body (400), whether email is set up (503 `mail_disabled`), the month, the formats, the\nstyle and the recipients (400, each with a sentence that says what is wrong; a month that has not started, that is more than about 400 days back or that ended less than ten minutes ago, is one of them), the allowance of 5 sends an hour for each person\n(429 with `Retry-After`; only a request that gets this far is counted), the mail login (502 `mail_error`, before Zabbix is\nasked, so a wrong password fails in a second), and then the two reports are read and the message is sent. A month that is\nnot cached can take as long as the download does.\n\nEvery send and every failure is logged with the user, the month, the formats, the size, the number of recipients and the\ndomains they are in, and never the addresses, the subject or a file; the portal also keeps a short record of it (counts only). A send that the mail server took for only some of the addresses is logged at warning level.\nA failure at the mail server is one fixed sentence for its kind (`login`, `connect`, `timeout`, `tls`, `recipients`,\n`rejected`, `other`); what the server said goes to the log only. The sentence for `timeout` says that the report may or may not have gone,\nbecause the server may have had the whole message when it stopped answering.\n",
+        "description": "**admin.** Builds the files `/api/sli/export` gives for the month, one to three formats, and sends them as attachments\nto one message, with the four figures of the report's first page in its text, through the SMTP server the `MAIL_`\nsettings name. `to` is who it goes to: one to ten plain addresses, each in `allowedDomains` when that list is not empty.\nLeft out, the saved list is used (`GET`), and with `remember: true` the list that was given is saved once the report has gone.\n`style` is written as `/api/sli/export` writes it. Any other field, in the body or in `style`, is a 400: there is no subject\nand no message to set, and no copy or blind copy.\n\nChecked in this order: the shape of the body (400), whether email is set up (503 `mail_disabled`), the month, the formats, the\nstyle and the recipients (400, each with a sentence that says what is wrong; a month that has not started, that is more than about 400 days back or that ended less than ten minutes ago, is one of them), the allowance of 5 sends an hour for each person\n(429 with `Retry-After`; only a request that gets this far is counted), the mail login (502 `mail_error`, before Zabbix is\nasked, so a wrong password fails in a second), and then the two reports are read and the message is sent. A month in which neither method\nfinds a device is not sent (502 `empty_report`). A month that is\nnot cached can take as long as the download does.\n\nEvery send and every failure is logged with the user, the month, the formats, the size, the number of recipients and the\ndomains they are in, and never the addresses, the subject or a file; the portal also keeps a short record of it (counts only). A send that the mail server took for only some of the addresses is logged at warning level.\nA failure at the mail server is one fixed sentence for its kind (`login`, `connect`, `timeout`, `tls`, `recipients`,\n`rejected`, `other`); what the server said goes to the log only. The sentence for `timeout` says that the report may or may not have gone,\nbecause the server may have had the whole message when it stopped answering.\n",
         "operationId": "emailSli",
         "tags": [
           "SLA"
@@ -2689,7 +2689,7 @@
             }
           },
           "502": {
-            "description": "`mail_error`, the mail server did not take the report, or `zabbix_error`. The message says which setting to check.",
+            "description": "`mail_error`, the mail server did not take the report, `empty_report`, neither method found a device in that month, so the report would have been empty, or `zabbix_error`. The message says which setting to check, or where to look.",
             "content": {
               "application/json": {
                 "schema": {
@@ -3439,7 +3439,7 @@
             "$ref": "#/components/responses/PayloadTooLarge"
           },
           "502": {
-            "description": "`zabbix_error`. When Zabbix answered with an error, the message says that Zabbix refused the change and may already have\nclosed the problem, or the account may not be allowed to change it; Zabbix's own words go to the log. When Zabbix\ncould not be reached, it says the data source is not answering.\n",
+            "description": "`zabbix_error`. When Zabbix answered with an error, the message says that Zabbix refused the change and may already have\nclosed the problem, or the account may not be allowed to change it; Zabbix's own words go to the log. When the portal\ncannot tell what Zabbix did with the request (an error page, a body that is not JSON-RPC, or a connection that failed\nwhen the request may have left), it says the change may or may not have been made. When Zabbix could not be reached\nat all, it says the data source is not answering.\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -4022,7 +4022,7 @@
                 },
                 "reason": {
                   "type": "string",
-                  "description": "A word for why it failed: a mail failure kind, `zabbix`, `recipients`, `not running` or `error`."
+                  "description": "A word for why it failed: a mail failure kind, `zabbix`, `recipients`, `empty`, `not running` or `error`."
                 }
               }
             }

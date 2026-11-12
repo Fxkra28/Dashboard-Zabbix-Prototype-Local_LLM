@@ -15,7 +15,7 @@ Use the page when you know a file name and want to know what it is for and what 
 Rebuilds both portals from the commit, checks their settings first, tags the old images, and checks the new ones. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card deploy/rebuild.sh -->
-322 lines, 0 exports. Imported by 0 files.
+349 lines, 0 exports. Imported by 0 files.
 
 Imports: none
 
@@ -27,7 +27,7 @@ Imported by: none
 Checks that the portals and their containers answer and tells you when they do not; meant to run from a timer. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card deploy/watch.sh -->
-401 lines, 0 exports. Imported by 0 files.
+424 lines, 0 exports. Imported by 0 files.
 
 Imports: none
 
@@ -291,7 +291,7 @@ Imported by: `tools/check/handover.check.mjs`, `tools/handover/lib/document.mjs`
 Reads one handbook page, renders its blocks and keeps the reading time in its box. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card tools/handover/lib/document.mjs -->
-116 lines, 7 exports. Imported by 2 files.
+114 lines, 6 exports. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -301,7 +301,6 @@ Reads one handbook page, renders its blocks and keeps the reading time in its bo
 | `boxOf` | function | 41 | `function boxOf(text)` | The box under the title: who the page is for, how long it takes, what to read before and after. |
 | `readingTime` | function | 58 | `function readingTime(text)` | The reading time of a page, counting its prose and the code it quotes, with the box's own time left out of the count. |
 | `processDocument` | function | 74 | `function processDocument(model, root, docRel, text, { fill = true, accept = false } = {})` | Renders every generated block of `text` and sets the reading time. |
-| `readPage` | function | 116 | `const readPage = (root, rel) =>` |  |
 
 Imports: `tools/handover/lib/blocks.mjs`, `tools/handover/lib/render.mjs`
 
@@ -371,7 +370,7 @@ Imported by: `tools/check/handover.check.mjs`, `tools/handover/lib/document.mjs`
 Decides which files get a card, which folders get a description, and what is never listed. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card tools/handover/lib/scope.mjs -->
-139 lines, 17 exports, 1 re-export. Imported by 3 files.
+128 lines, 15 exports, 1 re-export. Imported by 3 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -391,8 +390,6 @@ Decides which files get a card, which folders get a description, and what is nev
 | `areaOf` | function | 91 | `function areaOf(rel)` | The page of cards a file belongs to: server, web or tools. |
 | `testFiles` | function | 98 | `function testFiles(root)` | The test files (beside the code or under __tests__), for relating tests to the code they cover. |
 | `folderCards` | function | 112 | `function folderCards(root)` | The folders that get a description: every directory under the source roots, and the named top-level ones. |
-| `dirOf` | function | 131 | `const dirOf = (rel) =>` | `a/b/c.ts` -> `a/b`. |
-| `isDir` | function | 133 | `const isDir = (abs) =>` |  |
 
 Imports: `tools/check/parity.check.mjs`
 
@@ -502,7 +499,7 @@ Imported by: none
 Signs in through nginx and checks health, the reports, the downloads, the stream and the problem list. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card tools/live/signedin_check.py -->
-202 lines, 0 exports. Imported by 0 files.
+224 lines, 0 exports. Imported by 0 files.
 
 Imports: none
 

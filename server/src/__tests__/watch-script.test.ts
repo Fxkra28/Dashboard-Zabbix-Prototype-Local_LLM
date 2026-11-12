@@ -631,6 +631,72 @@ describe('deploy/watch.sh and a notify command that stalls (IN-68)', () => {
   });
 });
 
+describe('deploy/watch.sh and a notify command that starts children of its own (IN-73)', () => {
+  const unhealthy = () => writeFileSync(join(dir, 'inspect'), 'bff unhealthy 0\nweb healthy 0\n');
+  // A wrapper around a mailer: it runs the mailer as a child, and has more to do after it, so bash cannot hand its own place to it.
+  writeFileSync(join(bin, 'note-wrapped'), `#!/usr/bin/env bash\necho started > "$FAKE_WRAP_MARK"\nsleep "$FAKE_WRAP_SECONDS"\nexit 1\n`);
+  chmodSync(join(bin, 'note-wrapped'), 0o755);
+  /** A sleep length no other process has: found by its command line, and ended in `finally` so that a failing test leaves nothing behind. */
+  const unique = () => `${7000 + (process.pid % 1000)}.${n}`;
+  const running = (length: string) => spawnSync('pgrep', ['-f', `sleep ${length}`]).status === 0;
+  const gone = async (length: string) => {
+    for (let i = 0; i < 40 && running(length); i++) await new Promise((resolve) => setTimeout(resolve, 50));
+    return !running(length);
+  };
+
+  it('ends what a command line started, not only the shell it ran in, when the time is up', async () => {
+    unhealthy();
+    const length = unique();
+    try {
+      const r = watch({ WATCH_NOTIFY_CMD: `sleep ${length}; true`, WATCH_DOCKER_TIMEOUT: '1' });
+      expect(r.status).toBe(0);
+      expect(readFileSync(join(dir, 'state', 'watch.log'), 'utf8')).toMatch(/notify failed \(exit 124\)/);
+      expect(await gone(length)).toBe(true);
+    } finally {
+      spawnSync('pkill', ['-f', `sleep ${length}`]);
+    }
+  }, 30_000);
+
+  it('ends what a wrapper script started, the pattern of a cron line that mails the message', async () => {
+    unhealthy();
+    const length = unique();
+    try {
+      const mark = join(dir, 'wrapper-started');
+      const r = watch({ WATCH_NOTIFY_CMD: join(bin, 'note-wrapped'), FAKE_WRAP_SECONDS: length, FAKE_WRAP_MARK: mark, WATCH_DOCKER_TIMEOUT: '1' });
+      expect(r.status).toBe(0);
+      // The wrapper ran, so a sleep that is gone was ended and not never started.
+      expect(existsSync(mark)).toBe(true);
+      expect(await gone(length)).toBe(true);
+    } finally {
+      spawnSync('pkill', ['-f', `sleep ${length}`]);
+    }
+  }, 30_000);
+
+  it('ends them too when the script is told to stop in the middle of the command', async () => {
+    unhealthy();
+    const length = unique();
+    try {
+      const { child, done } = startWatch({ WATCH_NOTIFY_CMD: `sleep ${length}; true`, WATCH_DOCKER_TIMEOUT: '20' });
+      for (let i = 0; i < 100 && !running(length); i++) await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(running(length)).toBe(true);
+      child.kill('SIGTERM');
+      const { code, stderr } = await done;
+      expect(code).toBe(143);
+      expect(stderr).toBe('');
+      expect(await gone(length)).toBe(true);
+    } finally {
+      spawnSync('pkill', ['-f', `sleep ${length}`]);
+    }
+  }, 30_000);
+
+  it('still gives the message as the last argument, whole, to a command that starts a child and finishes in time', () => {
+    unhealthy();
+    const r = watch({ WATCH_NOTIFY_CMD: `sleep 0.1; ${join(bin, 'note')}`, WATCH_DOCKER_TIMEOUT: '5' });
+    expect(r.status).toBe(0);
+    expect(notes()).toEqual(['bff is unhealthy.']);
+  });
+});
+
 describe('deploy/watch.sh and a run that is still under way (IN-68)', () => {
   const lock = () => join(dir, 'state', 'lock');
   const attempts = () => (existsSync(join(dir, 'attempts')) ? readFileSync(join(dir, 'attempts'), 'utf8').trim().split('\n') : []);

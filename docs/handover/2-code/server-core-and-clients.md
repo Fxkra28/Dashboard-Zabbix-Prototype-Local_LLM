@@ -229,7 +229,7 @@ A job that throws gives its place back, which is what the `finally` guarantees. 
 `server/src/core/config.ts`. Run once at start. It refuses a configuration that is unsafe or unreadable, and warns about one that is merely odd, so that a portal that looks healthy and is not never starts.
 
 <!-- gen:snippet server/src/core/config.ts#assertConfig lines=1-48 sha=3abf7030d12a -->
-`server/src/core/config.ts:552-599` (lines 1 to 48 of assertConfig)
+`server/src/core/config.ts:560-607` (lines 1 to 48 of assertConfig)
 
 ```ts
 export function assertConfig(warn: (msg: string) => void): void {
@@ -328,8 +328,8 @@ Anything wrong gives `undefined`, which means no exception, so an expired certif
 
 `server/src/clients/zabbix.ts`. Every call to Zabbix is one of these. `zbx` reads with the read token, `zbxWrite` writes with the separate write token, and both use `call`, which turns every way a call can fail into one of four typed errors.
 
-<!-- gen:snippet server/src/clients/zabbix.ts#call lines=1-26 sha=c4535ed0869a -->
-`server/src/clients/zabbix.ts:109-134` (lines 1 to 26 of call)
+<!-- gen:snippet server/src/clients/zabbix.ts#call lines=1-28 sha=5a342a222da7 -->
+`server/src/clients/zabbix.ts:131-158` (lines 1 to 28 of call)
 
 ```ts
 async function call<T>(method: string, params: unknown, token: string, timeoutMs: number): Promise<T> {
@@ -356,19 +356,22 @@ async function call<T>(method: string, params: unknown, token: string, timeoutMs
       `Could not reach Zabbix for ${method}${typeof code === 'string' ? ` (${code})` : ''}. ` +
         'Check ZBX_URL and that the Zabbix frontend is running.',
       `ZBX_URL=${config.zbxUrl}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      // A refused or unresolved connection never carried the request; a reset or a drop part-way may have.
+      !requestNeverLeft(code),
     );
   }
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/clients/zabbix.ts#call lines=28-62 sha=c4535ed0869a -->
-`server/src/clients/zabbix.ts:136-170` (lines 28 to 62 of call)
+<!-- gen:snippet server/src/clients/zabbix.ts#call lines=30-66 sha=5a342a222da7 -->
+`server/src/clients/zabbix.ts:160-196` (lines 30 to 66 of call)
 
 ```ts
   if (!res.ok) {
     throw new ZabbixApiError(
       `${method}: HTTP ${res.status} ${res.statusText}`,
       `ZBX_URL=${config.zbxUrl} answered: ${snippet(res.body)}`,
+      true,
     );
   }
 
@@ -386,6 +389,7 @@ async function call<T>(method: string, params: unknown, token: string, timeoutMs
       `${method}: Zabbix returned a non-JSON response. Check that ZBX_URL points at api_jsonrpc.php ` +
         'and that the Zabbix frontend is not out of memory.',
       `ZBX_URL=${config.zbxUrl} answered: ${snippet(res.body)}`,
+      true,
     );
   }
 
@@ -404,10 +408,10 @@ async function call<T>(method: string, params: unknown, token: string, timeoutMs
 <!-- /gen -->
 
 1. `send` posts the JSON-RPC body. While a certificate exception is set and the address is https, it goes through the pinned agent. Otherwise it is a plain `fetch` with `AbortSignal.timeout`, because `fetch` has no timeout of its own and one hung Zabbix would hold every page open. The body is read under the same timeout, since `fetch` resolves once the headers arrive, and a Zabbix that stalled while still sending a large answer used to escape it and end as a bare 500.
-2. A refused certificate becomes a `ZabbixApiError` with the code in the message. A timeout becomes a `ZabbixTimeoutError`. Any other failure to connect, such as a refused connection, a name that does not resolve or a dropped connection, becomes a `ZabbixApiError` that names the code (`ECONNREFUSED`, `ENOTFOUND`) and not the host.
-3. A status that is not 2xx is a `ZabbixApiError` carrying the start of what Zabbix sent, for the log.
-4. A body that is not JSON-RPC means the address points at the frontend's login page or that PHP failed part-way, so the message tells you to check that it points at the API file and that the frontend is not out of memory.
-5. A JSON-RPC `error` is a `ZabbixAuthError` when its text names an expired, invalid or revoked token, and otherwise a `ZabbixRefusedError`, a kind of `ZabbixApiError`, with Zabbix's own words. The acknowledge route tells the kinds apart: a refusal gets the portal's own sentence, and a timeout says that the change may or may not have been made.
+2. A refused certificate becomes a `ZabbixApiError` with the code in the message. A timeout becomes a `ZabbixTimeoutError`. Any other failure to connect, such as a refused connection, a name that does not resolve or a dropped connection, becomes a `ZabbixApiError` that names the code (`ECONNREFUSED`, `ENOTFOUND`) and not the host. The error says whether the request may have been applied (`maybeApplied`): it is false when `requestNeverLeft` says that the code means the request never left (a connection that never opened: refused, not resolved, unreachable, a connect timeout; or one whose certificate was refused first) and true for any other, since a connection reset or dropped part-way may have carried a write (BK-53).
+3. A status that is not 2xx is a `ZabbixApiError` carrying the start of what Zabbix sent, for the log, and marked as possibly applied.
+4. A body that is not JSON-RPC means the address points at the frontend's login page or that PHP failed part-way, so the message tells you to check that it points at the API file and that the frontend is not out of memory. It is marked as possibly applied too, since a write may have gone through before the page failed.
+5. A JSON-RPC `error` is a `ZabbixAuthError` when its text names an expired, invalid or revoked token, and otherwise a `ZabbixRefusedError`, a kind of `ZabbixApiError`, with Zabbix's own words. The acknowledge route tells the kinds apart: a refusal gets the portal's own sentence, and a timeout, or an error marked as possibly applied, says that the change may or may not have been made.
 
 `zbx` and `zbxWrite` are three and four lines. `zbxWrite` refuses at once with `ZabbixWriteDisabledError` when no write token is set, so the read token can never reach a write. The reasons the message never carries the address: it would reach the browser, and the address is internal. Tests: `zabbix.test.ts`, `zabbix-pinned.test.ts` and the error mapping in `routes.test.ts`.
 

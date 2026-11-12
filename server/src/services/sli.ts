@@ -1,9 +1,10 @@
-import { cached } from '../core/cache.js';
+import { cached, invalidate } from '../core/cache.js';
 import { config, toSliProfile, type SliProfile } from '../core/config.js';
 import { BadRequestError } from '../core/validate.js';
 import { computeSli, type SliReport } from '../sli/engine.js';
 import { SETTLE_SECONDS } from '../sli/schedule.js';
-import { monthBounds } from '../sli/time.js';
+import { sliReads } from './reportPolicy.js';
+import { checkPeriodStart, monthBounds } from '../sli/time.js';
 
 /**
  * The derived monthly SLA (sli/engine.ts), read-only.
@@ -23,10 +24,19 @@ export function parseProfile(raw: unknown): SliProfile {
   return profile;
 }
 
+const PROFILES: readonly SliProfile[] = ['availability', 'hcml-report'];
+
+/** Drops what is kept for a month, in both methods and every phase: a report that came back empty must not be the answer to the next try (BK-51). */
+export function forgetMonthlySli(month: string): void {
+  for (const profile of PROFILES) invalidate(`derived-sli:${profile}:${month}:`);
+}
+
 /** The report for one calendar month, shared by every caller under one cache key. */
 export function getMonthlySli(month: string, profile: SliProfile): Promise<SliReport> {
-  const { to } = monthBounds(month, config.sla.timezone);
+  const { from, to } = monthBounds(month, config.sla.timezone);
   const now = Math.floor(Date.now() / 1000);
+  // Before the gate: a month nobody can report is refused at once, and does not wait for a place behind cold months (BK-50).
+  checkPeriodStart(from, now);
   // Three phases, each with its own key: a report computed while the month was still running, or in the minutes after it
   // ended while Zabbix still gets its last values (the monthly send waits as long), must not be kept for a day as the final figure.
   const phase = to + SETTLE_SECONDS <= now ? 'closed' : to <= now ? 'settling' : 'open';
@@ -35,5 +45,5 @@ export function getMonthlySli(month: string, profile: SliProfile): Promise<SliRe
   const key = `derived-sli:${profile}:${month}:${phase}`;
   // A closed month costs a full recompute and cannot change: pinned, so a run
   // of graph keys cannot push it out of the cache.
-  return cached(key, ttl, () => computeSli({ month, profile }), { staleMs: ttl, staleIfError: true, pin: closed });
+  return cached(key, ttl, () => sliReads.run(() => computeSli({ month, profile })), { staleMs: ttl, staleIfError: true, pin: closed });
 }

@@ -3,7 +3,7 @@ import { api, HttpFailure } from '../../api';
 import { UnreadableAnswer } from '../../guards';
 import type { EmailInfo, ReportFileFormat, ReportStyle, ScheduleInfo, SendRecord } from '../../types';
 import { formatDateTime } from '../../shared/lib/time';
-import { domainsList, joinAddresses, splitAddresses, wordsList } from './addresses';
+import { domainsList, joinAddresses, SEE_EACH_OTHER, splitAddresses, wordsList } from './addresses';
 import FileChoices, { nounOf } from './FileChoices';
 import { monthInWords } from './ReportDownload';
 import ReportDialog, { useReveal } from './ReportDialog';
@@ -50,6 +50,7 @@ const REASONS: Record<string, string> = {
   rejected: 'the mail server did not accept it',
   other: 'the message could not be sent',
   zabbix: 'Zabbix could not be read',
+  empty: 'the report had no device in it',
   error: 'something went wrong',
   changed: 'the schedule was changed',
 };
@@ -108,7 +109,7 @@ const formOf = (info: ScheduleInfo): FormState => ({
 const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** One dialog from the press of the button to the close: first it reads the schedule, then it is the form. */
-function ScheduleDialog({ mail, onClose, onSaved }: { mail: EmailInfo; onClose: () => void; onSaved?: () => void }) {
+function ScheduleDialog({ mail, onClose, onSaved }: { mail: EmailInfo; onClose: () => void; onSaved?: (list?: string[]) => void }) {
   const [info, setInfo] = useState<ScheduleInfo | null>(null);
   const [form, setForm] = useState<FormState | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -176,7 +177,7 @@ function ScheduleDialog({ mail, onClose, onSaved }: { mail: EmailInfo; onClose: 
         notify: splitAddresses(form.notify),
         style: form.style,
       });
-      onSaved?.();
+      onSaved?.(next.recipients);
       if (!alive.current) return;
       setInfo(next);
       setForm(formOf(next));
@@ -264,8 +265,10 @@ function ScheduleDialog({ mail, onClose, onSaved }: { mail: EmailInfo; onClose: 
           <FileChoices chosen={form.files} onChange={(files) => patch({ files })} disabled={off} />
           <div className="field" style={{ marginBottom: 12 }}>
             <label htmlFor={toId}>Send to</label>
-            <textarea id={toId} value={form.to} rows={4} maxLength={2000} spellCheck={false} disabled={off} onChange={(e) => patch({ to: e.target.value })} />
-            <span className="muted">{limits} The same list is the one the Email report button starts with.</span>
+            <textarea id={toId} value={form.to} rows={4} maxLength={2000} spellCheck={false} disabled={off} aria-describedby={`${toId}-limit`} onChange={(e) => patch({ to: e.target.value })} />
+            <span id={`${toId}-limit`} className="muted">
+              {limits} {SEE_EACH_OTHER} The same list is the one the Email report button starts with.
+            </span>
           </div>
           <SavedList
             saved={info.recipients}
@@ -276,7 +279,7 @@ function ScheduleDialog({ mail, onClose, onSaved }: { mail: EmailInfo; onClose: 
               // The box follows the saved list, unless the person has edited it.
               setForm((f) => (f && f.to === joinAddresses(info.recipients) ? { ...f, to: joinAddresses(list) } : f));
               setInfo((i) => (i ? { ...i, recipients: list } : i));
-              onSaved?.();
+              onSaved?.(list);
             }}
           />
           <div className="field" style={{ marginBottom: 12 }}>
@@ -311,7 +314,7 @@ function ScheduleDialog({ mail, onClose, onSaved }: { mail: EmailInfo; onClose: 
   );
 }
 
-export default function ReportSchedule({ info, onSaved }: { info: EmailInfo; onSaved?: () => void }) {
+export default function ReportSchedule({ info, onSaved }: { info: EmailInfo; onSaved?: (list?: string[]) => void }) {
   const [open, setOpen] = useState(false);
   return (
     <>

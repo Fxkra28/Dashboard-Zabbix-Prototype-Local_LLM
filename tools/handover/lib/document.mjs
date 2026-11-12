@@ -2,7 +2,7 @@
  * Reads one handbook page, renders its generated blocks, and keeps the one managed field (the reading time in the box at
  * the top). The build writes what this returns; the checker compares it with what is on disk.
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { joinBlocks, proseOf, splitBlocks } from './blocks.mjs';
 import { readingMinutes, renderCard, renderFiles, renderSnippet, renderSymbols, renderTestsMap, renderTree, resolveSnippet } from './render.mjs';
@@ -112,5 +112,3 @@ function setReadingTime(text) {
   lines[box.line - 1] = `| ${cells.join(' | ')} |`;
   return lines.join('\n');
 }
-
-export const readPage = (root, rel) => readFileSync(join(root, rel), 'utf8');

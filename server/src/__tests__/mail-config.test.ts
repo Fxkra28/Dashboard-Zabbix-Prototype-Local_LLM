@@ -62,6 +62,11 @@ describe('the presets', () => {
     ['a backslash', 'HCML\\Reports'],
     ['an at sign, which would read as an address', 'ceo@example.org'],
     ['more than 64 characters', 'H'.repeat(65)],
+    ['a zero width space (BK-57)', `HCML${String.fromCodePoint(0x200b)}Reports`],
+    ['a right-to-left override (BK-57)', `HCML${String.fromCodePoint(0x202e)}Reports`],
+    ['a left-to-right mark (BK-57)', `HCML${String.fromCodePoint(0x200e)}Reports`],
+    ['a line separator (BK-57)', `HCML${String.fromCodePoint(0x2028)}Reports`],
+    ['a paragraph separator (BK-57)', `HCML${String.fromCodePoint(0x2029)}Reports`],
   ])('turns email off, naming MAIL_FROM_NAME, for a sender name with %s (IN-62)', (_why, fromName) => {
     const r = resolveMail({ ...own, fromName });
     expect(r.enabled).toBe(false);

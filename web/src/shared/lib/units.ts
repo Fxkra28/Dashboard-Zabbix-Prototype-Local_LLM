@@ -116,6 +116,9 @@ function seconds(n: number): string {
   return `${trim(n / 3600, 1)} h`;
 }
 
+/** The last moment a Date can hold, in milliseconds. */
+const LAST_MOMENT_MS = 8.64e15;
+
 export function formatValue(v: number | null | undefined, units?: string): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—';
   const u = (units ?? '').trim();
@@ -139,7 +142,9 @@ export function formatValue(v: number | null | undefined, units?: string): strin
     case 'uptime':
       return formatDuration(v);
     case 'unixtime':
-      return v > 0 ? formatDateTime(v * 1000) : '—';
+      if (!(v > 0)) return '—';
+      // Past the last moment a Date can hold, formatting throws and the page drops to its error card (FR-39): the number is shown instead.
+      return v * 1000 > LAST_MOMENT_MS ? plain(v) : formatDateTime(v * 1000);
     case '':
       return plain(v);
     default:

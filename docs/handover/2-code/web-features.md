@@ -197,8 +197,8 @@ export function internetCard(d: MetersResponse | null | undefined): InternetCard
 
 `web/src/features/problems/`. The list of problems with filters, the Explain panel, and the Acknowledge dialog.
 
-<!-- gen:snippet web/src/features/problems/AckDialog.tsx#AckDialog lines=44-67 sha=ff9652e1053b -->
-`web/src/features/problems/AckDialog.tsx:70-93` (lines 44 to 67 of AckDialog)
+<!-- gen:snippet web/src/features/problems/AckDialog.tsx#AckDialog lines=44-67 sha=126ea15d2141 -->
+`web/src/features/problems/AckDialog.tsx:71-94` (lines 44 to 67 of AckDialog)
 
 ```tsx
 useEffect(() => {
@@ -237,7 +237,7 @@ const applied = (p: Problem, sent: Sent) =>
 ```
 <!-- /gen -->
 
-1. The dialog is the one place a click changes something in Zabbix, so it confirms and never acts on a single tap, and it does not offer Close for a trigger that does not allow a manual close (`manualClose`). While a request is under way the cross, Cancel and Escape are switched off and a click on the backdrop does nothing, so a refusal cannot arrive at a dialog that has gone (FR-33). Otherwise Escape closes it, and a click on the backdrop closes it unless that would throw away a typed message. The message box takes 1,974 characters, which is Zabbix's 2,048 less the longest tag the server puts in front, so the end of a long note is never cut off unseen.
+1. The dialog is the one place a click changes something in Zabbix, so it confirms and never acts on a single tap, and it does not offer Close for a trigger that does not allow a manual close (`manualClose`). While a request is under way the cross, Cancel and Escape are switched off and a click on the backdrop does nothing, so a refusal cannot arrive at a dialog that has gone (FR-33). Otherwise Escape closes it, and a click on the backdrop closes it unless that would throw away a typed message. The dialog is drawn on the page itself (`createPortal` into the body), so a wrapper with a transform cannot become its frame (UX-46), and the role of a dialog sits on a `div` around the form, since HTML lets a form take only the roles search, none and presentation (UX-45). While it is open the page behind it does not scroll (`useDialogFocus` takes `lockScroll`, UX-43), and its head and foot are `role="none"`, since outside `<main>` a header and a footer would count as a second banner and a second contentinfo (UX-45). The message box takes 1,974 characters, which is Zabbix's 2,048 less the longest tag the server puts in front, so the end of a long note is never cut off unseen.
 2. `submit` calls `api.acknowledge` with the event id, the message, and the two flags. If the dialog is closed before Zabbix answers, the page is still told what was sent, but the late answer does not close the dialog of another problem that was opened meanwhile (`open`). On failure the dialog shows the sentence the portal sends back and puts focus back in the message box, since disabling the Confirm button had dropped focus to the page. A refusal by Zabbix, such as a close on a trigger that does not allow it, reaches the dialog in the portal's own words, "Zabbix refused the change. It may already be closed, or this account may not be allowed to change it.", with the reference to quote, and a timeout says that the change may or may not have been made (BK-43). When the web server answered instead of the portal, the dialog says "The portal did not answer (HTTP 502)" and what to check, as the report dialogs do (FR-32).
 3. The dialog also asks `/api/freshness`. With no `zabbix-server` collecting, a close is accepted and never applied, so a person is told before sending. A failed check says nothing, so it never gets in the way.
 4. Zabbix applies a change a moment after it answers. After a write the server clears the cached answers that the write changes and, for 15 seconds, keeps a new copy of each for only 2 seconds, so the next reads are fresh, though Zabbix itself may still say open for a few seconds. The page keeps what it sent for each problem (`sent`), shows it until the refreshed list says the same (`applied`), and polls every 3 seconds, instead of every 30, while a change is awaited. After `WAIT_FOR_ZABBIX_MS`, a minute, a change that has not shown stops being "waiting": the row says it is late and goes back to offering Ack.
@@ -259,7 +259,7 @@ export function seriesColors(): string[] {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet web/src/features/graphs/TimeSeriesChart.tsx#TimeSeriesChart lines=30-45 sha=7a64fbfe3e65 -->
+<!-- gen:snippet web/src/features/graphs/TimeSeriesChart.tsx#TimeSeriesChart lines=30-45 sha=87703afaedc8 -->
 `web/src/features/graphs/TimeSeriesChart.tsx:131-146` (lines 30 to 45 of TimeSeriesChart)
 
 ```tsx
@@ -282,7 +282,7 @@ const palette = seriesColors();
 ```
 <!-- /gen -->
 
-<!-- gen:snippet web/src/features/graphs/TimeSeriesChart.tsx#TimeSeriesChart lines=47-93 sha=7a64fbfe3e65 -->
+<!-- gen:snippet web/src/features/graphs/TimeSeriesChart.tsx#TimeSeriesChart lines=47-93 sha=87703afaedc8 -->
 `web/src/features/graphs/TimeSeriesChart.tsx:148-194` (lines 47 to 93 of TimeSeriesChart)
 
 ```tsx
@@ -336,7 +336,7 @@ series.forEach((s, i) => {
 ```
 <!-- /gen -->
 
-1. A canvas cannot resolve a CSS variable, so the colours are read from the stylesheet at render (`seriesColors`, `chartInk`) and the chart is drawn again when the theme changes (`useThemeChange`). Without that, the chart keeps its light axes on a dark page, which is the usual way a canvas gets left out of a theme. `theme.ts` holds the light values as a fallback for a render without a document.
+1. A canvas cannot resolve a CSS variable, so the colours are read from the stylesheet at render (`seriesColors`, `chartInk`) and the chart is drawn again when the theme changes (`useThemeChange`). The tooltip takes its background, its edge and its text from the same tokens as the axes, since the library paints it white otherwise (UX-41). Without that, the chart keeps its light axes on a dark page, which is the usual way a canvas gets left out of a theme. `theme.ts` holds the light values as a fallback for a render without a document.
 2. Only the parts of ECharts the chart draws are registered, and not the convenience import, which pulls in every chart type and renderer, roughly a megabyte.
 3. Up to two unit families get an axis each, such as bits a second on the left and percent on the right (`MAX_UNIT_SCALES`). The picker refuses a third with a sentence, and a chart opened by an address that names three says which line is drawn on the first scale. The ticks of the time axis are the browser's, and their words are the report zone's (`formatAxisTime`), as are the labels of the slider. In a browser outside the report zone, a range that runs over midnight there puts the day on every tick (`axisNeedsDays`), since the tick at that midnight may fall between the browser's own. The x axis is pinned to the window that was asked for, so a sparse item does not stretch its few points across the width.
 4. The lines are straight, with no smoothing, and a state, such as ping or an interface status, is a step line. The third and fourth series are dashed (`DASHED_FROM`), a second cue for a reader who cannot tell two of the hues apart (UX-39). A collection gap, which the server marks with a null, breaks the line and never draws across it.

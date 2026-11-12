@@ -21,7 +21,7 @@ the method, the path and the address, and not the user (tracker SC-42, kept as i
 Where it goes. Docker's `json-file` driver keeps up to five files of 50 MB for each container and overwrites the oldest, and **deletes them
 when the container is made again**, which every rebuild does. `deploy/rebuild.sh` therefore saves a compressed copy of each copy's logs first, to
 `~/.local/state/hcml-portal-logs` (`LOG_ARCHIVE_DIR`), the newest 30 of each copy (`LOG_ARCHIVE_KEEP`), readable by the user who runs it alone.
-That is the whole of the keeping: a copy on the same Mac, and nothing outside it.
+That is the whole of the keeping: a copy on the same Mac, and nothing outside it. When the disk of the machine fills, [`full-disk.md`](full-disk.md) says what is likely to have filled it and what is safe to remove.
 
 What is still open, and is HCML's to decide (SC-42): where the container logs go so that they outlive the machine (a volume, or HCML's log server, by
 a different Docker logging driver), for how long they are kept, and who may read them. The names typed at sign-in, the addresses people sign in
@@ -44,7 +44,7 @@ The question to HCML IT is written down in `myown/documents/notes/hcml-it-log-ke
 The `docker-compose.yml` of `hcml-portal` declares one volume, `portal-state`, for the small file in the last row above
 ([ADR-0015](../architecture/adr/0015-keep-a-small-state-file-for-recipients-and-the-schedule.md)); that of `hcml-portal-ollama` declares
 none, so there is no portal data folder to copy there. `docker compose down -v` deletes the volume, so do not run it with `-v` unless that is meant. To keep the
-file, copy it out to a folder outside the repository, because it holds addresses and git does not ignore it: `mkdir -p ~/hcml-backup && docker run --rm -v hcml-portal_portal-state:/data:ro -v ~/hcml-backup:/backup alpine sh -c 'cp /data/portal-state.json /backup/ && chown "$1:$2" /backup/portal-state.json' sh "$(id -u)" "$(id -g)"`. The `chown` hands the copy to the person who made it: without it, Docker Engine on Linux leaves a file owned by root with mode 0600 in their folder, which they cannot read without `sudo`. Running the copy as one's own id (`--user "$(id -u):$(id -g)"`) does not work, because the portal's file is mode 0600 and belongs to the portal's user; both forms were tried on a throwaway volume on Docker Desktop for Mac (IN-70), and not on Docker Engine on Linux. To put it back, stop the portal (`docker compose stop portal-bff`), copy the file in as the portal's own user, `docker run --rm --user 1000:1000 -v hcml-portal_portal-state:/data -v ~/hcml-backup:/backup alpine cp /backup/portal-state.json /data/`, and start it again (`docker compose start portal-bff`). A file written by root has mode 0600 and the portal cannot read it. Each copy of
+file, copy it out to a folder outside the repository, because it holds addresses and git does not ignore it: `mkdir -p ~/hcml-backup && docker run --rm -v hcml-portal_portal-state:/data:ro -v ~/hcml-backup:/backup alpine sh -c 'cp /data/portal-state.json /backup/ && chown "$1:$2" /backup/portal-state.json' sh "$(id -u)" "$(id -g)"`. The `chown` hands the copy to the person who made it: without it, Docker Engine on Linux leaves a file owned by root with mode 0600 in their folder, which they cannot read without `sudo`. Running the copy as one's own id (`--user "$(id -u):$(id -g)"`) does not work, because the portal's file is mode 0600 and belongs to the portal's user; both forms were tried on a throwaway volume on Docker Desktop for Mac (IN-70), and not on Docker Engine on Linux. To put it back, stop the portal (`docker compose stop portal-bff`), copy the file in as root and give it to the portal's user inside the container, `docker run --rm -v hcml-portal_portal-state:/data -v ~/hcml-backup:/backup:ro alpine sh -c 'cp /backup/portal-state.json /data/portal-state.json && chown 1000:1000 /data/portal-state.json && chmod 600 /data/portal-state.json'`, and start it again (`docker compose start portal-bff`). Root can read a backup that belongs to any user, so this works whatever the operator's user id is. This page used to copy the file in as user 1000, and that fails with `Permission denied` when the backup belongs to another user: it did with a file of user 1001 and mode 0600 on a throwaway volume (IN-77), the case of a Linux server whose operator is not the first user. The file the portal reads is mode 0600 and belongs to its own user, so without the `chown` and the `chmod` it cannot read what was put back. The new recipe was tried on that volume, on Docker Desktop for Mac, which maps ownership; a Linux server with Docker Engine is still to try (ask HCML for one). Each copy of
 the portal has its own `.env` files, and each needs its own backup. `hcml-portal-ollama` is not
 under git at all (checked 7 October 2026: there is no `.git` folder in it), so its compose file, its
 documents and its `.env.example` files are not versioned either. Copy that whole folder, leaving out
@@ -93,9 +93,9 @@ machine.
 
 ## Restore checklist
 
-1. **Get the code.** `git clone` for `hcml-portal`. For `hcml-portal-ollama`, restore the folder you
-   copied. A clone holds only what was committed: the live builds of 2 November were made from a working tree that is
-   ahead of the last commit, and `hcml-portal-ollama` is not under git, so keep a copy of each beside the encrypted
+1. **Get the code.** `git clone` for each copy: `hcml-portal`, and `hcml-portal-ollama`, which has had a repository
+   of its own since 11 November 2026. A clone holds only what was committed, and a live build can be made from a working tree
+   that is ahead of the last commit (its label ends in `-dirty`), so keep a copy of each beside the encrypted
    files (a `git bundle` and a tar of the folder, without the `.env` files) on another machine (tracker IN-50).
 2. **Put the files back and lock them.** From the repository root:
    ```bash

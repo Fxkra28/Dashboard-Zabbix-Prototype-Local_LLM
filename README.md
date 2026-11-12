@@ -93,7 +93,7 @@ component library (the UI is plain CSS, so the app runs with zero extra setup).
 | TypeScript | ^5.9 | ESM throughout: `"type": "module"`, `NodeNext` resolution, ES2022 target, `strict: true`. Tests live under `src/` (same imports as the code) but are excluded from the shipped `dist/` and typechecked by a second config, `tsconfig.test.json` |
 | Fastify | ^5.12 | Plugin-scoped hooks are the reason the RBAC guard is a single `onRequest` at the root rather than a check repeated in every handler. 24 route modules register onto it → 45 endpoints, and `security/auth.ts` and `http/health.ts` add the other six: `/api/auth/login`, `/api/auth/me`, `/api/auth/refresh`, `/api/auth/logout`, `/api/health` and `/api/ready` |
 | `@fastify/helmet` | ^13.1 | Security headers. CSP is off: nginx serves the SPA, and Fastify serves data, not pages: JSON, the event streams and the report files, which download as attachments |
-| `@fastify/cors` | ^11.3 | Exactly one allowed origin, from `WEB_ORIGIN` |
+| `@fastify/cors` | ^11.4 | Exactly one allowed origin, from `WEB_ORIGIN` |
 | `@fastify/jwt` | ^10.2 | Signs the login token (12 hours unless `SESSION_HOURS` says otherwise) and reads it from the session cookie, or from an `Authorization: Bearer` header for scripts. No route takes it in the query string; `logging.ts` still redacts a `?token=` sent by a page opened before the cookie |
 | `@fastify/cookie` | ^11.1 | Sets the httpOnly, `SameSite=Strict` session cookie the token travels in, so no script on the page can read it ([ADR-0010](docs/architecture/adr/0010-session-cookie.md)) |
 | `@fastify/rate-limit` | ^11.2 | Per-IP cap, with `/api/stream` and `/api/health` exempt, so a NOC wall that polls does not throttle itself, and sign-out, so a spent allowance never leaves the cookie working. The stream is capped instead: `STREAM_MAX_CLIENTS` screens in all and `STREAM_MAX_PER_USER` for one user, past which it answers 429. `POST /api/auth/login` has a tighter limit of its own: 10 attempts a minute, and a lock after 10 failures in a row that grows from 1 to 5 minutes |
@@ -101,7 +101,7 @@ component library (the UI is plain CSS, so the app runs with zero extra setup).
 | `dotenv` | ^16.4 | `.env` in dev. In Docker, Compose passes the environment directly |
 | `@anthropic-ai/sdk` | ^0.124 | Installed but unused in this copy. It is the hosted backend of `ai.ts`, which this repo never selects; because the source tree is shared it is still imported at module load and still ships in the image. The backend this copy *does* use (OpenAI-compatible and Ollama-native) is hand-rolled on `fetch`, no SDK |
 | Report writers | not a package | `src/export/` writes the monthly SLA report as a PDF and as an Excel workbook, on request, with Node's built-in `zlib` and `crypto` modules and no PDF or spreadsheet library. ADR-0011 (`docs/architecture/adr/0011-build-the-sla-report-files-in-the-bff.md`) has the trade-off |
-| Vitest | ^5.0 | 2976 tests in 117 files, all green (11 Nov 2026, run in both copies). Zabbix is mocked at `src/clients/zabbix.ts` (the single module all API traffic funnels through) so the suite needs no live instance and no model |
+| Vitest | ^5.0 | 3097 tests in 122 files, all green (12 Nov 2026, run in both copies). Zabbix is mocked at `src/clients/zabbix.ts` (the single module all API traffic funnels through) so the suite needs no live instance and no model |
 | tsx | ^4.16 | `npm run dev` watch mode, and the standalone checks under `scripts/`. Production runs plain `node dist/index.js` |
 | ESLint (with `@eslint/js`, `typescript-eslint` and `globals`) | ^10.13 | Dev only, never shipped. `npm run lint` in `server/`: the recommended rules of ESLint and of typescript-eslint, and no warning allowed. The first run, on 19 October 2026, found 22 findings; the eight `eslint-disable` lines left each say why |
 
@@ -119,7 +119,7 @@ few seconds.
 | ECharts + `echarts-for-react` | ^6.1 / ^3.0 | Registered selectively (line chart, grid, tooltip, legend, data zoom, canvas renderer) instead of the barrel, which pulls in roughly a megabyte of chart types nothing draws. Drawn with the `v5` theme ECharts 6 ships, so the parts the portal does not colour itself look as they did on 5.x. Imported only by `TimeSeriesChart`, so its 612 kB chunk loads on Graphs and Network and nowhere else |
 | Custom CSS | not a package | One stylesheet in 20 numbered parts (`web/src/styles/`). HCML blue `#2B5584`, measured from the company logo, with Inter for text and IBM Plex Mono for IDs and figures. Light and dark from one set of CSS variables, per `DESIGN.md`. `scripts/css.check.mjs` checks it structurally, because Vite's build does not fail on an unclosed block; `scripts/tokens.check.mjs` computes the contrast of every pair and fails on a raw value |
 | Hand-rolled, on purpose | not a package | `shared/hooks/useSSE.ts` over native `EventSource`; `shared/hooks/useAsync.ts` for server state, in place of a query library; `features/assistant/parseMarkdown.ts` in about 150 lines, because the assistant's answers are the only markdown in the app and a full renderer is a large attack surface for a small job |
-| Vitest + Testing Library | ^5.0 / ^16.3 | 1769 tests in 114 files, run in jsdom: the sign-in return path, the CSRF header and 401 handling in `api/`, `useAsync`, `useSSE`, `useUrlState`, the wall highlight, the live list, `lib/time`, the report download buttons, the data-age and stale-copy notices, the CSV writer and the Assistant's chat storage. `npm test` in `web/` |
+| Vitest + Testing Library | ^5.0 / ^16.3 | 1844 tests in 119 files, run in jsdom: the sign-in return path, the CSRF header and 401 handling in `api/`, `useAsync`, `useSSE`, `useUrlState`, the wall highlight, the live list, `lib/time`, the report download buttons, the data-age and stale-copy notices, the CSV writer and the Assistant's chat storage. `npm test` in `web/` |
 | ESLint | ^9.39 | `npm run lint` in `web/`: typescript-eslint, the two classic react-hooks rules and jsx-a11y's recommended set. On 9 because jsx-a11y does not support ESLint 10 yet |
 | `openapi-typescript` | ^7.13 | Dev only, never shipped. `npm run gen:api` in `web/` turns `docs/api/openapi.yaml` into `web/src/generated/openapi.ts`. A test holds the app's hand-written types (`types/`) to those: a response schema that promises less than a page needs, or a kind the page cannot hold, fails `npm run typecheck` and names the place, such as `/api/hosts[].status` |
 
@@ -212,7 +212,7 @@ cd server
 cp .env.example .env            # set ZBX_URL + ZABBIX_API_TOKEN; auth needs JWT_SECRET + PORTAL_PASS
 npm install
 npm run dev                     # http://127.0.0.1:4000
-npm test                        # 2976 tests, no live Zabbix and no model needed
+npm test                        # 3097 tests, no live Zabbix and no model needed
 
 curl localhost:4000/api/health   # { ok, ts, ai, aiProvider, aiExternal, writeBack, defaults, ready: true|false } and, signed in, version, startedAt, build, streams, ready as an object
 ```
@@ -271,8 +271,7 @@ docker compose up -d --build
 start on a published or short secret or an empty or `admin` password. The rules are under
 [Access control](#access-control). To have `/api/health` show which build is running, build with `BUILD_COMMIT` and
 `BUILD_TIME` as Docker build arguments; they read `unknown` when left out.
-`deploy/rebuild.sh` and `deploy/watch.sh` are run from `hcml-portal`: this copy has no git, so the rebuild script refuses to run
-here. `rebuild.sh` rebuilds both portals (the rollback tags, those arguments, the wait for the containers to be healthy, the checks
+`deploy/rebuild.sh` and `deploy/watch.sh` are run from `hcml-portal`. `rebuild.sh` rebuilds both portals (the rollback tags, those arguments, the wait for the containers to be healthy, the checks
 an anonymous caller can make, and the tag that says what is live; `--dry-run` shows what it would do). `watch.sh --install` makes
 this Mac check both portals every minute and show a notification when one stops answering, comes back, or has a container that
 restarts in a loop; on a server, run `--once` from a timer.
@@ -410,7 +409,7 @@ its default, versioned.
 | `PORTAL_USER` / `PORTAL_PASS` | `admin` / none | Single-user fallback. With auth on, the server refuses to start while any user's password, here or in `PORTAL_USERS`, is empty or `admin` |
 | `PORTAL_USERS` | none | `name:password:role` triples, comma-separated. Roles: `viewer`, `wall`, `operator`, `admin`. A password is plain text or an scrypt hash (`scrypt.N.r.p.salt.hash`, made with `server/scripts/hash-password.ts`) and may contain `:`. Names ignore case |
 | `ALLOW_WRITE_WITHOUT_AUTH` | none | Dev only. With `AUTH_ENABLED=false` acknowledge and close are refused unless this is `true`. Not passed to the containers |
-| `ALLOW_EMAIL_WITHOUT_AUTH` | none | Dev only. With `AUTH_ENABLED=false` report email and the monthly schedule are refused unless this is `true`, since every caller would count as an administrator and could send the report to any address. Not passed to the containers |
+| `ALLOW_EMAIL_WITHOUT_AUTH` | none | Dev only. With `AUTH_ENABLED=false` report email, the monthly schedule and the saved list of recipients are refused unless this is `true`, since every caller would count as an administrator and could send the report to any address. Not passed to the containers |
 | `SESSION_HOURS` | `12` | How long one sign-in lasts, a number from 2 to 24. An open portal renews its token an hour before the end, so this limits how long a forgotten session works, not how long a wall screen stays signed in. Signing out ends the whole chain of renewals of that sign-in and closes its live streams. A copy that someone keeps renewing after the owner only closed the tab, without signing out, works until the user is removed from `PORTAL_USERS`, `SESSION_EPOCH` is raised or `JWT_SECRET` is changed. The server refuses to start on a value outside that range or one that is not a number |
 | `SESSION_EPOCH` | `1` | A label of 1 to 32 letters, digits, `.`, `_` or `-`, stamped into every token. A token is refused under any other label, so raising it and recreating the BFF's container (`docker compose up -d`; a plain restart keeps the old settings) signs everyone out without a new `JWT_SECRET`. The server refuses to start on a label outside that pattern |
 | `SESSION_COOKIE` | `hcml_session`; `hcml_session_ollama` in this copy's compose | Name of the httpOnly cookie that holds the sign-in token. Cookies ignore ports, so this portal and hcml-portal need different names on one host. The server refuses to start on a name a cookie cannot carry |
@@ -480,7 +479,7 @@ directly comparable on the same problem. What this copy sets is in the right-han
 | `MAIL_PROVIDER` | none | Not passed by this copy's compose file, which never emails a report. Emailing the SLA report, off while this is blank: `gmail`, `yahoo`, `zoho`, `icloud`, or `smtp` for a server of your own. See [`docs/setup/18-automated-reporting.md`](docs/setup/18-automated-reporting.md) |
 | `MAIL_HOST` / `MAIL_PORT` / `MAIL_SECURITY` | none | Not passed by this copy's compose file, which never emails a report. Only for `smtp`, or to name another server for a provider. Security is `tls` (port 465), `starttls` (587) or `none`; blank follows the port. `none` is refused alongside a password |
 | `MAIL_USER` / `MAIL_PASS` | none | Not passed by this copy's compose file, which never emails a report. The login. An app password for Gmail, Yahoo, Zoho and iCloud, never the usual one. A secret: it belongs in `.env` |
-| `MAIL_FROM_NAME` | `HCML Monitoring Portal` | The name shown beside the sender's address, up to 64 characters, with no `<`, `>`, `"`, `\` or `@`. A name of your own, such as the one people know the reports by, helps a mail program place the message; the sending account stays your choice |
+| `MAIL_FROM_NAME` | `HCML Monitoring Portal` | The name shown beside the sender's address, up to 64 characters, with no `<`, `>`, `"`, `\` or `@` and no invisible character. A name of your own, such as the one people know the reports by, helps a mail program place the message; the sending account stays your choice |
 | `MAIL_FROM` / `MAIL_TO` | none | Not passed by this copy's compose file, which never emails a report. The sender (blank means `MAIL_USER`) and the list the portal starts with, at most 10 addresses separated by commas |
 | `MAIL_ALLOWED_DOMAINS` | none | Not passed by this copy's compose file, which never emails a report. The only domains a report may go to; blank means any |
 | `MAIL_SCHEDULE` | on | Not passed by this copy's compose file, which never emails a report. `off` keeps the monthly send from running |
@@ -533,14 +532,14 @@ shows *partial view* when a list was cut.
 
 ```bash
 cd server
-npm test                        # 2976 tests in 117 files
+npm test                        # 3097 tests in 122 files
 npm run lint                    # eslint
 npm run typecheck               # app and tests
 
 npx tsx scripts/validate-sli.ts # optional: derived SLA vs HCML's published reports
 
 cd ../web
-npm test                        # 1769 tests in 114 files, in jsdom
+npm test                        # 1844 tests in 119 files, in jsdom
 npm run lint                    # eslint
 npm run typecheck               # app and tests
 ```
@@ -574,8 +573,8 @@ original.
 
 ## Known gaps
 
-- This repo is not under git. Its history is the filesystem; the git history of the shared source
-  tree is in `hcml-portal`.
+- This repo has been under git since 11 November 2026. Before that its history was the filesystem;
+  the git history of the shared source tree is in `hcml-portal`.
 - The `AUDIT_REPORT.md` items BE-12 to BE-17 are closed, and since the trees were unified they apply
   to both portals. `PORTAL_PASS` can still be plain text, though an scrypt hash is accepted since
   7 October 2026, and the dev `server/.env` has held a secret of its own since 13 October 2026 (DOC-11).

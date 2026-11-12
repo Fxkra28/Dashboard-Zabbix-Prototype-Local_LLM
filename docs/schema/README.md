@@ -28,7 +28,7 @@ The two sets are not copies of each other. Compare `schema/CDM.pdf` in both to s
 one box.
 
 > **Reconstructed 22 September 2026.** This copy's three sources and this README were overwritten by the
-> sibling's during the `docs/` reorganisation, and this repo has no version control to restore them from.
+> sibling's during the `docs/` reorganisation, and this repo had no version control then to restore them from.
 > They were rebuilt from the documented divergence: the title comment, the `AI EXPLANATION` label and its
 > class line, and re-rendered. The substance is right; if the originals said anything more than that, it is
 > lost.

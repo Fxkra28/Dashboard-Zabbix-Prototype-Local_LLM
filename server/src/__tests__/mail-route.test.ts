@@ -15,7 +15,11 @@ import { sampleSliReports } from './helpers/sliReportFixture.js';
  * against a real socket); the report files are the real ones. Every address and password is made up.
  */
 vi.hoisted(() => {
-  const admins = Array.from({ length: 17 }, (_, i) => `a${i + 1}:admin-pass:admin`).join(',');
+  // a1 to a17 are named in the tests; f1 to f60 are the ones `freshAdmin` hands out, one allowance each.
+  const admins = [
+    ...Array.from({ length: 17 }, (_, i) => `a${i + 1}:admin-pass:admin`),
+    ...Array.from({ length: 60 }, (_, i) => `f${i + 1}:admin-pass:admin`),
+  ].join(',');
   process.env.AUTH_ENABLED = 'true';
   process.env.JWT_SECRET = 'test-only-secret-at-least-32-bytes-long';
   process.env.PORTAL_USERS = `ana:viewer-pass:viewer,olu:operator-pass:operator,${admins}`;
@@ -75,8 +79,8 @@ const tokenFor = (sub: string, role: string) => app.jwt.sign({ sub, role, ...tok
 const bearer = (sub: string, role = 'admin') => ({ authorization: `Bearer ${tokenFor(sub, role)}` });
 
 let nextAdmin = 0;
-/** A different administrator each time, so the allowance of one does not use up the next test's. */
-const freshAdmin = () => `a${(nextAdmin++ % 10) + 1}`;
+/** A different administrator each time, so the allowance of one does not use up the next test's. The clock is fixed, so no allowance comes back; 60 names hold 300 sends. */
+const freshAdmin = () => `f${(nextAdmin++ % 60) + 1}`;
 
 const send = (payload: unknown, headers: Record<string, string> = bearer(freshAdmin()), remoteAddress = '10.9.8.7') =>
   app.inject({ method: 'POST', url: '/api/sli/email', headers, payload: payload as object, remoteAddress });
@@ -784,5 +788,60 @@ describe('a send that some addresses refused', () => {
   it('is logged at information level when every address took it', async () => {
     await send(ok);
     expect(emails()[0]).toMatchObject({ level: 30, outcome: 'sent', refused: 0 });
+  });
+});
+
+describe('a report with no device in it (BK-51)', () => {
+  const emptied = (r: typeof strict) => ({ ...r, hosts: [], overall: { ...r.overall, hosts: 0, withData: 0 } });
+
+  it('is not mailed: the answer says why, and nothing goes out', async () => {
+    reads.get.mockImplementation(async (_m: string, profile: string) => emptied(profile === 'hcml-report' ? hcml : strict));
+    const res = await send(ok);
+    expect(res.statusCode).toBe(502);
+    expect(res.json()).toMatchObject({ error: 'empty_report' });
+    expect(res.json().message).toMatch(/no device/i);
+    expect(mailer.send).not.toHaveBeenCalled();
+  });
+
+  it('is logged as a failed email with the reason empty, and no address', async () => {
+    reads.get.mockImplementation(async (_m: string, profile: string) => emptied(profile === 'hcml-report' ? hcml : strict));
+    await send(ok);
+    expect(emails()[0]).toMatchObject({ outcome: 'failed', reason: 'empty' });
+    expect(JSON.stringify(emails())).not.toMatch(/ana@|budi@/);
+  });
+
+  it('is still mailed when only one of the two profiles has no device', async () => {
+    reads.get.mockImplementation(async (_m: string, profile: string) => (profile === 'hcml-report' ? emptied(hcml) : strict));
+    expect((await send(ok)).statusCode).toBe(200);
+    expect(mailer.send).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('the ten minutes after a month ends, at their edges (BK-54)', () => {
+  const END = Date.parse('2026-08-31T17:00:00Z');
+  const later = (seconds: number) => vi.setSystemTime(new Date(END + seconds * 1000));
+
+  it.each([
+    [0, 'about 10 minutes'],
+    [1, 'about 10 minutes'],
+    [540, 'about 1 minute'],
+    [599, 'about 1 minute'],
+  ])('refuses %i seconds after the end, and says %s', async (seconds, words) => {
+    later(seconds);
+    const res = await send({ month: '2026-08', formats: ['pdf'] });
+    expect(res.statusCode).toBe(400);
+    // 'about 1 minute' is also the start of 'about 1 minutes', so the end of the word is pinned too.
+    expect(res.json().message).toMatch(new RegExp(`${words}(?!s)`));
+    expect(mailer.send).not.toHaveBeenCalled();
+  });
+
+  it('allows the send exactly ten minutes after the end, the second the closed month is read for good', async () => {
+    later(600);
+    expect((await send({ month: '2026-08', formats: ['pdf'] })).statusCode).toBe(200);
+  });
+
+  it('never delays the month before the one that just ended', async () => {
+    later(1);
+    expect((await send({ month: '2026-07', formats: ['pdf'] })).statusCode).toBe(200);
   });
 });

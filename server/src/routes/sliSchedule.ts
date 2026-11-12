@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { config, emailRefusal } from '../core/config.js';
+import { config, signInRefusal } from '../core/config.js';
 import { MAX_RECIPIENTS } from '../core/mailConfig.js';
 import { checkRecipients, domainsOf } from '../core/recipients.js';
 import { scheduleBody } from '../core/schemas.js';
@@ -18,7 +18,7 @@ const MAX_NOTIFY = 3;
 const SENDS_SHOWN = 12;
 
 /** A record as the page sees it: what happened, with counts, and none of the scheduler's own bookkeeping. */
-const shown = ({ nextAt: _nextAt, noticed: _noticed, ...record }: SendRecord): Omit<SendRecord, 'nextAt' | 'noticed'> => record;
+const shown = ({ nextAt: _nextAt, noticed: _noticed, unsure: _unsure, ...record }: SendRecord): Omit<SendRecord, 'nextAt' | 'noticed' | 'unsure'> => record;
 
 /** The schedule as the page sees it. */
 const scheduleView = ({ enabledAt: _enabledAt, ...schedule }: Schedule): Omit<Schedule, 'enabledAt'> => schedule;
@@ -29,8 +29,8 @@ interface ScheduleRouteOptions {
 
 export async function sliScheduleRoutes(app: FastifyInstance, options: ScheduleRouteOptions): Promise<void> {
   const view = (state: PortalState) => {
-    const refusal = emailRefusal();
-    // With sign-in off every caller counts as an administrator: the page is told why, and shown nothing the portal keeps (SC-43).
+    const refusal = signInRefusal();
+    // With sign-in off every caller counts as an administrator: the page is told why, and shown nothing the portal keeps, whether or not mail is set up (SC-43, SC-49).
     if (refusal) {
       return {
         available: false,

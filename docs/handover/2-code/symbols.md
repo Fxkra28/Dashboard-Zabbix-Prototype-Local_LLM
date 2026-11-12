@@ -15,14 +15,14 @@ The kinds are the ones the cards use. A function and a component are told apart 
 
 | Name | Kind | Declared at |
 |---|---|---|
-| `$defs` | type | `web/src/generated/openapi.ts:2578` |
+| `$defs` | type | `web/src/generated/openapi.ts:2579` |
 
 ### A
 
 | Name | Kind | Declared at |
 |---|---|---|
 | `acceptsGzip` | function | `server/src/core/acceptEncoding.ts:18` |
-| `AckBody` | interface | `server/src/services/actions.ts:82` |
+| `AckBody` | interface | `server/src/services/actions.ts:85` |
 | `acknowledgeBody` | constant | `server/src/core/schemas.ts:113` |
 | `AcknowledgeResult` | interface | `web/src/types/problems.ts:23` |
 | `AckPill` | component | `web/src/features/problems/AckPill.tsx:2` |
@@ -55,7 +55,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `aiUse` | function | `server/src/security/audit.ts:24` |
 | `AJV_OPTIONS` | constant | `server/src/core/schemas.ts:22` |
 | `analyticsRoutes` | function | `server/src/routes/analytics.ts:14` |
-| `answered` | constant | `server/src/services/actions.ts:80` |
+| `answered` | constant | `server/src/services/actions.ts:83` |
 | `AnswerOptions` | interface | `server/src/services/assistantAnswer.ts:152` |
 | `anthropicFailure` | function | `server/src/clients/ai.ts:203` |
 | `api` | constant | `web/src/api/index.ts:21` |
@@ -65,14 +65,14 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `arcPath` | function | `web/src/features/meters/gaugeDial.ts:32` |
 | `areaOf` | function | `tools/handover/lib/scope.mjs:91` |
 | `askedPath` | function | `server/src/http/noStore.ts:11` |
-| `assertConfig` | function | `server/src/core/config.ts:552` |
+| `assertConfig` | function | `server/src/core/config.ts:560` |
 | `assertFits` | function | `web/src/guards/misfit.ts:36` |
 | `assertUsers` | function | `server/src/security/auth.ts:243` |
-| `assistantApi` | constant | `web/src/api/assistant.ts:80` |
+| `assistantApi` | constant | `web/src/api/assistant.ts:83` |
 | `Async` | component | `web/src/shared/components/states.tsx:140` |
 | `Attachment` | interface | `server/src/clients/mail.ts:46` |
 | `auditDownload` | function | `server/src/security/audit.ts:58` |
-| `auditEmail` | function | `server/src/security/audit.ts:93` |
+| `auditEmail` | function | `server/src/security/audit.ts:98` |
 | `AUTH_CHANGED` | constant | `web/src/api/session.ts:75` |
 | `Availability` | type | `server/src/domain/reachability.ts:31` |
 | `availability` | function | `web/src/features/dashboard/hostsFigures.ts:15` |
@@ -97,7 +97,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `BarChart` | interface | `server/src/export/types.ts:87` |
 | `billedTokens` | function | `server/src/clients/ai.ts:492` |
 | `Block` | type | `web/src/features/assistant/parseMarkdown.ts:16` |
-| `bodyOf` | function | `server/src/services/sliMail.ts:29` |
+| `bodyOf` | function | `server/src/services/sliMail.ts:30` |
 | `bodyOf` | function | `tools/check/diagrams.check.mjs:33` |
 | `Box` | type | `web/src/features/network/mapLabels.ts:56` |
 | `boxOf` | function | `tools/handover/lib/document.mjs:41` |
@@ -166,12 +166,12 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `chatRoutes` | function | `server/src/routes/chat.ts:11` |
 | `chatStream` | function | `web/src/api/assistant.ts:19` |
 | `ChatTurn` | interface | `server/src/services/assistantAnswer.ts:12` |
-| `chatWarm` | function | `web/src/api/assistant.ts:76` |
+| `chatWarm` | function | `web/src/api/assistant.ts:79` |
 | `Check` | type | `web/src/guards/shape.ts:19` |
 | `checkBox` | function | `tools/check/handover.check.mjs:129` |
-| `checkBreakpoints` | function | `web/scripts/tokens.check.mjs:364` |
+| `checkBreakpoints` | function | `web/scripts/tokens.check.mjs:365` |
 | `checkCallTable` | function | `tools/check/facts.check.mjs:403` |
-| `checkContrast` | function | `web/scripts/tokens.check.mjs:216` |
+| `checkContrast` | function | `web/scripts/tokens.check.mjs:217` |
 | `checkCss` | function | `web/scripts/css.check.mjs:14` |
 | `checkDiagrams` | function | `tools/check/diagrams.check.mjs:75` |
 | `checkEveryone` | function | `tools/check/handover.check.mjs:170` |
@@ -181,17 +181,17 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `checkLinks` | function | `tools/check/links.check.mjs:179` |
 | `checkOpenItemsTotals` | function | `tools/check/facts.check.mjs:461` |
 | `checkPeriodStart` | function | `server/src/sli/time.ts:76` |
-| `checkRawColors` | function | `web/scripts/tokens.check.mjs:250` |
-| `checkRawSizes` | function | `web/scripts/tokens.check.mjs:319` |
+| `checkRawColors` | function | `web/scripts/tokens.check.mjs:251` |
+| `checkRawSizes` | function | `web/scripts/tokens.check.mjs:320` |
 | `checkRecipients` | function | `server/src/core/recipients.ts:31` |
 | `checkReferences` | function | `tools/check/handover.check.mjs:265` |
 | `checkSecrets` | function | `tools/check/handover.check.mjs:110` |
-| `checkStatusText` | function | `web/scripts/tokens.check.mjs:390` |
+| `checkStatusText` | function | `web/scripts/tokens.check.mjs:391` |
 | `checkStyle` | function | `tools/check/handover.check.mjs:98` |
 | `checkSummary` | function | `tools/check/handover.check.mjs:198` |
 | `checkText` | function | `tools/check/facts.check.mjs:325` |
 | `checkTracker` | function | `tools/check/facts.check.mjs:430` |
-| `checkTsx` | function | `web/scripts/tokens.check.mjs:467` |
+| `checkTsx` | function | `web/scripts/tokens.check.mjs:468` |
 | `chunk` | function | `server/src/sli/events.ts:167` |
 | `citedFile` | function | `tools/check/links.check.mjs:137` |
 | `citedLines` | function | `tools/check/facts.check.mjs:385` |
@@ -220,7 +220,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `compareRoles` | function | `tools/check/openapi.check.ts:361` |
 | `compareTrees` | function | `tools/check/parity.check.mjs:86` |
 | `complementIntervals` | function | `server/src/sli/intervals.ts:61` |
-| `components` | interface | `web/src/generated/openapi.ts:1390` |
+| `components` | interface | `web/src/generated/openapi.ts:1391` |
 | `composite` | function | `web/scripts/tokens.check.mjs:65` |
 | `computeSli` | function | `server/src/sli/engine.ts:553` |
 | `config` | constant | `server/src/core/config.ts:192` |
@@ -240,10 +240,10 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `CoverageText` | component | `web/src/features/sla/Sli.tsx:78` |
 | `coveredFromTrends` | function | `server/src/sli/engine.ts:260` |
 | `createGate` | function | `server/src/core/gate.ts:11` |
-| `createMailer` | function | `server/src/clients/mail.ts:120` |
+| `createMailer` | function | `server/src/clients/mail.ts:126` |
 | `createPinnedAgent` | function | `server/src/clients/pinnedTls.ts:102` |
 | `createReadiness` | function | `server/src/http/health.ts:78` |
-| `createReportSchedule` | function | `server/src/services/reportSchedule.ts:183` |
+| `createReportSchedule` | function | `server/src/services/reportSchedule.ts:198` |
 | `CSRF` | constant | `web/src/api/session.ts:42` |
 | `CSRF_HEADER` | constant | `server/src/security/auth.ts:61` |
 | `csrfRefusal` | function | `server/src/security/auth.ts:137` |
@@ -298,7 +298,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `default` | component | `web/src/features/network/Maps.tsx:46` |
 | `default` | component | `web/src/features/network/Network.tsx:56` |
 | `default` | component | `web/src/features/network/Sites.tsx:129` |
-| `default` | component | `web/src/features/problems/AckDialog.tsx:27` |
+| `default` | component | `web/src/features/problems/AckDialog.tsx:28` |
 | `default` | component | `web/src/features/problems/Problems.tsx:59` |
 | `default` | component | `web/src/features/problems/ProblemsTable.tsx:11` |
 | `default` | component | `web/src/features/reports/AlertNoise.tsx:64` |
@@ -310,11 +310,11 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `default` | component | `web/src/features/shell/Sidebar.tsx:135` |
 | `default` | component | `web/src/features/shell/TodayDate.tsx:6` |
 | `default` | component | `web/src/features/sla/Availability.tsx:148` |
-| `default` | component | `web/src/features/sla/EmailReport.tsx:223` |
+| `default` | component | `web/src/features/sla/EmailReport.tsx:225` |
 | `default` | component | `web/src/features/sla/FileChoices.tsx:13` |
 | `default` | component | `web/src/features/sla/ReportDialog.tsx:32` |
 | `default` | component | `web/src/features/sla/ReportDownload.tsx:52` |
-| `default` | component | `web/src/features/sla/ReportSchedule.tsx:314` |
+| `default` | component | `web/src/features/sla/ReportSchedule.tsx:317` |
 | `default` | component | `web/src/features/sla/ReportStyleButton.tsx:39` |
 | `default` | component | `web/src/features/sla/SavedList.tsx:26` |
 | `default` | component | `web/src/features/sla/Services.tsx:402` |
@@ -345,7 +345,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `DerivedServicesResponse` | interface | `server/src/sli/tree.ts:36` |
 | `DerivedServicesResponse` | interface | `web/src/types/sla.ts:183` |
 | `derivedSlaLines` | function | `server/src/sli/summary.ts:25` |
-| `DerivedSlaScope` | interface | `web/src/features/assistant/ExplainPanel.tsx:171` |
+| `DerivedSlaScope` | interface | `web/src/features/assistant/ExplainPanel.tsx:175` |
 | `describeTitles` | function | `tools/handover/lib/model.mjs:258` |
 | `DESIGN_HEIGHT` | constant | `web/src/features/dashboard/fit.ts:6` |
 | `detectLanguage` | function | `server/src/services/assistantPrompt.ts:78` |
@@ -365,9 +365,8 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `DimensionKey` | type | `server/src/services/inventory.ts:21` |
 | `DimensionKey` | type | `web/src/types/reports.ts:19` |
 | `directionOf` | function | `server/src/services/meters.ts:226` |
-| `dirOf` | function | `tools/handover/lib/scope.mjs:131` |
 | `documentedVariables` | function | `tools/check/facts.check.mjs:127` |
-| `domainsList` | function | `web/src/features/sla/addresses.ts:14` |
+| `domainsList` | function | `web/src/features/sla/addresses.ts:17` |
 | `domainsOf` | function | `server/src/core/recipients.ts:29` |
 | `downFor` | function | `server/src/services/assistantLines.ts:44` |
 | `downloadCsv` | function | `web/src/shared/lib/csv.ts:24` |
@@ -381,19 +380,21 @@ The kinds are the ones the cards use. A function and a component are told apart 
 |---|---|---|
 | `ELLIPSIS` | constant | `server/src/export/pdfFonts.ts:19` |
 | `EmailAudit` | interface | `server/src/security/audit.ts:62` |
-| `EmailedFile` | interface | `server/src/services/sliMail.ts:14` |
-| `EmailedReport` | interface | `server/src/services/sliMail.ts:20` |
+| `EmailedFile` | interface | `server/src/services/sliMail.ts:15` |
+| `EmailedReport` | interface | `server/src/services/sliMail.ts:21` |
 | `EmailInfo` | interface | `web/src/types/sla.ts:213` |
 | `emailInfoGuard` | constant | `web/src/guards/sla.ts:183` |
-| `emailRefusal` | function | `server/src/core/config.ts:492` |
-| `emailReport` | function | `server/src/services/sliMail.ts:56` |
+| `emailRefusal` | function | `server/src/core/config.ts:504` |
+| `emailReport` | function | `server/src/services/sliMail.ts:57` |
 | `emailReportBody` | constant | `server/src/core/schemas.ts:56` |
-| `EmailRequest` | interface | `server/src/services/sliMail.ts:45` |
+| `EmailRequest` | interface | `server/src/services/sliMail.ts:46` |
 | `EmailRequest` | interface | `web/src/types/sla.ts:239` |
 | `EmailSent` | interface | `web/src/types/sla.ts:247` |
 | `emailSentGuard` | constant | `web/src/guards/sla.ts:195` |
 | `Empty` | component | `web/src/shared/components/states.tsx:71` |
-| `emptyState` | function | `server/src/core/state.ts:60` |
+| `EMPTY_REPORT_WORDS` | constant | `server/src/core/validate.ts:25` |
+| `EmptyReportError` | class | `server/src/core/validate.ts:30` |
+| `emptyState` | function | `server/src/core/state.ts:62` |
 | `emptyTopWords` | function | `web/src/features/dashboard/hostsFigures.ts:40` |
 | `Encoding` | type | `server/src/http/compress.ts:23` |
 | `endpointTableRows` | function | `tools/check/facts.check.mjs:378` |
@@ -406,11 +407,11 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `ErrorState` | component | `web/src/shared/components/states.tsx:48` |
 | `estimatedTokens` | function | `server/src/clients/limits.ts:67` |
 | `EXPLAIN_TIMEOUT_MS` | constant | `web/src/api/client.ts:76` |
-| `explainDerivedSla` | function | `server/src/services/explain.ts:121` |
-| `explainProblem` | function | `server/src/services/explain.ts:93` |
+| `explainDerivedSla` | function | `server/src/services/explain.ts:125` |
+| `explainProblem` | function | `server/src/services/explain.ts:97` |
 | `explainRoutes` | function | `server/src/routes/explain.ts:16` |
 | `ExplainSlaQuery` | type | `web/src/api/assistant.ts:8` |
-| `explainZabbixSla` | function | `server/src/services/explain.ts:182` |
+| `explainZabbixSla` | function | `server/src/services/explain.ts:186` |
 | `exportProblems` | function | `web/scripts/tokens.export.mjs:231` |
 
 ### F
@@ -447,16 +448,17 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `fmtTime` | function | `web/src/shared/lib/severity.ts:11` |
 | `fmtValue` | function | `web/src/shared/lib/severity.ts:39` |
 | `focusBlock` | function | `server/src/services/assistantFocus.ts:88` |
-| `focusMain` | function | `web/src/shared/hooks/useDialogFocus.ts:8` |
+| `focusMain` | function | `web/src/shared/hooks/useDialogFocus.ts:9` |
 | `folderCards` | function | `tools/handover/lib/scope.mjs:112` |
 | `folderProblems` | function | `tools/check/handover.check.mjs:342` |
 | `foldIcmp` | function | `server/src/domain/reachability.ts:103` |
 | `FontFace` | type | `server/src/export/pdfFonts.ts:16` |
 | `fontWidths` | function | `server/src/export/pdfFonts.ts:94` |
 | `footWords` | function | `web/src/features/meters/gaugeDial.ts:99` |
+| `forgetMonthlySli` | function | `server/src/services/sli.ts:30` |
 | `Format` | type | `server/src/core/reportChoices.ts:9` |
 | `FORMAT_NAMES` | constant | `server/src/core/reportChoices.ts:8` |
-| `formatAxis` | function | `web/src/shared/lib/units.ts:151` |
+| `formatAxis` | function | `web/src/shared/lib/units.ts:156` |
 | `formatAxisTime` | function | `web/src/shared/lib/time.ts:158` |
 | `formatClock` | function | `web/src/shared/lib/time.ts:99` |
 | `formatClockLabeled` | function | `web/src/shared/lib/time.ts:110` |
@@ -468,7 +470,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `formatIsoDateTime` | function | `web/src/shared/lib/time.ts:77` |
 | `formatPercent` | function | `web/src/shared/lib/units.ts:42` |
 | `FORMATS` | constant | `server/src/services/sliExport.ts:23` |
-| `formatValue` | function | `web/src/shared/lib/units.ts:119` |
+| `formatValue` | function | `web/src/shared/lib/units.ts:122` |
 | `formatWeekdayDate` | function | `web/src/shared/lib/time.ts:131` |
 | `frameJson` | function | `server/src/services/stream.ts:84` |
 | `Freshness` | interface | `web/src/types/dashboard.ts:67` |
@@ -514,7 +516,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `getMapDetail` | function | `server/src/services/maps.ts:95` |
 | `getMaps` | function | `server/src/services/maps.ts:156` |
 | `getMeters` | function | `server/src/services/meters.ts:521` |
-| `getMonthlySli` | function | `server/src/services/sli.ts:27` |
+| `getMonthlySli` | function | `server/src/services/sli.ts:35` |
 | `getNetDevices` | function | `server/src/services/net.ts:158` |
 | `getNoise` | function | `server/src/services/noise.ts:64` |
 | `getNoiseReport` | function | `server/src/services/noise.ts:149` |
@@ -540,7 +542,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `GraphResponse` | interface | `web/src/types/graphs.ts:19` |
 | `graphsApi` | constant | `web/src/api/graphs.ts:7` |
 | `GraphSeries` | interface | `web/src/types/graphs.ts:6` |
-| `GraphView` | component | `web/src/features/graphs/TimeSeriesChart.tsx:443` |
+| `GraphView` | component | `web/src/features/graphs/TimeSeriesChart.tsx:447` |
 | `groupBySite` | function | `web/src/shared/lib/sites.ts:56` |
 | `groupInterfaces` | function | `server/src/services/net.ts:77` |
 | `GroupProblems` | interface | `web/src/types/dashboard.ts:80` |
@@ -653,12 +655,11 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `intersectIntervals` | function | `server/src/sli/intervals.ts:37` |
 | `Interval` | type | `server/src/sli/intervals.ts:8` |
 | `intervalsFor` | function | `server/src/sli/engine.ts:170` |
-| `intParam` | function | `server/src/core/validate.ts:51` |
+| `intParam` | function | `server/src/core/validate.ts:63` |
 | `invalidate` | function | `server/src/core/cache.ts:337` |
 | `InvalidateOptions` | interface | `server/src/core/cache.ts:98` |
 | `inventoryRoutes` | function | `server/src/routes/inventory.ts:5` |
 | `isCommon` | function | `server/src/security/passwords.ts:92` |
-| `isDir` | function | `tools/handover/lib/scope.mjs:133` |
 | `isFresh` | function | `server/src/domain/reachability.ts:61` |
 | `isGraphable` | function | `server/src/services/hosts.ts:36` |
 | `isGuessable` | function | `server/src/security/passwords.ts:106` |
@@ -672,7 +673,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `isSignedIn` | function | `server/src/security/auth.ts:308` |
 | `isSignedOut` | function | `web/src/api/session.ts:64` |
 | `isTestFile` | function | `tools/handover/lib/scope.mjs:25` |
-| `isZabbixId` | function | `server/src/core/validate.ts:29` |
+| `isZabbixId` | function | `server/src/core/validate.ts:41` |
 | `Item` | interface | `web/src/types/hosts.ts:66` |
 | `itemListGuard` | constant | `web/src/guards/hosts.ts:85` |
 | `ItemQuery` | interface | `server/src/services/hosts.ts:98` |
@@ -740,6 +741,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `Loaded` | component | `web/src/shared/components/states.tsx:114` |
 | `Loading` | component | `web/src/shared/components/states.tsx:7` |
 | `loadTypescript` | function | `tools/handover/lib/model.mjs:15` |
+| `lockScroll` | function | `web/src/shared/hooks/scrollLock.ts:9` |
 | `logAttempt` | function | `server/src/services/actions.ts:61` |
 | `logEmail` | function | `server/src/security/audit.ts:85` |
 | `login` | function | `web/src/api/session.ts:170` |
@@ -752,6 +754,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `loginBody` | constant | `server/src/core/schemas.ts:42` |
 | `LOGO_PNG_BASE64` | constant | `server/src/export/logo.ts:16` |
 | `logout` | function | `web/src/api/session.ts:211` |
+| `logSkipped` | function | `server/src/security/audit.ts:94` |
 | `LONG_OUTAGE_LOOKUPS` | constant | `server/src/services/incidents.ts:84` |
 | `looksLikeName` | function | `tools/check/handover.check.mjs:229` |
 | `luminance` | function | `web/scripts/tokens.check.mjs:70` |
@@ -767,7 +770,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `MailerOptions` | interface | `server/src/clients/mail.ts:68` |
 | `MailError` | class | `server/src/clients/mail.ts:28` |
 | `MailFailure` | type | `server/src/clients/mail.ts:10` |
-| `mailNow` | function | `server/src/core/config.ts:501` |
+| `mailNow` | function | `server/src/core/config.ts:509` |
 | `MailProvider` | type | `server/src/core/mailConfig.ts:7` |
 | `MailSecurity` | type | `server/src/core/mailConfig.ts:8` |
 | `MailSettings` | interface | `server/src/core/mailConfig.ts:35` |
@@ -799,7 +802,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `Me` | interface | `web/src/types/auth.ts:5` |
 | `median` | function | `server/src/services/history.ts:58` |
 | `meGuard` | constant | `web/src/guards/auth.ts:14` |
-| `memoryState` | function | `server/src/core/state.ts:213` |
+| `memoryState` | function | `server/src/core/state.ts:217` |
 | `mergedSeconds` | function | `server/src/sli/intervals.ts:23` |
 | `mergeIntervals` | function | `server/src/sli/intervals.ts:11` |
 | `Meter` | interface | `server/src/services/meters.ts:60` |
@@ -828,7 +831,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `MethodToggle` | component | `web/src/features/sla/Sli.tsx:114` |
 | `MIN_BYTES` | constant | `server/src/http/compress.ts:21` |
 | `MinuteLimit` | class | `server/src/clients/limits.ts:27` |
-| `minutes` | function | `server/src/services/explain.ts:71` |
+| `minutes` | function | `server/src/services/explain.ts:75` |
 | `Model` | interface | `tools/check/erd.check.ts:47` |
 | `ModelState` | type | `server/src/http/health.ts:24` |
 | `momentWords` | function | `web/src/shared/lib/freshness.ts:59` |
@@ -880,7 +883,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `noteRefreshing` | function | `server/src/core/staleness.ts:45` |
 | `noteStale` | function | `server/src/core/staleness.ts:39` |
 | `noteStaleCopy` | function | `web/src/shared/lib/freshness.ts:23` |
-| `NotFound` | interface | `server/src/services/explain.ts:82` |
+| `NotFound` | interface | `server/src/services/explain.ts:86` |
 | `NOTHING_TO_LIST` | constant | `server/src/export/types.ts:134` |
 | `notifyProblemsChanged` | function | `server/src/services/stream.ts:351` |
 | `nounOf` | function | `web/src/features/sla/FileChoices.tsx:10` |
@@ -902,12 +905,12 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `openapiEndpoints` | function | `tools/check/facts.check.mjs:362` |
 | `openLine` | function | `tools/handover/lib/blocks.mjs:30` |
 | `openProblems` | function | `server/src/domain/queries.ts:31` |
-| `openState` | function | `server/src/core/state.ts:249` |
-| `operations` | interface | `web/src/generated/openapi.ts:2579` |
+| `openState` | function | `server/src/core/state.ts:253` |
+| `operations` | interface | `web/src/generated/openapi.ts:2580` |
 | `OperStatus` | type | `server/src/services/net.ts:7` |
 | `OperStatus` | type | `web/src/types/network.ts:12` |
 | `opt` | function | `web/src/guards/shape.ts:38` |
-| `optionalId` | function | `server/src/core/validate.ts:42` |
+| `optionalId` | function | `server/src/core/validate.ts:54` |
 | `orNoData` | function | `web/src/shared/components/NoData.tsx:18` |
 | `orNull` | function | `web/src/guards/shape.ts:43` |
 | `OtherDirection` | interface | `server/src/services/meters.ts:49` |
@@ -949,7 +952,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `parseMermaid` | function | `tools/check/erd.check.ts:67` |
 | `parseMonth` | function | `server/src/sli/time.ts:65` |
 | `parseNoDataWindows` | function | `server/src/core/config.ts:117` |
-| `parseProfile` | function | `server/src/services/sli.ts:19` |
+| `parseProfile` | function | `server/src/services/sli.ts:20` |
 | `parseRange` | function | `server/src/services/history.ts:209` |
 | `parseScale` | function | `server/src/services/meters.ts:170` |
 | `parseSource` | function | `tools/handover/lib/model.mjs:138` |
@@ -959,6 +962,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `parseTokens` | function | `web/scripts/tokens.check.mjs:89` |
 | `parseTurns` | function | `server/src/services/chat.ts:96` |
 | `paths` | interface | `web/src/generated/openapi.ts:6` |
+| `pct` | function | `server/src/services/explain.ts:35` |
 | `PDF_TYPE` | constant | `server/src/export/types.ts:127` |
 | `pdfNumber` | function | `server/src/export/pdf.ts:63` |
 | `Peer` | interface | `server/src/clients/pinnedTls.ts:17` |
@@ -971,7 +975,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `percentUp` | function | `web/src/features/dashboard/hostsFigures.ts:30` |
 | `perCopyProblems` | function | `tools/check/handover.check.mjs:390` |
 | `pickEncoding` | function | `server/src/http/compress.ts:30` |
-| `pickScope` | function | `server/src/services/explain.ts:54` |
+| `pickScope` | function | `server/src/services/explain.ts:58` |
 | `pingFrame` | function | `server/src/services/stream.ts:41` |
 | `pinnedAgentFor` | function | `server/src/clients/pinnedTls.ts:92` |
 | `PinnedTlsError` | class | `server/src/clients/pinnedTls.ts:7` |
@@ -981,7 +985,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `plainAddress` | function | `server/src/core/mailConfig.ts:80` |
 | `Plan` | type | `server/src/sli/schedule.ts:54` |
 | `planNext` | function | `server/src/sli/schedule.ts:67` |
-| `PortalState` | interface | `server/src/core/state.ts:55` |
+| `PortalState` | interface | `server/src/core/state.ts:57` |
 | `portalState` | function | `server/src/services/portalState.ts:16` |
 | `post` | function | `web/src/api/client.ts:173` |
 | `postModel` | function | `server/src/clients/ai.ts:515` |
@@ -993,7 +997,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `Problem` | interface | `web/src/types/problems.ts:3` |
 | `PROBLEM_FIELDS` | constant | `server/src/domain/queries.ts:38` |
 | `PROBLEM_NAME_MAX` | constant | `server/src/services/assistantLines.ts:11` |
-| `ProblemExplainPanel` | component | `web/src/features/assistant/ExplainPanel.tsx:95` |
+| `ProblemExplainPanel` | component | `web/src/features/assistant/ExplainPanel.tsx:99` |
 | `ProblemExplanation` | interface | `server/src/clients/ai.ts:96` |
 | `ProblemExplanation` | interface | `web/src/types/assistant.ts:3` |
 | `problemExplanationGuard` | constant | `web/src/guards/assistant.ts:16` |
@@ -1033,9 +1037,8 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `readManifest` | function | `tools/check/handover.check.mjs:294` |
 | `readOllamaStream` | function | `server/src/clients/ai.ts:328` |
 | `readOpenAiStream` | function | `server/src/services/assistantAnswer.ts:52` |
-| `readPage` | function | `tools/handover/lib/document.mjs:116` |
 | `readReportStyle` | function | `web/src/features/sla/reportStyle.ts:33` |
-| `readState` | function | `server/src/core/state.ts:134` |
+| `readState` | function | `server/src/core/state.ts:138` |
 | `READY_FOR_MS` | constant | `web/src/features/sla/ReportDownload.tsx:26` |
 | `READY_STALE_MS` | constant | `server/src/http/health.ts:18` |
 | `READY_TIMEOUT_MS` | constant | `server/src/http/health.ts:20` |
@@ -1089,8 +1092,9 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `reportTimeZone` | function | `web/src/shared/lib/time.ts:22` |
 | `ReportWindow` | interface | `server/src/services/incidents.ts:44` |
 | `request` | function | `web/src/api/client.ts:89` |
+| `requestNeverLeft` | function | `server/src/clients/zabbix.ts:127` |
 | `requiredRole` | function | `server/src/security/auth.ts:47` |
-| `requireId` | function | `server/src/core/validate.ts:34` |
+| `requireId` | function | `server/src/core/validate.ts:46` |
 | `resetAuthProbe` | function | `web/src/shared/hooks/useAuth.ts:21` |
 | `resolve` | function | `web/scripts/tokens.check.mjs:124` |
 | `resolveImport` | function | `tools/handover/lib/model.mjs:230` |
@@ -1131,8 +1135,8 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `savedRecipientsGuard` | constant | `web/src/guards/sla.ts:189` |
 | `saveFile` | function | `web/src/shared/lib/saveFile.ts:5` |
 | `saveRecipients` | function | `server/src/services/mailState.ts:15` |
-| `scalesOf` | function | `web/scripts/tokens.check.mjs:280` |
-| `scanTsx` | function | `web/scripts/tokens.check.mjs:418` |
+| `scalesOf` | function | `web/scripts/tokens.check.mjs:281` |
+| `scanTsx` | function | `web/scripts/tokens.check.mjs:419` |
 | `scenarioName` | function | `server/src/services/webMonitoring.ts:50` |
 | `Schedule` | interface | `server/src/core/state.ts:16` |
 | `scheduleBody` | constant | `server/src/core/schemas.ts:79` |
@@ -1145,19 +1149,20 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `scorecardGuard` | constant | `web/src/guards/reports.ts:81` |
 | `ScorecardResponse` | interface | `server/src/services/inventory.ts:50` |
 | `ScorecardResponse` | interface | `web/src/types/reports.ts:39` |
-| `scrub` | function | `server/src/clients/mail.ts:77` |
+| `scrub` | function | `server/src/clients/mail.ts:78` |
 | `SCRYPT_DEFAULTS` | constant | `server/src/security/passwords.ts:21` |
 | `ScryptParams` | interface | `server/src/security/passwords.ts:14` |
 | `SEARCHES_PER_MINUTE` | constant | `server/src/security/searchLimit.ts:8` |
 | `searchGuard` | function | `server/src/security/searchLimit.ts:13` |
 | `section` | function | `server/src/services/assistantLines.ts:56` |
+| `SEE_EACH_OTHER` | constant | `web/src/features/sla/addresses.ts:14` |
 | `Segment` | interface | `web/src/features/meters/gaugeDial.ts:38` |
 | `segments` | function | `web/src/features/meters/gaugeDial.ts:45` |
 | `selfTest` | function | `tools/check/diagrams.check.mjs:96` |
 | `selfTest` | function | `tools/check/handover.check.mjs:457` |
 | `selfTest` | function | `tools/check/parity.check.mjs:121` |
-| `sendLine` | function | `web/src/features/sla/ReportSchedule.tsx:58` |
-| `sendNotice` | function | `server/src/services/sliMail.ts:86` |
+| `sendLine` | function | `web/src/features/sla/ReportSchedule.tsx:59` |
+| `sendNotice` | function | `server/src/services/sliMail.ts:93` |
 | `SendRecord` | interface | `server/src/core/state.ts:34` |
 | `SendRecord` | interface | `web/src/types/sla.ts:273` |
 | `SENDS_PER_HOUR` | constant | `server/src/security/mailLimit.ts:9` |
@@ -1208,6 +1213,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `ShutdownOptions` | interface | `server/src/http/shutdown.ts:14` |
 | `SiblingIds` | interface | `server/src/services/meters.ts:413` |
 | `Siblings` | interface | `server/src/services/meters.ts:257` |
+| `signInRefusal` | function | `server/src/core/config.ts:495` |
 | `singleValues` | function | `server/src/core/schemas.ts:34` |
 | `Site` | interface | `server/src/services/sites.ts:40` |
 | `Site` | interface | `web/src/types/network.ts:123` |
@@ -1233,10 +1239,10 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `SkippedSlot` | interface | `server/src/sli/schedule.ts:86` |
 | `skippedSlots` | function | `server/src/sli/schedule.ts:97` |
 | `Sla` | interface | `web/src/types/sla.ts:319` |
-| `SLA_PERIODS` | constant | `server/src/services/explain.ts:73` |
+| `SLA_PERIODS` | constant | `server/src/services/explain.ts:77` |
 | `SlaAnswer` | type | `server/src/services/explain.ts:17` |
 | `slaApi` | constant | `web/src/api/sla.ts:66` |
-| `SlaExplainPanel` | component | `web/src/features/assistant/ExplainPanel.tsx:183` |
+| `SlaExplainPanel` | component | `web/src/features/assistant/ExplainPanel.tsx:187` |
 | `SlaExplanation` | interface | `server/src/clients/ai.ts:104` |
 | `SlaExplanation` | interface | `web/src/types/assistant.ts:10` |
 | `slaExplanationGuard` | constant | `web/src/guards/assistant.ts:19` |
@@ -1249,6 +1255,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `SlaSource` | interface | `web/src/types/sla.ts:196` |
 | `slaSourceGuard` | constant | `web/src/guards/sla.ts:174` |
 | `slasView` | function | `server/src/services/sla.ts:110` |
+| `SLI_AT_ONCE` | constant | `server/src/services/reportPolicy.ts:35` |
 | `SLI_TIMEOUT_MS` | constant | `web/src/api/client.ts:79` |
 | `SliceOptions` | interface | `server/src/sli/events.ts:16` |
 | `Slide` | type | `web/src/shared/lib/wall.ts:13` |
@@ -1267,6 +1274,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `SliPill` | component | `web/src/features/sla/Sli.tsx:47` |
 | `SliProfile` | type | `server/src/core/config.ts:154` |
 | `SliProfile` | type | `web/src/types/sla.ts:43` |
+| `sliReads` | constant | `server/src/services/reportPolicy.ts:36` |
 | `SliReport` | interface | `server/src/sli/engine.ts:120` |
 | `SliReport` | interface | `web/src/types/sla.ts:107` |
 | `SliRequest` | interface | `server/src/sli/engine.ts:546` |
@@ -1292,7 +1300,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `splitAddresses` | function | `server/src/core/recipients.ts:26` |
 | `splitAddresses` | function | `web/src/features/sla/addresses.ts:2` |
 | `splitBlocks` | function | `tools/handover/lib/blocks.mjs:40` |
-| `STALE_AFTER_WRITE` | constant | `server/src/services/actions.ts:97` |
+| `STALE_AFTER_WRITE` | constant | `server/src/services/actions.ts:100` |
 | `STALE_HEADER` | constant | `server/src/core/staleness.ts:20` |
 | `StaleCopy` | component | `web/src/shared/components/states.tsx:92` |
 | `staleCopyOf` | function | `web/src/shared/lib/freshness.ts:40` |
@@ -1307,8 +1315,8 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `StateReason` | type | `server/src/domain/reachability.ts:21` |
 | `StateReason` | type | `web/src/types/hosts.ts:28` |
 | `stateSince` | function | `server/src/services/assistantFacts.ts:44` |
-| `StateStore` | interface | `server/src/core/state.ts:69` |
-| `StateWriteError` | class | `server/src/core/state.ts:62` |
+| `StateStore` | interface | `server/src/core/state.ts:71` |
+| `StateWriteError` | class | `server/src/core/state.ts:64` |
 | `Stats` | interface | `web/src/types/dashboard.ts:54` |
 | `statsGuard` | constant | `web/src/guards/dashboard.ts:47` |
 | `statusBucket` | function | `server/src/services/net.ts:154` |
@@ -1392,7 +1400,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `trouble` | function | `web/src/features/hosts/deviceTally.ts:17` |
 | `trustProxyOption` | function | `server/src/core/config.ts:174` |
 | `tryAcquireModelSlot` | function | `server/src/clients/ai.ts:432` |
-| `TSX_EXCEPTIONS` | constant | `web/scripts/tokens.check.mjs:405` |
+| `TSX_EXCEPTIONS` | constant | `web/scripts/tokens.check.mjs:406` |
 
 ### U
 
@@ -1411,7 +1419,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `useCapabilities` | hook | `web/src/features/assistant/useAi.ts:72` |
 | `useChangeHighlight` | hook | `web/src/features/problems/useChangeHighlight.ts:43` |
 | `useDebounced` | hook | `web/src/shared/hooks/useDebounced.ts:4` |
-| `useDialogFocus` | hook | `web/src/shared/hooks/useDialogFocus.ts:33` |
+| `useDialogFocus` | hook | `web/src/shared/hooks/useDialogFocus.ts:34` |
 | `useFitHeight` | hook | `web/src/features/dashboard/useFitHeight.ts:11` |
 | `useHostsView` | hook | `web/src/features/dashboard/useHostsView.ts:9` |
 | `useLogger` | hook | `server/src/services/stream.ts:145` |
@@ -1444,6 +1452,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `validAddress` | function | `server/src/core/mailConfig.ts:77` |
 | `validationProblem` | function | `server/src/core/schemas.ts:181` |
 | `valueWords` | function | `web/src/features/meters/gaugeDial.ts:94` |
+| `verifyLimit` | function | `server/src/clients/mail.ts:122` |
 | `verifyPassword` | function | `server/src/security/passwords.ts:65` |
 
 ### W
@@ -1467,7 +1476,7 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `WEB_SUB` | constant | `web/src/features/dashboard/hostsFigures.ts:46` |
 | `WebFailure` | interface | `server/src/services/webMonitoring.ts:10` |
 | `WebFailure` | interface | `web/src/types/dashboard.ts:30` |
-| `webhooks` | type | `web/src/generated/openapi.ts:1389` |
+| `webhooks` | type | `web/src/generated/openapi.ts:1390` |
 | `webMonitoringGuard` | constant | `web/src/guards/dashboard.ts:59` |
 | `WebMonitoringResponse` | interface | `server/src/services/webMonitoring.ts:22` |
 | `WebMonitoringResponse` | interface | `web/src/types/dashboard.ts:42` |
@@ -1485,11 +1494,12 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `wrapParagraph` | function | `server/src/export/pdfFonts.ts:152` |
 | `wrapText` | function | `server/src/export/pdfFonts.ts:117` |
 | `wrapWords` | function | `server/src/export/pdfFonts.ts:164` |
-| `WRITE_HOLD_MS` | constant | `server/src/services/actions.ts:115` |
-| `WRITE_MAY_HAVE_GONE` | constant | `server/src/services/actions.ts:66` |
+| `WRITE_HOLD_MS` | constant | `server/src/services/actions.ts:118` |
+| `WRITE_MAY_HAVE_GONE` | constant | `server/src/services/actions.ts:67` |
 | `WRITE_REFUSED` | constant | `server/src/services/actions.ts:65` |
+| `WRITE_UNCLEAR` | constant | `server/src/services/actions.ts:66` |
 | `writeBackEnabled` | function | `server/src/core/config.ts:487` |
-| `writeFailure` | function | `server/src/services/actions.ts:72` |
+| `writeFailure` | function | `server/src/services/actions.ts:73` |
 | `writeReportStyle` | function | `web/src/features/sla/reportStyle.ts:49` |
 
 ### X
@@ -1505,15 +1515,15 @@ The kinds are the ones the cards use. A function and a component are told apart 
 | `ZabbixApiError` | class | `server/src/clients/zabbix.ts:59` |
 | `ZabbixAuthError` | class | `server/src/clients/zabbix.ts:15` |
 | `zabbixCalls` | function | `tools/check/facts.check.mjs:90` |
-| `ZabbixRefusedError` | class | `server/src/clients/zabbix.ts:70` |
+| `ZabbixRefusedError` | class | `server/src/clients/zabbix.ts:73` |
 | `ZabbixState` | type | `server/src/http/health.ts:22` |
 | `ZabbixTimeoutError` | class | `server/src/clients/zabbix.ts:40` |
-| `ZabbixWriteDisabledError` | class | `server/src/clients/zabbix.ts:73` |
-| `zbx` | function | `server/src/clients/zabbix.ts:178` |
-| `ZbxOptions` | interface | `server/src/clients/zabbix.ts:173` |
+| `ZabbixWriteDisabledError` | class | `server/src/clients/zabbix.ts:76` |
+| `zbx` | function | `server/src/clients/zabbix.ts:204` |
+| `ZbxOptions` | interface | `server/src/clients/zabbix.ts:199` |
 | `ZbxProblem` | interface | `server/src/domain/queries.ts:6` |
 | `ZbxSla` | interface | `server/src/services/sla.ts:9` |
-| `zbxWrite` | function | `server/src/clients/zabbix.ts:186` |
+| `zbxWrite` | function | `server/src/clients/zabbix.ts:212` |
 | `ZDashboard` | interface | `server/src/services/meters.ts:110` |
 | `ZGraphItem` | interface | `server/src/services/history.ts:22` |
 | `ZHost` | interface | `server/src/services/hosts.ts:41` |

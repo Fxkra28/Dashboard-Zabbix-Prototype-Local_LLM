@@ -85,7 +85,7 @@ cached(key, ttl, fn) ──► fresh hit │ join in-flight │ stale-while-reva
 
 Four *outcomes*, not four checks: "already fetching" and "miss" are the same line of code,
 `inflight.get(key) ?? begin(key, fn, opts.pin)`. 500 entries or about 64 MB of values, whichever is
-reached first, TTLs from 5 s to 24 h, all of it gone on restart. A closed month's SLA report is pinned,
+reached first, TTLs from 15 s to 24 h, all of it gone on restart. A closed month's SLA report is pinned,
 so a run of graph keys cannot push it out.
 This is why twenty NOC screens cost one upstream read. Stale serving is never permitted for the problem
 list. A view HCML's Zabbix takes tens of seconds to build is answered from its last copy while a newer one

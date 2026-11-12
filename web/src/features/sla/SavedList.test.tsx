@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { api, HttpFailure } from '../../api';
 import SavedList from './SavedList';
@@ -286,6 +286,23 @@ describe('while a change is under way', () => {
     await user.click(screen.getByRole('button', { name: 'Remove dewi@example.org from the saved list' }));
     expect(save).toHaveBeenCalledTimes(1);
     finish({ recipients: ['dewi@example.org'], saved: 1 });
+  });
+
+  it('sends one change at a time even when two presses come in the same tick, before the buttons are off (FR-37)', async () => {
+    let finish!: (v: { recipients: string[]; saved: number }) => void;
+    save.mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    await open();
+    const carla = screen.getByRole('button', { name: 'Remove carla@example.org from the saved list' });
+    const dewi = screen.getByRole('button', { name: 'Remove dewi@example.org from the saved list' });
+    // Both presses run before React draws again, so the second still finds its button on.
+    act(() => {
+      carla.click();
+      dewi.click();
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith(['dewi@example.org']);
+    finish({ recipients: ['dewi@example.org'], saved: 1 });
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add' })).toBeEnabled());
   });
 
   it('puts the focus back on the button that opens the view, since the button that was pressed is gone', async () => {

@@ -62,7 +62,7 @@ The line numbers are where each method is called in the code on 20 October 2026,
 | Method | Called from `server/src/` | Tables |
 |---|---|---|
 | `host.get` | `domain/queries.ts:206`, `http/health.ts:44`, `services/devices.ts:28`, `services/hosts.ts:52`, `:82`, `services/maps.ts:86`, `:119`, `services/net.ts:172`, `services/reports.ts:119`, `sli/engine.ts:471`, `:602` | `hosts`; `interface`, `hosts_groups` → `hstgrp`, `host_tag`, `host_inventory` for the matching `select*` |
-| `hostgroup.get` | `services/hosts.ts:94`, `services/reports.ts:123`, `:153`, `sli/maintenance.ts:137` | `hstgrp` (host groups only), `hosts_groups` |
+| `hostgroup.get` | `services/hosts.ts:94`, `services/reports.ts:123`, `:153`, `sli/maintenance.ts:139`, `:145` | `hstgrp` (host groups only), `hosts_groups` |
 | `item.get` | `domain/reachability.ts:147`, `:276`, `security/viewerPolicy.ts:40`, `services/capacity.ts:122`, `:247`, `services/history.ts:244`, `services/hosts.ts:115`, `:164`, `:183`, `:201`, `services/links.ts:113`, `services/meters.ts:457`, `:529`, `:542`, `services/net.ts:210`, `services/reports.ts:74`, `services/topHosts.ts:58`, `services/webMonitoring.ts:58`, `sli/engine.ts:476`, `:611` | `items`, `item_rtdata`, `item_tag`, `hosts`; the history tables for `lastvalue`, `lastclock`, `prevvalue` |
 | `history.get` | `domain/recentValues.ts:27`, `services/capacity.ts:169`, `services/history.ts:71`, `services/meters.ts:505`, `sli/engine.ts:419`, `:511` | one of `history`, `history_str`, `history_log`, `history_uint`, `history_text`, chosen by the `history` parameter |
 | `trend.get` | `sli/events.ts:139` | `trends` for float items, `trends_uint` for unsigned ones |

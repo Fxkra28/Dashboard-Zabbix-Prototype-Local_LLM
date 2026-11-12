@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { createMailer, failureWords, MailError, scrub, type MailFailure, type OutgoingMail } from '../clients/mail.js';
+import { createMailer, failureWords, MailError, scrub, verifyLimit, type MailFailure, type OutgoingMail } from '../clients/mail.js';
 import type { MailSettings } from '../core/mailConfig.js';
 import { closedPort, startFakeSmtp, type FakeSmtp, type FakeSmtpOptions } from './helpers/fakeSmtp.js';
 import { TEST_CA } from './helpers/tlsTestCerts.js';
@@ -278,6 +278,46 @@ describe('what each failure turns into', () => {
     const err = await failure(mailer.send(mail));
     expect(err.kind).toBe('timeout');
     expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it('a server that never answers the check before a send: nothing could have gone, so it is not told as a timeout (BK-52)', async () => {
+    const smtp = await start({ mode: 'plain', silent: true });
+    const mailer = createMailer(settings(smtp.port, { security: 'none', user: '', pass: '' }), {
+      timeoutsMs: { connect: 300, greeting: 300, socket: 300 },
+    });
+    const err = await failure(mailer.verify());
+    expect(err.kind).toBe('connect');
+    expect(err.message).not.toMatch(/may or may not/);
+    expect(err.message).toMatch(/could not reach/);
+  });
+
+  it('a server that greets and then ignores EHLO: the check gives up on its own short limit, not after the long send timeout (BK-52)', async () => {
+    const smtp = await start({ mode: 'plain', ignoreCommands: true });
+    const mailer = createMailer(settings(smtp.port, { security: 'none', user: '', pass: '' }), {
+      timeoutsMs: { connect: 300, greeting: 300, socket: 120_000, verify: 400 },
+    });
+    const started = Date.now();
+    const err = await failure(mailer.verify());
+    expect(err.kind).toBe('connect');
+    expect(Date.now() - started).toBeLessThan(5_000);
+  });
+
+  it('limits the silence of the check before a send to 15 seconds at most, to the socket timeout when that is shorter, and to its own setting when it has one (BK-52)', () => {
+    expect(verifyLimit({ socket: 60_000 })).toBe(15_000);
+    expect(verifyLimit({ socket: 120_000 })).toBe(15_000);
+    expect(verifyLimit({ socket: 900 })).toBe(900);
+    expect(verifyLimit({ socket: 120_000, verify: 400 })).toBe(400);
+  });
+
+  it('a send keeps the longer socket timeout, because a message may be large: the short limit belongs to the check alone (BK-52)', async () => {
+    const smtp = await start({ mode: 'plain', ignoreCommands: true });
+    const mailer = createMailer(settings(smtp.port, { security: 'none', user: '', pass: '' }), {
+      timeoutsMs: { connect: 300, greeting: 300, socket: 900, verify: 100 },
+    });
+    const started = Date.now();
+    const err = await failure(mailer.send(mail));
+    expect(err.kind).toBe('timeout');
+    expect(Date.now() - started).toBeGreaterThanOrEqual(700);
   });
 
   it('a certificate the portal does not trust: a TLS failure, and the connection goes no further', async () => {

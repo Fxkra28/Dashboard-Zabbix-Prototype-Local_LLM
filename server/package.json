@@ -19,12 +19,12 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",
     "@fastify/cookie": "^11.1.2",
-    "@fastify/cors": "^11.3.0",
+    "@fastify/cors": "^11.4.1",
     "@fastify/helmet": "^13.1.1",
-    "@fastify/jwt": "^10.2.2",
+    "@fastify/jwt": "^10.2.7",
     "@fastify/rate-limit": "^11.2.0",
     "dotenv": "^16.4.5",
-    "fastify": "^5.12.5",
+    "fastify": "^5.12.8",
     "nodemailer": "^10.3.1"
   },
   "devDependencies": {

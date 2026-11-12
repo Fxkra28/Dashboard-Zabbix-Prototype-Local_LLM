@@ -31,7 +31,7 @@ export async function problemRoutes(app: FastifyInstance): Promise<void> {
 Everything in `req.query` arrives as text or not at all, and both failures are silent. A missing id reaches Zabbix as `[undefined]` and comes back as an opaque 500. A non-numeric window becomes `NaN`, which Zabbix reads as "no time limit", and one request once returned an item's whole history, 20,218 points. So the routes use four helpers. An id is digits and no larger than Zabbix stores, 18446744073709551615 (`isZabbixId`): a longer number only comes back from Zabbix as a failed read, so it is a 400 here.
 
 <!-- gen:snippet server/src/core/validate.ts#requireId sha=1c2bb6afeeac -->
-`server/src/core/validate.ts:34-39`
+`server/src/core/validate.ts:46-51`
 
 ```ts
 export function requireId(value: unknown, name: string): string {
@@ -44,7 +44,7 @@ export function requireId(value: unknown, name: string): string {
 <!-- /gen -->
 
 <!-- gen:snippet server/src/core/validate.ts#intParam sha=188640584a71 -->
-`server/src/core/validate.ts:51-55`
+`server/src/core/validate.ts:63-67`
 
 ```ts
 export function intParam(value: unknown, fallback: number, min: number, max: number): number {
@@ -270,7 +270,7 @@ Tests: `graphs.test.ts`.
 
 ![The acknowledge path: the page sends the request, the guard checks the role, the route checks the body, the write token sends event.acknowledge to Zabbix, the caches are cleared and the live screens are told.](../diagrams/acknowledge-flow.png)
 
-<!-- gen:snippet server/src/routes/actions.ts#actionRoutes lines=10-35 sha=bc64fe860b2c -->
+<!-- gen:snippet server/src/routes/actions.ts#actionRoutes lines=10-35 sha=3e8f6e0b0943 -->
 `server/src/routes/actions.ts:38-63` (lines 10 to 35 of actionRoutes)
 
 ```ts
@@ -303,7 +303,7 @@ if (req.body != null && (typeof req.body !== 'object' || Array.isArray(req.body)
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/routes/actions.ts#actionRoutes lines=63-101 sha=bc64fe860b2c -->
+<!-- gen:snippet server/src/routes/actions.ts#actionRoutes lines=63-101 sha=3e8f6e0b0943 -->
 `server/src/routes/actions.ts:91-129` (lines 63 to 101 of actionRoutes)
 
 ```ts
@@ -338,14 +338,14 @@ try {
   if (!told) throw err;
   // The error handler's own log line, which this answer skips: the address Zabbix was asked at is in it.
   req.log.error({ detail: (err as { detail?: string }).detail }, (err as Error).message);
+  // A write that may have gone through: the next read of the lists must be Zabbix's, as after one that did, since the message says to look again (BK-53).
+  if (err instanceof ZabbixTimeoutError || (err instanceof ZabbixApiError && err.maybeApplied)) {
+    for (const key of STALE_AFTER_WRITE) invalidate(key, { holdMs: WRITE_HOLD_MS });
+    void notifyProblemsChanged();
+  }
   return reply.code(told.status).send({ error: told.error, message: told.message });
 }
 
-// Without this the change wouldn't surface until the 15 s cache expired, and
-// the click would look like it did nothing.
-for (const key of STALE_AFTER_WRITE) invalidate(key, { holdMs: WRITE_HOLD_MS });
-// Live screens get the new list now, not on the stream's next tick.
-void notifyProblemsChanged();
 ```
 <!-- /gen -->
 
@@ -354,7 +354,7 @@ void notifyProblemsChanged();
 3. The lines left out between the two quotes check the body: it must be an object, there must be at least one event id and at most 50 (`MAX_EVENTIDS`), every id must be digits and no larger than Zabbix stores (`isZabbixId`), `message` must be text, and `acknowledge` and `close` must be true or false. Types are checked and not coerced: the text "false" would otherwise count as true.
 4. `asked` is a bit mask of what the caller wants: 1 closes the problem, 2 acknowledges it and 4 adds a message. Acknowledging is the default. A request that asks for nothing is a 400.
 5. Zabbix files every write under the owner of the write token, so the portal user goes into the message as `[portal:<user>]`, first, and the cut to 2,048 characters keeps it. The cut never splits a pair of characters such as an emoji, and the dialog allows 1,974 characters, which leaves room for the longest tag, so a note is not cut off unseen. `actor`, in `security/audit.ts`, takes brackets and control characters out of the name so the tag cannot be closed early.
-6. `zbxWrite` sends `event.acknowledge`. A failure is logged. A refusal by Zabbix and a timeout are answered by the route itself, through `writeFailure`, with the portal's own sentence and the reference to quote (BK-43): 502 `zabbix_error` for a refusal, which says that Zabbix refused the change and that it may already be closed or the account may not be allowed to change it, and 503 `zabbix_timeout` for a timeout, which says that the change may or may not have been made. The route writes the error handler's log line itself, because the reply skips the handler and the address is in that line. Any other failure is thrown to the error handler as before.
+6. `zbxWrite` sends `event.acknowledge`. A failure is logged. A refusal by Zabbix and a timeout are answered by the route itself, through `writeFailure`, with the portal's own sentence and the reference to quote (BK-43): 502 `zabbix_error` for a refusal, which says that Zabbix refused the change and that it may already be closed or the account may not be allowed to change it, and 503 `zabbix_timeout` for a timeout, which says that the change may or may not have been made, and 502 `zabbix_error` with its own sentence when the portal cannot tell what Zabbix did with the request (an error page, a body that is not JSON-RPC, a connection that failed when the request may have left), which says the same (BK-53). After a timeout or such an error the route drops the cached lists and tells the open screens, as after a write that went through. The route writes the error handler's log line itself, because the reply skips the handler and the address is in that line. Any other failure is thrown to the error handler as before.
 7. After a write, `STALE_AFTER_WRITE` lists the cache entries that show problem state: the problem list, the counts, the problems by group, the sites, the aging report, the services, the hosts overview, the Devices page, the maps and the Assistant's snapshot. Each is invalidated with a hold of `WRITE_HOLD_MS`, 15 seconds, on a short lifetime, because Zabbix applies a close a few seconds after the call returns and the first refetch can still read the problem as open. `notifyProblemsChanged` then pushes the new list to the live screens.
 8. The route is `/api/problems/acknowledge` only. The rule in `ROUTE_RULES` also names a `close` path, but closing is a flag of the same call and nothing is registered at that path. Closing works only when the trigger allows a manual close, and `getProblems` carries that flag so the page does not offer a button Zabbix would reject.
 

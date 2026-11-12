@@ -512,8 +512,8 @@ npx tsx scripts/units.check.ts
 
 ## Known gaps
 
-- **This repo is not under git.** Its whole history is the filesystem, and it is now the reference
-  copy of a source tree that exists twice.
+- **This repo has been under git only since 11 November 2026.** Before that its whole history was the filesystem,
+  and it is now the reference copy of a source tree that exists twice.
 - `AUDIT_REPORT.md` items **BE-12 – BE-17** are open, and since the trees were unified they apply to
   both portals. `PORTAL_PASS` is compared as plain text, and `docker-compose.yml` falls back to
   `admin`/`admin` when it is unset.

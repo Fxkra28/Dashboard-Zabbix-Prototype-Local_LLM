@@ -15,7 +15,8 @@
 #   WATCH_STATE_DIR   where the state and the log are kept (default ~/.local/state/hcml-portal-watch)
 #   WATCH_NOTIFY_CMD  a command line run with the message as its last argument, instead of the desktop
 #                     notification: on a server, for example, a script that mails it
-#   WATCH_DOCKER_TIMEOUT  seconds a call to Docker, or the notification, may take before it counts as not answering (default 20)
+#   WATCH_DOCKER_TIMEOUT  seconds a call to Docker, or the notification, may take before it counts as not answering (default 20);
+#                     at the end of it the call and everything it started are stopped
 #
 # A portal counts as down after two failed checks in a row, Docker as not answering the same, and a container is told as
 # stopped, paused, dead, created, restarting or removing on the second check in a row, so a rebuild's restart is not news.
@@ -98,9 +99,24 @@ num() { case $1 in '' | *[!0-9]*) printf 0 ;; *) [ ${#1} -le 9 ] && printf '%s' 
 # Run a command and leave what it printed in LIMITED_OUT; give up on it after DOCKER_TIMEOUT seconds (status 124).
 # macOS has no timeout command; a Docker Desktop that hangs would otherwise hold this run, and launchd starts no second one.
 # Not run in a command substitution, so that a signal to this script can reach the call (cleanup below).
+#
+# The call leads a process group of its own, and the limit and a signal end the whole group: bash does not replace `sleep 300; true`,
+# or a wrapper script around a mailer, with its last command, so ending only the first process left its children running (IN-73).
+# macOS has no setsid; perl, which it and Debian both have, does the same with setpgrp. Without perl the call runs as before, and the limit ends only its first process.
+# A call in a group of its own is not in the one launchd cleans up when a job is killed (SIGKILL): TERM and INT are handled by `cleanup`, which ends the group.
+GROUPED=0
+command -v perl >/dev/null 2>&1 && GROUPED=1
 CHILD=''
 SCRATCH=''
 LIMITED_OUT=''
+# Send a signal to the call in hand: to its group when it leads one, else to the process alone.
+stop_call() {
+  if [ "$GROUPED" -eq 1 ]; then
+    kill -s "$1" -- "-$CHILD" 2>/dev/null || kill -s "$1" "$CHILD" 2>/dev/null
+  else
+    kill -s "$1" "$CHILD" 2>/dev/null
+  fi
+}
 limited() {
   local rc=0 waited=0 i
   LIMITED_OUT=''
@@ -110,16 +126,22 @@ limited() {
     LIMITED_OUT=$("$@" 2>/dev/null)
     return $?
   }
-  "$@" >"$SCRATCH" 2>/dev/null &
+  if [ "$GROUPED" -eq 1 ]; then
+    # exec with a block never hands the line to a shell, whatever the arguments hold.
+    perl -e 'setpgrp(0, 0); exec { $ARGV[0] } @ARGV or exit 127' -- "$@" >"$SCRATCH" 2>/dev/null &
+  else
+    "$@" >"$SCRATCH" 2>/dev/null &
+  fi
   CHILD=$!
   while kill -0 "$CHILD" 2>/dev/null; do
     if [ "$waited" -ge $((DOCKER_TIMEOUT * 20)) ]; then
-      kill "$CHILD" 2>/dev/null
+      stop_call TERM
       for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
         kill -0 "$CHILD" 2>/dev/null || break
         sleep 0.05 2>/dev/null || sleep 1
       done
-      kill -9 "$CHILD" 2>/dev/null
+      # Before the first process is reaped, so that its number is still ours: children may outlive it, or ignore TERM.
+      stop_call KILL
       wait "$CHILD" 2>/dev/null
       rm -f "$SCRATCH"
       SCRATCH=''
@@ -141,13 +163,14 @@ NEWSTATE=''
 cleanup() {
   local i
   if [ -n "$CHILD" ]; then
-    kill "$CHILD" 2>/dev/null
+    stop_call TERM
     for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
       kill -0 "$CHILD" 2>/dev/null || break
       sleep 0.05 2>/dev/null || sleep 1
     done
-    # Reaped here, so that bash does not report "Killed" on stderr, which launchd would keep in launchd.err.
-    kill -0 "$CHILD" 2>/dev/null && { kill -9 "$CHILD" 2>/dev/null; wait "$CHILD" 2>/dev/null; }
+    # The whole group goes, since children may outlive the first process. Reaped here, so that bash does not report "Killed" on stderr, which launchd would keep in launchd.err.
+    stop_call KILL
+    wait "$CHILD" 2>/dev/null
   fi
   [ -n "$SCRATCH" ] && rm -f "$SCRATCH"
   [ -n "$NEWSTATE" ] && rm -f "$NEWSTATE"

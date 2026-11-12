@@ -13,9 +13,9 @@
 # server/scripts/validate-sli.ts is deliberately absent: it reads HCML's real Availability Report spreadsheets and needs a
 # running BFF, and must not run here.
 #
-# Where it runs: hcml-portal is the git repository, so CI runs from it. hcml-portal-ollama is not under git and has
-# no CI of its own. The file is kept in both trees so that they stay identical, and tools/check/parity.check.mjs is how
-# that is checked, on a machine that has both. With one tree it runs its own checks and skips the comparison.
+# Where it runs: both trees are git repositories (the second since 11 November 2026), so CI can run from either. The file is kept
+# in both so that they stay identical, and tools/check/parity.check.mjs is how that is checked, on a machine that has
+# both. With one tree it runs its own checks and skips the comparison.
 #
 # There is no workspace: server/ and web/ are separate npm projects with separate lockfiles. The two checkers written
 # in TypeScript run through server/node_modules/.bin/tsx rather than npx, which would fetch a package that is in

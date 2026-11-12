@@ -25,6 +25,7 @@ const { actionRoutes } = await import('../routes/actions.js');
 const { MAX_EVENTIDS } = await import('../services/actions.js');
 const { ZabbixApiError, ZabbixRefusedError, ZabbixTimeoutError, ZabbixAuthError } = await import('../clients/zabbix.js');
 const { AJV_OPTIONS } = await import('../core/schemas.js');
+const { cached, invalidate } = await import('../core/cache.js');
 
 type Line = Record<string, unknown> & { level: number; msg: string };
 
@@ -321,6 +322,50 @@ describe('what a person is told when Zabbix does not take the change (BK-43)', (
     const res = await ack({ eventids: ['109'] });
     expect(res.statusCode).toBe(502);
     expect(res.json().message).toMatch(/^The data source is not answering\. Tell an administrator and quote reference \S+\.$/);
+  });
+
+  it.each([
+    ['an HTTP 500', 'event.acknowledge: HTTP 500 Internal Server Error'],
+    ['a page that is not JSON', 'event.acknowledge: Zabbix returned a non-JSON response.'],
+    ['a connection that broke after the request was sent', 'Could not reach Zabbix for event.acknowledge (ECONNRESET).'],
+  ])('says the change may or may not have been made when Zabbix answered with %s (BK-53)', async (_why, message) => {
+    const UNCLEAR = 'The portal could not tell whether Zabbix took the change, so it may or may not have been made. Look at the problem again before you try it again.';
+    zbxWriteMock.mockRejectedValue(new ZabbixApiError(message, 'ZBX_URL=http://zabbix.internal', true));
+    const res = await ack({ eventids: ['109'] });
+    expect(res.statusCode).toBe(502);
+    expect(res.json().error).toBe('zabbix_error');
+    expect(res.json().message).toBe(`${UNCLEAR} Tell an administrator and quote reference ${reference(res)}.`);
+    expect(res.body).not.toMatch(/event\.acknowledge|HTTP 500|ECONNRESET|zabbix\.internal/);
+  });
+
+  describe('the lists after a write that may have gone through (BK-53)', () => {
+    // What the problem list holds in the cache, as the page would read it: the old answer, until something drops it.
+    const seed = () => cached('problems', 60_000, async () => 'old');
+    const reread = () => cached('problems', 60_000, async () => 'fresh');
+
+    beforeEach(() => {
+      invalidate('');
+    });
+
+    it.each([
+      ['a timeout', () => new ZabbixTimeoutError('Zabbix did not respond to event.acknowledge within 5000 ms.', 'ZBX_URL=http://zabbix.internal')],
+      ['an error page', () => new ZabbixApiError('event.acknowledge: HTTP 500 Internal Server Error', 'ZBX_URL=http://zabbix.internal', true)],
+    ])('drops the cached lists after %s, so that looking at the problem again shows what Zabbix holds', async (_why, make) => {
+      await seed();
+      zbxWriteMock.mockRejectedValue(make());
+      await ack({ eventids: ['109'] });
+      expect(await reread()).toBe('fresh');
+    });
+
+    it.each([
+      ['a refusal', () => new ZabbixRefusedError('Cannot close problem.', 'ZBX_URL=http://zabbix.internal')],
+      ['a connection that never opened', () => new ZabbixApiError('Could not reach Zabbix for event.acknowledge (ECONNREFUSED).', 'ZBX_URL=http://zabbix.internal')],
+    ])('keeps the cached lists after %s: nothing changed in Zabbix', async (_why, make) => {
+      await seed();
+      zbxWriteMock.mockRejectedValue(make());
+      await ack({ eventids: ['109'] });
+      expect(await reread()).toBe('old');
+    });
   });
 
   it('leaves a rejected write token as it was', async () => {

@@ -22,14 +22,15 @@ sequenceDiagram
     %%  or 504: a rejected token and an unreachable Zabbix are
     %%  configuration states, not upstream faults, and errors.ts returns
     %%  503 for both (pinned by routes.test.ts and zabbix.test.ts).
-    %%  Only zabbix_error is a 502. Nothing in the server ever returns
+    %%  zabbix_error is the 502 of a Zabbix failure (mail_error, ai_error
+    %%  and empty_report are 502 too). Nothing in the server ever returns
     %%  504. Do not "correct" these back.
 
-    %%  A miss on /api/sites issues four methods across three cache keys
-    %%  with three different TTLs: host.get (hosts:meta, 30 s),
-    %%  problem.get (problems, 5 s) plus trigger.get because problem.get
-    %%  carries no host names, and item.get (icmp:hosts, 15 s) for the
-    %%  ICMP readings. hostgroup.get is not called here: host groups
+    %%  A miss on /api/sites issues several methods across three cache keys:
+    %%  host.get (hosts:meta, 30 s), problem.get (problems,
+    %%  PROBLEMS_TTL_MS) plus trigger.get because problem.get carries no
+    %%  host names, and the ICMP readings (icmp:hosts, 30 s, folded from
+    %%  item.get and history.get). hostgroup.get is not called here: host groups
     %%  ride along as selectHostGroups on host.get. hostgroup.get
     %%  belongs to /api/hosts and /api/reports.
 
@@ -106,7 +107,7 @@ sequenceDiagram
         Note over F,Z: When Zabbix does not cooperate
         Z--xF: token rejected → 503 zabbix_auth<br/>"fix the token", not an opaque 500
         Z--xF: no answer in ZABBIX_TIMEOUT_MS → 503 zabbix_timeout
-        Z--xF: JSON-RPC error → 502 zabbix_error, carrying Zabbix's own words
+        Z--xF: JSON-RPC error → 502 zabbix_error, a fixed sentence<br/>(Zabbix's own words go to the log)
         Note over F: the address in ZBX_URL goes to the log,<br/>never into the response body
     end
 
@@ -129,4 +130,4 @@ sequenceDiagram
         F-->>B: how many addresses the mail server took
         Note over F,S: On the chosen day the scheduler does the same without a browser,<br/>and saves each step to the state file before the next
     end
-%% source-hash: 526379aafdcb
+%% source-hash: 83e9f21b4a84

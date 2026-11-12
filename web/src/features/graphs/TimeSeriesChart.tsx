@@ -217,6 +217,10 @@ export default function TimeSeriesChart({
     tooltip: {
       trigger: 'axis',
       confine: true,
+      // The library paints a white box with dark text unless told: the tokens keep it on the page's plane in both themes (UX-41).
+      backgroundColor: ink.surface,
+      borderColor: ink.border,
+      textStyle: { color: ink.text },
       formatter: (params: { seriesIndex: number; dataIndex: number; value: [number, number | null] }[]) => {
         if (!params.length) return '';
         const t = params[0].value[0];

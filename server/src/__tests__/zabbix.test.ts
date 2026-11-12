@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import Fastify from 'fastify';
 import { config } from '../core/config.js';
 import { registerErrorHandler } from '../http/errors.js';
-import { ZabbixApiError, ZabbixAuthError, ZabbixRefusedError, ZabbixTimeoutError, zbx } from '../clients/zabbix.js';
+import { ZabbixApiError, ZabbixAuthError, ZabbixRefusedError, ZabbixTimeoutError, requestNeverLeft, zbx } from '../clients/zabbix.js';
 
 /**
  * The JSON-RPC client against a throwaway local HTTP server standing in for
@@ -192,5 +192,78 @@ describe('zbx()', () => {
     expect(stalled.json().error).toBe('zabbix_timeout');
     expect(stalled.body).not.toContain('127.0.0.1');
     await app.close();
+  });
+});
+
+describe('zbx() and whether a failed request may have been applied (BK-53)', () => {
+  const maybeApplied = async () => ((await failure('event.acknowledge')) as ZabbixApiError).maybeApplied;
+  const closedPort = async () => {
+    const closed = http.createServer();
+    await new Promise<void>((resolve) => closed.listen(0, '127.0.0.1', resolve));
+    const port = (closed.address() as AddressInfo).port;
+    await new Promise((resolve) => closed.close(resolve));
+    return port;
+  };
+
+  it('marks an HTTP error status: the request arrived, and what it did is not said', async () => {
+    zabbixAnswers((res) => {
+      res.statusCode = 500;
+      res.end('<html>Internal Server Error</html>');
+    });
+    expect(await maybeApplied()).toBe(true);
+  });
+
+  it('marks a 200 that is not JSON-RPC', async () => {
+    zabbixAnswers((res) => res.end('<html>login</html>'));
+    expect(await maybeApplied()).toBe(true);
+  });
+
+  it('marks a connection that was cut after the request arrived', async () => {
+    zabbixAnswers((res) => res.socket?.destroy());
+    expect(await maybeApplied()).toBe(true);
+  });
+
+  it('does not mark a port nobody listens on: the request never left', async () => {
+    config.zbxUrl = `http://127.0.0.1:${await closedPort()}/api_jsonrpc.php`;
+    expect(await maybeApplied()).toBe(false);
+  });
+
+  it('does not mark an error Zabbix answered with: it said no', async () => {
+    zabbixAnswers((res) => res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32500, data: 'Cannot close problem.' }, id: 1 })));
+    const err = await failure('event.acknowledge');
+    expect(err).toBeInstanceOf(ZabbixRefusedError);
+    expect((err as ZabbixApiError).maybeApplied).toBe(false);
+  });
+});
+
+describe('requestNeverLeft (BK-53)', () => {
+  it.each([
+    'ECONNREFUSED',
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'EAI_FAIL',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+    'ENETDOWN',
+    'UND_ERR_CONNECT_TIMEOUT',
+    'ERR_INVALID_URL',
+    'CERT_HAS_EXPIRED',
+    'DEPTH_ZERO_SELF_SIGNED_CERT',
+    'SELF_SIGNED_CERT_IN_CHAIN',
+    'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+    'ERR_TLS_CERT_ALTNAME_INVALID',
+  ])('says that a failure with %s came before the request left', (code) => {
+    expect(requestNeverLeft(code)).toBe(true);
+  });
+
+  it.each(['ECONNRESET', 'EPIPE', 'UND_ERR_SOCKET', 'ETIMEDOUT', 'UND_ERR_HEADERS_TIMEOUT', 'ERR_STREAM_PREMATURE_CLOSE'])(
+    'does not say it for %s, which can come after the request was sent',
+    (code) => {
+      expect(requestNeverLeft(code)).toBe(false);
+    },
+  );
+
+  it.each([undefined, null, 7, ''])('does not say it when the code is %j', (code) => {
+    expect(requestNeverLeft(code)).toBe(false);
   });
 });

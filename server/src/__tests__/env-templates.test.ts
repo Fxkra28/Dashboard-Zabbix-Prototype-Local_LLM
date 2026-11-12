@@ -50,6 +50,7 @@ function compose(): { names: Set<string>; defaults: Map<string, string> } {
 const NOT_IN_TEMPLATE: Record<string, string> = {
   BUILD_COMMIT: 'set on the command line when building (see the comment in docker-compose.yml), never in a file',
   BUILD_TIME: 'set on the command line when building, never in a file',
+  APK_ROUND: 'the month, set by deploy/rebuild.sh when it builds so that the web image runs apk upgrade again (IN-75), never in a file',
 };
 
 /** Template values that differ from compose's default on purpose, with the reason. */

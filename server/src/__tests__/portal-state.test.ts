@@ -302,6 +302,8 @@ describe('a file with something wrong in part of it', () => {
     ['a reason that is not text', { reason: 5 }],
     ['a next try that is not a time', { nextAt: -5 }],
     ['a count of notices out of range', { noticed: 10 }],
+    ['a doubt that is not true', { unsure: 'yes' }],
+    ['a doubt that is false', { unsure: false }],
   ])('drops a record with %s, and says so', async (_what, over) => {
     write({ recipients: [], schedule: null, sends: [{ ...send(), ...over }, send({ month: '2026-09' })] });
     const store = await openState(dir, warn);
@@ -309,8 +311,8 @@ describe('a file with something wrong in part of it', () => {
     expect(said.join(' ')).toMatch(/record/);
   });
 
-  it('keeps a record that carries a reason, a next try and a count of notices, as it was', async () => {
-    const full = send({ outcome: 'sending', reason: 'zabbix', nextAt: 1_800_000_900, noticed: 1 });
+  it('keeps a record that carries a reason, a next try, a count of notices and a doubt, as it was', async () => {
+    const full = send({ outcome: 'sending', reason: 'timeout', nextAt: 1_800_000_900, noticed: 1, unsure: true });
     write({ recipients: [], schedule: null, sends: [full] });
     expect((await openState(dir, warn)).read().mail.sends).toEqual([full]);
     expect(said).toEqual([]);

@@ -355,6 +355,26 @@ describe('the verdict of an SLA explanation is the server\'s own comparison, wha
     }
   });
 
+  it('writes a figure that is a hair under the target as under it, not rounded up to the target (BK-56)', async () => {
+    const { invalidate } = await import('../core/cache.js');
+    const { config } = await import('../core/config.js');
+    invalidate('');
+    estate();
+    const target = config.sla.target;
+    // One hour lost of 744 is 99.8655914 %, which three decimals would round to 99.866, the target itself.
+    config.sla.target = 99.866;
+    humanizeMock.mockResolvedValue({ status: 'On target', plain: 'Met.', meetingTarget: true, recommendation: 'Nothing.' });
+    try {
+      const answer = await derived();
+      expect(answer).toMatchObject({ status: 'Below the target', meetingTarget: false });
+      expect((answer as { plain: string }).plain).toMatch(/99\.865 %.*target of 99\.866 %/);
+      expect((answer as { plain: string }).plain).not.toMatch(/99\.866 %.*target of 99\.866 %/);
+    } finally {
+      config.sla.target = target;
+      invalidate('');
+    }
+  });
+
   it('turns a model\'s "missed" into a pass when the figure is at the target or over it', async () => {
     const { invalidate } = await import('../core/cache.js');
     invalidate('');
@@ -390,6 +410,26 @@ describe('the verdict of an SLA explanation is the server\'s own comparison, wha
       config.sla.target = target;
       invalidate('');
     }
+  });
+
+  it('writes the lowest service of one of Zabbix\'s own SLAs as under its objective when a hair under it, not rounded up to it (BK-56)', async () => {
+    const { invalidate } = await import('../core/cache.js');
+    invalidate('');
+    estate({
+      'sla.get': () => [{ slaid: '2', name: 'SLA:1', slo: '98.9', period: '1', status: '1' }],
+      'sla.getsli': () => ({
+        periods: [{ period_from: 1, period_to: 2 }],
+        serviceids: [10],
+        sli: [[{ uptime: 100, downtime: 1, sli: 98.8996, error_budget: 0 }]],
+      }),
+      'service.get': () => [{ serviceid: '10', name: 'A' }],
+    });
+    humanizeMock.mockResolvedValue({ status: 'On target', plain: 'Met.', meetingTarget: true, recommendation: 'Nothing.' });
+    const missed = await zabbixSla();
+    expect(missed).toMatchObject({ status: 'Below the target', meetingTarget: false });
+    // Three decimals would round 98.8996 to 98.9, the objective itself.
+    expect((missed as { plain: string }).plain).toMatch(/lowest service is at 98\.899 % against a target of 98\.9 %/);
+    invalidate('');
   });
 
   it('does the same for one of Zabbix\'s own SLAs: met only when every service is at or over its objective', async () => {

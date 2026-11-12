@@ -16,7 +16,7 @@ One thing decides it: which model writes the plain-language answers.
 | What leaves the machine | The text of a problem or an SLA figure, and the Assistant's snapshot of the estate, when someone asks, and the monthly report by email, when an administrator sends it and email is set up | Nothing. The fonts are served from the site in both copies, so nothing is fetched from outside either, and this copy never emails a report: its compose file passes no mail settings |
 | Address | Port 8081 on the loopback address | Port 8082 on the loopback address |
 | Session cookie | `hcml_session` | `hcml_session_ollama` |
-| Under git | Yes. CI runs here, and the `live-<date>` tags are cut here | No. It is written by copying from the other |
+| Under git | Yes. CI is set up here (it has not run yet, IN-30), and the `live-<date>` tags are cut here | Yes, a repository of its own since 11 November 2026. Its shared files are still written by copying them from the other |
 
 Cookies ignore ports, so two portals on one machine would overwrite each other's session if they shared a cookie name. That is the reason for the second cookie name.
 
@@ -51,11 +51,12 @@ The folder name says it. So does the port in the address bar, the name of the se
 
 A change to shared code lands in both folders, in the same piece of work. The order that avoids mistakes:
 
-1. Make the change in `hcml-portal`, the copy under git, and get its checks green.
+1. Make the change in `hcml-portal`, the first copy, and get its checks green.
 2. Copy the shared files across with `rsync -a --delete`, and the exclude list that names the files above and `.env*`, `pic/`, `node_modules/`, `dist/`, `.git/`, `.DS_Store` and `*.tsbuildinfo`. Run it with `--dry-run` first and read what it would do. `--delete` removes a file from the destination that the source lacks, which is right for a deleted file and wrong for one that belongs to the destination only.
 3. Edit the per-copy files by hand in each folder, if the change touches what they say.
 4. Run `npm run verify` in both folders. Its last step is `parity.check`, which compares the two and fails on any difference that is not on the list.
-5. Rebuild both ([the rebuild script](tools-deploy-docs.md#deploy) does it in order, the hosted copy first).
+5. Commit in each folder, in its own repository. Since 11 November 2026 the second copy has a history of its own, so one commit does not cover both.
+6. Rebuild both ([the rebuild script](tools-deploy-docs.md#deploy) does it in order, the hosted copy first).
 
 Merging the two into one repository with two profiles was considered and not done: it would change how both live portals are built and started. The price is that a fix is two edits, two builds and two deployments, and the parity check is what makes that safe.
 

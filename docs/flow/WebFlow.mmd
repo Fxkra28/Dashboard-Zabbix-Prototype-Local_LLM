@@ -21,10 +21,11 @@ flowchart TB
     %%  user is to the portal and grants nothing in Zabbix.
 
     %%  Two arrows were corrected against the code and must stay this
-    %%  way. (1) The stream is opened by the Dashboard, not the shell:
-    %%  useSSE has exactly one call site, Overview.tsx, and navigating
-    %%  away closes the connection. The Problems page does not stream at
-    %%  all: it polls every 30 s. (2) There is no ExplainPanel ->
+    %%  way. (1) The stream is opened by two pages, not the shell:
+    %%  useSSE has two call sites, Overview.tsx (the Dashboard) and
+    %%  Problems.tsx, and navigating away closes the connection. The
+    %%  Problems page uses it as a signal to read its list again and
+    %%  still polls every 30 s. (2) There is no ExplainPanel ->
     %%  markdown arrow: ExplainPanel renders its fields as plain <p>
     %%  paragraphs and never imports the renderer. The Assistant is its
     %%  only consumer.
@@ -53,7 +54,7 @@ flowchart TB
         HASROLE{"signed in?"}
         LOGIN["<b>Login.tsx</b><br>POST /api/auth/login<br>with X-HCML-CSRF: 1"]
         COOKIE["<b>session cookie</b><br>hcml_session &middot; a 12 h JWT<br>httpOnly &middot; SameSite=Strict<br>scripts cannot read it"]
-        LAYOUT["<b>Layout + Sidebar</b><br>nav filtered by role<br>viewer &middot; operator &middot; admin"]
+        LAYOUT["<b>Layout + Sidebar</b><br>nav filtered by role<br>viewer &middot; wall &middot; operator &middot; admin"]
 
         ME --> HASROLE
         HASROLE -->|"no"| LOGIN
@@ -87,7 +88,7 @@ flowchart TB
     subgraph W5["5 &middot; On demand only"]
         EXPLAIN["<b>ExplainPanel</b><br>GET /api/explain/problem<br>never called on page load<br>renders plain paragraphs, not markdown"]
         CHATP["<b>Assistant</b><br>POST /api/chat<br>body read as a stream, frame by frame"]
-        MD["<b>features/assistant/parseMarkdown.ts</b><br>141 lines, hand-rolled: the Assistant's<br>answers are the only markdown here"]
+        MD["<b>features/assistant/parseMarkdown.ts</b><br>hand-rolled: the Assistant's<br>answers are the only markdown here"]
         ACK["<b>AckDialog</b><br>POST /api/problems/acknowledge<br>operator role<br>the only write to Zabbix"]
         MAILD["<b>Email report, Schedule</b><br>POST /api/sli/email<br>PUT /api/sli/schedule<br>administrator role<br>drawn only when the server<br>says email is on"]
 
@@ -108,7 +109,7 @@ flowchart TB
 
     CHUNK --> ME
     LAYOUT --> PAGE
-    PAGE -->|"Dashboard only"| SSE
+    PAGE -->|"Dashboard and Problems"| SSE
     PAGE --> EXPLAIN
     PAGE --> ACK
     PAGE -->|"SLA pages only"| MAILD
@@ -143,4 +144,4 @@ flowchart TB
     class ACK written
     class BFF server
     class HASROLE,R401,GUARD,HIDDEN choice
-%% source-hash: efd65b6a8449
+%% source-hash: 850068276cf4

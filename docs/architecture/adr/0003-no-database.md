@@ -28,7 +28,7 @@ a monthly SLA. Something has to produce them. Should the portal own a datastore 
 ## Decision Outcome
 
 Chosen: **no store at all.** Every derived value is computed per request and held in a single
-module-level `Map` with an LRU cap of 500 entries or about 64 MB and per-key TTLs from 5 seconds to 24 hours.
+module-level `Map` with an LRU cap of 500 entries or about 64 MB and per-key TTLs from 15 seconds to 24 hours.
 
 The cache coalesces concurrent misses onto one upstream fetch, so twenty NOC screens cost one Zabbix
 read. The slow report families may serve a stale value rather than an error, and say so in two response

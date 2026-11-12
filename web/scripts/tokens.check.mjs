@@ -139,6 +139,7 @@ export function resolve(name, theme, base) {
  */
 export const PAIRS = [
   ['--text', '--bg', 4.5],
+  // Also the graph tooltip, which the chart library paints from these two tokens and from --muted below (UX-41).
   ['--text', '--surface', 4.5],
   ['--text', '--surface-2', 4.5],
   ['--text', '--tint', 4.5],

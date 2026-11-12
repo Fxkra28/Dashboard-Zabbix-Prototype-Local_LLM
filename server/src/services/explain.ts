@@ -31,8 +31,12 @@ export function noDataExplanation(what: string, why: string, recommendation: str
   };
 }
 
-/** A percentage as people read it: a figure a hair under the target must not round up to it. */
-const pct = (n: number): string => String(Math.round(n * 1000) / 1000);
+/** A percentage to three decimals: a figure under 100 does not round up to 100, and one under the target does not round up to it (BK-46, BK-56). */
+export function pct(n: number, target?: number): string {
+  const rounded = Math.round(n * 1000) / 1000;
+  const roundsUpTo = (limit: number) => n < limit && rounded >= limit;
+  return String(roundsUpTo(100) || (target !== undefined && roundsUpTo(target)) ? Math.floor(n * 1000) / 1000 : rounded);
+}
 
 /**
  * The server compares the figure with the target and writes the pill's words; the model only explains. A small model wrote
@@ -141,7 +145,7 @@ export async function explainDerivedSla(
 
   // The engine already compared the figure with the target; the model only words it, so a slip near the target cannot show green.
   const meetingTarget = group.meeting === true;
-  const figure = `${group.name} was at ${pct(group.sli)} % in ${month}, against a target of ${pct(report.target)} %.`;
+  const figure = `${group.name} was at ${pct(group.sli, report.target)} % in ${month}, against a target of ${pct(report.target)} %.`;
   return cached(`explain:sla:derived:${month}:${profile}:${scope}`, 300_000, async () => ({
     ...agreeWithFigure(await humanize('sla', {
       sla: `${group.name}: monthly availability derived from ICMP ping triggers`,
@@ -195,7 +199,7 @@ export async function explainZabbixSla(slaid: string, serviceid: string | undefi
 
   // Met only when every service is at or over the objective; the model words the verdict and does not decide it.
   const meetingTarget = sli.every((s) => s.sli >= Number(sla.slo));
-  const figure = `The lowest service is at ${pct(Math.min(...sli.map((s) => s.sli)))} % against a target of ${pct(Number(sla.slo))} %.`;
+  const figure = `The lowest service is at ${pct(Math.min(...sli.map((s) => s.sli)), Number(sla.slo))} % against a target of ${pct(Number(sla.slo))} %.`;
   // Shorter TTL than problems: the SLI moves as the period progresses.
   return cached(`explain:sla:${slaid}:${serviceid ?? 'all'}`, 300_000, async () => ({
     ...agreeWithFigure(await humanize('sla', {

@@ -75,10 +75,29 @@ describe('the images (SC-21)', () => {
     expect(user, 'and before CMD').toBeLessThan(stage.findIndex((l) => l.startsWith('CMD ')));
   });
 
-  it('serves the web app from the unprivileged nginx image, which never switches back to root', () => {
+  it('serves the web app from the unprivileged nginx image, and is root for one step only, the upgrade of the system packages (IN-75)', () => {
     const stage = finalStage(webDockerfile);
     expect(stage[0]).toMatch(/^FROM nginxinc\/nginx-unprivileged:/);
-    expect(stage.filter((l) => l.startsWith('USER '))).toEqual([]);
+    // The base image's own user is uid 101; it is given back at once, before anything of ours is copied in.
+    expect(stage.filter((l) => l.startsWith('USER '))).toEqual(['USER root', 'USER 101']);
+    const root = stage.indexOf('USER root');
+    const back = stage.indexOf('USER 101');
+    expect(root).toBeLessThan(back);
+    expect(stage.slice(root + 1, back).filter((l) => /^(RUN|COPY|ADD) /.test(l))).toEqual(['RUN apk upgrade --no-cache']);
+    expect(stage.slice(back + 1).some((l) => /^USER /.test(l))).toBe(false);
+    const lastStep = stage.reduce((at, l, i) => (/^(RUN|COPY|ADD) /.test(l) ? i : at), -1);
+    expect(back, 'the user is back before the first COPY of the app').toBeLessThan(stage.findIndex((l) => l.startsWith('COPY ')));
+    expect(lastStep).toBeGreaterThan(back);
+  });
+
+  it('runs the upgrade of the system packages again each month: an ARG before it, which the compose file feeds (IN-75)', () => {
+    // A layer is reused while its text and its parent are the same, and the base is pinned by digest: without a value that changes, `apk upgrade` would run once.
+    const stage = finalStage(webDockerfile);
+    const arg = stage.indexOf('ARG APK_ROUND');
+    const upgrade = stage.indexOf('RUN apk upgrade --no-cache');
+    expect(arg).toBeGreaterThan(-1);
+    expect(arg).toBeLessThan(upgrade);
+    expect(compose.join('\n')).toMatch(/portal-web:\n\s+build:\n\s+context: \.\/web\n\s+args:\n(?:\s+#.*\n)*\s+APK_ROUND: \$\{APK_ROUND:-\}/);
   });
 
   it('names an explicit minor version for every base image, never a major alone or a moving word', () => {

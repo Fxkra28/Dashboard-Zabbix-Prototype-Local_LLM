@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '../../api';
 import { useAsync } from '../../shared/hooks/useAsync';
 import type { Problem, ProblemExplanation, Sla, SlaExplanation, SliProfile } from '../../types';
@@ -30,7 +31,7 @@ function Drawer({
   children: ReactNode;
 }) {
   const titleId = useId();
-  const panel = useRef<HTMLElement>(null);
+  const panel = useRef<HTMLDivElement>(null);
 
   // Escape closes, matching how Zabbix's own overlays behave.
   useEffect(() => {
@@ -42,11 +43,13 @@ function Drawer({
   // Focus in on open, kept inside while open, back to the Explain button on close.
   useDialogFocus(panel);
 
-  return (
+  // Drawn on the page, not where it is called from: a wrapper with a transform would otherwise become its frame (UX-46).
+  return createPortal(
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- Esc and the close button do this from the keyboard
     <div className="drawer-overlay" onClick={onClose}>
+      {/* A div, not an aside: HTML lets an aside take no role of a dialog (UX-45). */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- only keeps the click from reaching the backdrop */}
-      <aside
+      <div
         ref={panel}
         className="drawer"
         role="dialog"
@@ -55,7 +58,7 @@ function Drawer({
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="drawer-head">
+        <header className="drawer-head" role="none">
           <div>
             <h2 id={titleId}>{title}</h2>
             {subtitle && <div className="drawer-sub">{subtitle}</div>}
@@ -71,14 +74,15 @@ function Drawer({
           {children}
         </div>
 
-        <footer className="drawer-foot">
+        <footer className="drawer-foot" role="none">
           Written by an AI model from the Zabbix data on this page. It rephrases, it
           doesn’t diagnose.
           Confirm before acting.
           <AiDataNotice kind="explain" />
         </footer>
-      </aside>
-    </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

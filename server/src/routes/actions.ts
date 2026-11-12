@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { zbxWrite } from '../clients/zabbix.js';
+import { ZabbixApiError, ZabbixTimeoutError, zbxWrite } from '../clients/zabbix.js';
 import { invalidate } from '../core/cache.js';
 import { config, writeBackEnabled } from '../core/config.js';
 import { notifyProblemsChanged } from '../services/stream.js';
@@ -119,6 +119,11 @@ export async function actionRoutes(app: FastifyInstance): Promise<void> {
       if (!told) throw err;
       // The error handler's own log line, which this answer skips: the address Zabbix was asked at is in it.
       req.log.error({ detail: (err as { detail?: string }).detail }, (err as Error).message);
+      // A write that may have gone through: the next read of the lists must be Zabbix's, as after one that did, since the message says to look again (BK-53).
+      if (err instanceof ZabbixTimeoutError || (err instanceof ZabbixApiError && err.maybeApplied)) {
+        for (const key of STALE_AFTER_WRITE) invalidate(key, { holdMs: WRITE_HOLD_MS });
+        void notifyProblemsChanged();
+      }
       return reply.code(told.status).send({ error: told.error, message: told.message });
     }
 

@@ -6,7 +6,7 @@
 
 ## What it is for
 
-GitHub holds the repository of the first copy, `hcml-portal`, runs its checks on every push and pull request, and proposes updates to its packages and images. Nothing is deployed from it: a change goes live only when someone runs the rebuild script on the machine. The second copy, `hcml-portal-ollama`, is not under git, so it has no remote and no CI. The workflow file is kept in both folders so that they stay identical, and the parity check is how that is verified.
+GitHub holds the repository of the first copy, `hcml-portal`, runs its checks on every push and pull request, and proposes updates to its packages and images. Nothing is deployed from it: a change goes live only when someone runs the rebuild script on the machine. The second copy, `hcml-portal-ollama`, has had a repository of its own, with a remote, since 11 November 2026, so the same workflow can run there; it has not run there either (IN-30). The workflow file is kept in both folders so that they stay identical, and the parity check is how that is verified.
 
 ## What runs
 
@@ -40,7 +40,7 @@ The checkers, each a step with a name that says what it guarantees:
 
 ## The secret scan
 
-gitleaks scans the commits of the push or the pull request, not the whole history. So a leak already in history does not fail every run: the token in the first commit has to be revoked where it was issued, and history cannot be unpublished. The file `.gitleaks.toml` at the root keeps the default rules and sets aside two made-up test values, a throwaway TLS key for the pinned-TLS tests and a sample login token for the log test, each by its own text. A different key or token in the same file, or any secret anywhere else, is still found. It posts no comments and uploads no findings, because on a public repository either would repeat what it found. A manual run has no commit range, so it skips this job. A repository owned by an organisation needs a licence secret for the scanner. A personal one does not.
+gitleaks scans the commits of the push or the pull request, not the whole history. So a leak already in history does not fail every run: the token in the first commit has to be revoked where it was issued, and history cannot be unpublished. The file `.gitleaks.toml` at the root keeps the default rules and sets aside three made-up test values, a throwaway TLS key for the pinned-TLS tests, a sample login token for the log test and a sample password for the password test, each by its own text. A different key or token in the same file, or any secret anywhere else, is still found. It posts no comments and uploads no findings, because on a public repository either would repeat what it found. A manual run has no commit range, so it skips this job. A repository owned by an organisation needs a licence secret for the scanner. A personal one does not.
 
 ## Dependabot
 

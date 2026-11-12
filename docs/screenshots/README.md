@@ -1,16 +1,17 @@
 # Screenshots
 
-The main pages of the portal, as images. They were taken on 11 November 2026 from a throwaway portal made from the live image of
-`hcml-portal`, which reads HCML's own Zabbix (the set of 20 October came from the restored copy of September). The throwaway had a
-made-up sign-in, no write token and no mail. The footer of the images says `Build bfa4d45-dirty, 11/11/2026, 12.29.05 WIB`: the build that
-went live that day, made from the working tree on top of commit `bfa4d45`. The set of 20 October is replaced: it showed the look before
-26 October (soft depth, the white logo) and none of what came after. The Dashboard's Internet traffic view has no image here: see "Adding or
+The main pages of the portal, as images. Six were taken on 11 November 2026 and the four Dashboard images on 12 November, each from a
+throwaway portal made from the live image of `hcml-portal`, which reads HCML's own Zabbix (the set of 20 October came from the restored
+copy of September). The throwaway had a made-up sign-in, no write token and no mail. The footer of the six says
+`Build bfa4d45-dirty, 11/11/2026, 12.29.05 WIB` and the footer of the Dashboard images says `Build bd09bd1-dirty, 12/11/2026, 10.41.28 WIB`:
+the builds that went live on those two days, each made from a working tree on top of the commit it names. The set of 20 October is
+replaced: it showed the look before 26 October (soft depth, the white logo) and none of what came after. The Dashboard's Internet traffic view has no image here: see "Adding or
 replacing one". Each is one screen, 1440 px wide, in the light theme unless it says otherwise.
 
 ## What is real and what is replaced
 
-The portal shows names from HCML's own network, and this repository is public. So every host name,
-address and interface description is replaced on the page before the picture is taken, and the capture
+The portal shows names from HCML's own network, and this repository is public. So every host name, address,
+interface description, link title and web check name is replaced on the page before the picture is taken, and the capture
 stops, writing nothing, if a real one is still there.
 
 | Replaced | By |
@@ -18,11 +19,12 @@ stops, writing nothing, if a real one is still there.
 | Host names | the site number at the start is kept, then a kind and a number: `1.4 SW-04`, `INET : JAKARTA WAN-114` |
 | IP addresses | an address in 198.18.0.0/15, a range reserved for testing, so it cannot be a real one |
 | Interface descriptions, link and tunnel names, the values of free-text problem tags | `link-` and three digits |
+| Names of web monitoring scenarios, and the trigger line `Web <name> Down` however the name is written in it | `web-check-` and three digits |
 
-Not replaced, because the pages need them or this repository already says them: counts, severities, times,
-site names, host group names, interface names such as `Gi1/0/8`, template names such as `Cisco IOS by SNMP`,
-the names of the web monitoring scenarios, and the text of triggers that name no host. The figures are real, so the
-images show the size and shape of the estate, though not what its devices are called.
+Not replaced, because the pages need them or this repository already says them: counts (the totals of hosts, items and
+problems are real), severities, times, site names, host group names (one of them is a vendor's name), interface names such
+as `Gi1/0/8`, template names such as `Cisco IOS by SNMP`, and the text of triggers that name no host. The figures are real, so the
+images show the size and shape of the estate, though not what its devices or its web checks are called.
 
 The data is HCML's own, read when the pictures were taken, so a device shows whether it answers ping and the lists of
 busiest hosts hold values. Acknowledge is off, because the portal that was shot had no write token.

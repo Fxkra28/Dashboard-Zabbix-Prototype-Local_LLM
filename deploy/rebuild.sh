@@ -9,7 +9,9 @@
 #   --allow-dirty  build although server/, web/ or docker-compose.yml differ from the commit; the
 #                  build is then labelled <commit>-dirty and is not tagged
 #   --mark-good    build nothing: keep the images that run now as last-good, the build to go back to if a
-#                  later run fails. Run it once the check that needs a sign-in has passed.
+#                  later run fails. The image is the one each container runs (its id), not whatever :latest names; with no
+#                  container, :latest, which is what `docker compose up` would start.
+#                  Run it once the check that needs a sign-in has passed.
 #
 # It refuses to run from a tree whose server/, web/ (their tests apart, which no image holds) or
 # docker-compose.yml differ from HEAD: the build is named by the commit, and a name that lies is worse
@@ -72,18 +74,30 @@ if [ "$(project_of "$ROOT")" = hcml-portal ] && [ -f "$PARENT/hcml-portal-ollama
 fi
 
 # The images that run now become the ones a later failed run points back to. Not part of a build: it asks for no git.
+# The image is the one the container runs, by its id: :latest can have moved on since, after a build by hand or a rollback tag moved without `up`.
 if [ "$MARK" -eq 1 ]; then
+  MARKED=0
   for C in "${COPIES[@]}"; do
     P=$(project_of "$C")
     for IMG in "$P-portal-bff" "$P-portal-web"; do
-      if docker image inspect "$IMG:latest" >/dev/null 2>&1; then
+      if ID=$(docker inspect -f '{{.Image}}' "$IMG-1" 2>/dev/null) && [ -n "$ID" ]; then
+        run docker tag "$ID" "$IMG:last-good"
+        MARKED=$((MARKED + 1))
+      elif docker image inspect "$IMG:latest" >/dev/null 2>&1; then
+        # Nothing runs (after `docker compose down`, say), so no running image can be named: :latest is what `docker compose up` would start.
+        say "no container $IMG-1: marking the image :latest, which is what \`docker compose up\` would start"
         run docker tag "$IMG:latest" "$IMG:last-good"
+        MARKED=$((MARKED + 1))
       else
         say "no $IMG:latest to mark"
       fi
     done
   done
   say ""
+  if [ "$MARKED" -eq 0 ]; then
+    say "Nothing was marked: there is no container of the portals and no image of them here."
+    exit 1
+  fi
   if [ "$DRY" -eq 1 ]; then say "Dry run: nothing was changed."; else say "Marked. A later run that fails points back to these."; fi
   exit 0
 fi
@@ -101,13 +115,15 @@ if git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
     LABEL="$SHA-dirty"
   fi
 else
-  # The local-model copy has no git: there is no commit to name the build, and nothing to compare the tree with.
+  # A folder with no git has no commit to name the build and nothing to compare the tree with.
   HAVE_GIT=0
   SHA=unknown
   LABEL=unknown
   say "$ROOT is not a git checkout, so this build is labelled \"unknown\" and no live tag is made."
 fi
 TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+# The month: the web image takes the operating system's fixes again when it changes (IN-75).
+ROUND=$(date -u +%Y-%m)
 
 say "Build $LABEL, $TIME, for: $(for c in "${COPIES[@]}"; do basename "$c"; done | tr '\n' ' ')"
 if [ "$DRY" -eq 1 ]; then say "Dry run: nothing is changed."; fi
@@ -178,11 +194,21 @@ free_tag() {
 }
 
 KEPT=()
+# The copies that came up and passed their checks in this run, so that the help can say which copy runs which build.
+BUILT=()
 # Where to go back to. last-good is the build someone marked good with --mark-good; the rollback tags hold the images this run
 # replaced, under the names free_tag gave them; if the run before this one failed, they hold its failed build.
-rollback_help() {
-  local t img good=()
+rollback_help() { # the project that failed
+  local t img good=() p
   say ""
+  # A failure of the second copy leaves the first one on the new build: going back with it would undo a copy that is fine.
+  for p in ${BUILT[@]+"${BUILT[@]}"}; do
+    say "$p already runs the new build and passed its checks. Leave it as it is unless you mean to go back with it."
+  done
+  if [ "${#BUILT[@]}" -gt 0 ] && [ -n "${1:-}" ]; then
+    say "$1 is the one that failed: a build that did not finish leaves its old containers running, and one that finished may run unhealthy."
+    say ""
+  fi
   if [ "${#KEPT[@]}" -eq 0 ]; then
     say "No image was tagged for a rollback: none existed before this run."
     return
@@ -242,10 +268,10 @@ for C in "${COPIES[@]}"; do
       say "no $IMG:latest yet, so nothing is kept for a rollback"
     fi
   done
-  if ! run env BUILD_COMMIT="$LABEL" BUILD_TIME="$TIME" docker compose --project-directory "$C" up -d --build; then
+  if ! run env BUILD_COMMIT="$LABEL" BUILD_TIME="$TIME" APK_ROUND="$ROUND" docker compose --project-directory "$C" up -d --build; then
     say ""
     say "docker compose could not bring $P up."
-    rollback_help
+    rollback_help "$P"
     exit 1
   fi
   if [ "$DRY" -eq 1 ]; then continue; fi
@@ -260,7 +286,7 @@ for C in "${COPIES[@]}"; do
       say "  FAIL  $P-portal-web-1 publishes no port 8080, so it is not running: its checks cannot be made"
       say ""
       say "Something above failed."
-      rollback_help
+      rollback_help "$P"
       exit 1
       ;;
   esac
@@ -284,15 +310,16 @@ for C in "${COPIES[@]}"; do
   if [ "$FAILED" -ne 0 ] && [ "$C" != "${COPIES[${#COPIES[@]} - 1]}" ]; then
     say ""
     say "Something above failed. $(basename "${COPIES[${#COPIES[@]} - 1]}") was not rebuilt, so one portal still runs the build it had."
-    rollback_help
+    rollback_help "$P"
     exit 1
   fi
+  if [ "$FAILED" -eq 0 ]; then BUILT+=("$P"); fi
 done
 
 if [ "$FAILED" -ne 0 ]; then
   say ""
   say "Something above failed."
-  rollback_help
+  rollback_help "$P"
   exit 1
 fi
 

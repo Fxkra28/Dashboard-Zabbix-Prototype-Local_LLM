@@ -564,8 +564,8 @@ Tests: `compress.test.ts`.
 
 `server/src/http/errors.ts`. Maps every failure to one reply shape: `{ error, message }`, plus `requestId`.
 
-<!-- gen:snippet server/src/http/errors.ts#registerErrorHandler sha=8b7b7f2402eb -->
-`server/src/http/errors.ts:35-120`
+<!-- gen:snippet server/src/http/errors.ts#registerErrorHandler sha=906ca6eaf33e -->
+`server/src/http/errors.ts:35-124`
 
 ```ts
 export function registerErrorHandler(app: FastifyInstance): void {
@@ -611,13 +611,17 @@ export function registerErrorHandler(app: FastifyInstance): void {
     }
 
     if (err instanceof MailDisabledError) {
-      req.log.warn('a report email was asked for, but email is not set up');
+      req.log.warn('email, or its saved list, was asked for, but it is off on this portal');
       return reply.code(503).send({ error: 'mail_disabled', message: err.message });
     }
     if (err instanceof MailError) {
       // `detail` is what the mail server said: the log gets it, the response never does.
       req.log.error({ detail: err.detail, kind: err.kind }, 'the mail server did not take the report');
       return reply.code(502).send({ error: 'mail_error', message: err.message });
+    }
+    if (err instanceof EmptyReportError) {
+      req.log.warn('a report email was asked for, but the report had no device in it');
+      return reply.code(502).send({ error: 'empty_report', message: err.message });
     }
     if (err instanceof ScheduleUnavailableError) {
       return reply.code(503).send({ error: 'schedule_unavailable', message: err.message });
@@ -660,7 +664,7 @@ export function registerErrorHandler(app: FastifyInstance): void {
 1. A `BadRequestError`, or a body or query a schema refused, is a 400 `bad_request` with its own message.
 2. The four Zabbix errors are 503 or 502 with a fixed sentence for the person at the screen, "The data source is not answering. Tell an administrator and quote reference ...", and the details, the method and the setting to check and Zabbix's own words, go to the log. A rejected token and a Zabbix that does not answer in time are 503, because both mean the data source is not usable right now and not that the portal is at fault; every other failure of the call, a refused connection included, is 502 `zabbix_error`.
 3. The AI errors come next: not switched on, 503; busy, 503 with `Retry-After`, because a local model answering someone else is expected under load; and a failure upstream, 502. Their details also go to the log and never to the browser.
-4. Email follows the same rule. Email not set up is 503 `mail_disabled`, and a refusal by the mail server is 502 `mail_error` with one fixed sentence for its kind (login, connection, time, TLS, recipients, message, other). What the server said goes to the log, with the login name and the password taken out. The monthly schedule adds two: 503 `schedule_unavailable` where it cannot run on this portal (the message says what to change), and 500 `state_error` when the portal could not save its small state file, with a fixed sentence and the system's own code in the log only.
+4. Email follows the same rule. Email not set up is 503 `mail_disabled`, a month in which neither method finds a device is 502 `empty_report` with a sentence that says where to look (BK-51), and a refusal by the mail server is 502 `mail_error` with one fixed sentence for its kind (login, connection, time, TLS, recipients, message, other). What the server said goes to the log, with the login name and the password taken out. The monthly schedule adds two: 503 `schedule_unavailable` where it cannot run on this portal (the message says what to change), and 500 `state_error` when the portal could not save its small state file, with a fixed sentence and the system's own code in the log only.
 5. Anything else with a 4xx status, such as malformed JSON, a wrong content type or a body too large, is passed on with its message. Anything else is a bug: it is logged in full, and the browser gets "The portal hit an unexpected error. Tell an administrator and quote reference ..." and never the internal wording.
 6. An unknown route is a 404 that names the method and path, without the query string.
 

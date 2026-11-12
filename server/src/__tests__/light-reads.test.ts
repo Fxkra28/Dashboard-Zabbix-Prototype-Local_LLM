@@ -195,6 +195,8 @@ describe('the warm-up after a start', () => {
     ]);
     expect(order).toEqual(['first', 'last']);
     expect(log.warn).toHaveBeenCalledWith(expect.objectContaining({ view: 'broken', reason: 'Zabbix did not respond' }), expect.any(String));
+    // BK-49: the line ends its sentence.
+    expect(log.warn.mock.calls[0]![1]).toBe('warm-up: could not read it; its first visit will be slow');
     expect(log.info).toHaveBeenLastCalledWith(expect.objectContaining({ ms: expect.any(Number) }), 'warm-up: done');
   });
 

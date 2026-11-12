@@ -76,3 +76,15 @@
     margin: 0;
   }
 }
+
+/* Forced colours drop shadows, and the edge of these surfaces is a shadow: each gets a line in the system text colour. */
+@media (forced-colors: active) {
+  .panel,
+  .kpi,
+  .meter,
+  .modal,
+  .drawer,
+  .login-card {
+    border: 1px solid CanvasText;
+  }
+}

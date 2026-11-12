@@ -63,7 +63,7 @@ A page on another site must not be able to make a signed-in browser acknowledge 
 
 ## With sign-in off
 
-`AUTH_ENABLED=false` is for development only. Every caller is an admin, the host check answers only a `Host` that names this machine so that a rebinding page cannot reach the server, and acknowledge and close are refused unless `ALLOW_WRITE_WITHOUT_AUTH=true` is also set. Report email and the monthly schedule are refused unless `ALLOW_EMAIL_WITHOUT_AUTH=true` is set (SC-43), since every caller would be an administrator and could send the report to any address. Leave both unset.
+`AUTH_ENABLED=false` is for development only. Every caller is an admin, the host check answers only a `Host` that names this machine so that a rebinding page cannot reach the server, and acknowledge and close are refused unless `ALLOW_WRITE_WITHOUT_AUTH=true` is also set. Report email, the monthly schedule and the saved list of recipients are refused unless `ALLOW_EMAIL_WITHOUT_AUTH=true` is set (SC-43, SC-49), since every caller would be an administrator and could send the report to any address. Leave both unset.
 
 ## Settings
 
@@ -77,7 +77,7 @@ A page on another site must not be able to make a signed-in browser acknowledge 
 | `SESSION_HOURS` | 12 | How long a session lasts, from 2 to 24 |
 | `SESSION_EPOCH` | 1 | A label inside every token. Changing it ends every session |
 | `ALLOW_WRITE_WITHOUT_AUTH` | unset | The development opt-in for the write |
-| `ALLOW_EMAIL_WITHOUT_AUTH` | unset | The development opt-in for report email and the monthly schedule |
+| `ALLOW_EMAIL_WITHOUT_AUTH` | unset | The development opt-in for report email, the monthly schedule and the saved list of recipients |
 
 ## How it fails
 

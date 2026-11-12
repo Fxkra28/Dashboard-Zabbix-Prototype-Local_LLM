@@ -22,6 +22,18 @@ export class ScheduleUnavailableError extends Error {
   readonly code = 'schedule_unavailable';
 }
 
+export const EMPTY_REPORT_WORDS =
+  'Zabbix returned no device for that month, so the report would have been empty and was not sent. ' +
+  'Check that the portal reads the right Zabbix, that its token can read hosts and triggers, and that the SLA triggers still have their names.';
+
+/** A report with no device in either profile: mailing it would send an empty page as a success. Mapped to 502 `empty_report` in errors.ts. */
+export class EmptyReportError extends Error {
+  readonly code = 'empty_report';
+  constructor(message: string = EMPTY_REPORT_WORDS) {
+    super(message);
+  }
+}
+
 /** The largest id Zabbix stores, an unsigned 64-bit number. */
 const MAX_ZABBIX_ID = 18_446_744_073_709_551_615n;
 

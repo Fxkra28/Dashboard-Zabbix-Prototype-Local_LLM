@@ -93,3 +93,23 @@ describe('the unit is chosen after the rounding (FR-36)', () => {
   });
 });
 
+
+describe('formatValue for a unixtime item outside the dates a clock can show (FR-39)', () => {
+  it.each([
+    [8640000000001, '8,640,000,000,001'],
+    // The largest 64-bit counter, as a number: the digits it can keep are fewer than it has.
+    [Number('18446744073709551615'), '18,446,744,073,709,552,000'],
+  ])('prints %s as the number instead of failing', (value, text) => {
+    expect(formatValue(value, 'unixtime')).toBe(text);
+  });
+
+  it('still prints a date up to the last moment a clock can show, and a usual one', () => {
+    expect(formatValue(8640000000000, 'unixtime')).toMatch(/275760/);
+    expect(formatValue(4294967295, 'unixtime')).toMatch(/2106/);
+    expect(formatValue(1790000000, 'unixtime')).toMatch(/2026/);
+  });
+
+  it('keeps the dash for zero, a negative number and what is not a number', () => {
+    for (const v of [0, -5, null, undefined, Number.NaN, Number.POSITIVE_INFINITY]) expect(formatValue(v, 'unixtime')).toBe('—');
+  });
+});

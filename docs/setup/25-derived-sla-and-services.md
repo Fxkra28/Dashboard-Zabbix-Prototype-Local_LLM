@@ -56,9 +56,10 @@ all legs are down. Web scenarios on the *Web Monitoring* host are measured from 
 `SLO_TARGET` is a percentage from 0 to 100 and `SLI_MIN_COVERAGE` a number from 0 to 1. A value outside its range, or one that is not a number, stops the server at
 start with a line that names the range (BK-48), where it used to run, or to fall back to the standard value without a word.
 
-One limit is known and not removed (BK-46, third point). In Zabbix a maintenance window on a parent host group also covers its nested groups. The portal reads the hosts of a
-window's groups with `hostgroup.get` and `selectHosts`, which returns direct members only, so a window on a parent group would leave out the hosts of its sub-groups. HCML's
-groups are flat and no such window exists, and it was not run against a Zabbix that has one.
+A maintenance window on a parent host group also covers its nested groups, as in Zabbix (BK-46, third point). `hostgroup.get` with `selectHosts` returns direct members only, so after it
+the portal asks once more for the groups whose name starts with a window's group name and a slash, and adds their hosts to the window. The name is matched in full and by case, since
+Zabbix's own search ignores case. The second call is made only when a window names a group. It was tested against a stand-in that answers as Zabbix documents, and not against a Zabbix that has
+such a group: HCML's groups are flat and no such window exists.
 
 ## Hours declared not measured
 
@@ -108,4 +109,4 @@ ids, so they are read in memory and nothing from them is stored.
 | `GET /api/reports/availability?basis=availability` | the availability report, now on this engine (default); `basis=all-problems` keeps the original any-problem report, no longer truncated | 2 min |
 
 A closed month of the strict method costs about 20 Zabbix calls and 0.6 s cold; the report method
-about 6 calls and 0.2 s.
+about 6 calls and 0.2 s. Months that are not cached are read two at a time (`SLI_AT_ONCE`, BK-50): a caller who asks for every month of both methods at once starts two reads, and the others wait their turn, so one low-privilege token cannot hold every cold month of both methods in memory at once. A cached month does not wait, and two requests for one month still share one read.

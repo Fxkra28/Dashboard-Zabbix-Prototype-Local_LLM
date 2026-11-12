@@ -69,8 +69,8 @@ The settings are the `MAIL_` variables in the root `.env`; [section 18 of the se
 | 2 | The addresses typed are checked by one set of rules | `server/src/core/recipients.ts` |
 | 3 | The route checks the body, the settings, the month, the formats, the style and the recipients, and a month that ended less than ten minutes ago is refused, as the monthly send waits for it too, then the allowance of five sends an hour for each person | `server/src/routes/sliMail.ts`, `server/src/security/mailLimit.ts` |
 | 4 | The mail login is tried first, so a wrong password fails in a second | `server/src/services/sliMail.ts` |
-| 5 | The two reports are read, each file is built by the function the download uses, and the message is written from the first-page figures of the same document | `server/src/services/sliMail.ts`, `server/src/services/sliExport.ts` |
-| 6 | `nodemailer` sends one message with all the files over TLS or STARTTLS, and a failure becomes one fixed sentence for its kind | `server/src/clients/mail.ts` |
+| 5 | The two reports are read, each file is built by the function the download uses, and the message is written from the first-page figures of the same document; a month in which neither method finds a device is not sent (502 `empty_report`, BK-51) | `server/src/services/sliMail.ts`, `server/src/services/sliExport.ts` |
+| 6 | `nodemailer` sends one message with all the files over TLS or STARTTLS, so every address is in its To line and each person sees the other addresses (SC-50), and a failure becomes one fixed sentence for its kind | `server/src/clients/mail.ts` |
 | 7 | One log line says who sent which report to how many people and which domains, and a short record of the send is kept | `server/src/security/audit.ts`, `server/src/services/mailState.ts` |
 
 `nodemailer` is the library added for email, and it has none of its own to bring. The PDF, Excel and CSV writers need no library.

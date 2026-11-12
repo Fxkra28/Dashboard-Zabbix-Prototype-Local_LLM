@@ -1,9 +1,10 @@
 import { createMailer, MailDisabledError } from '../clients/mail.js';
 import { mailNow } from '../core/config.js';
+import { EmptyReportError } from '../core/validate.js';
 import { buildSlaReportDoc } from '../export/slaReport.js';
 import { DEFAULT_STYLE, type Format, type ReportStyle } from '../core/reportChoices.js';
 import type { ReportDoc } from '../export/types.js';
-import { getMonthlySli } from './sli.js';
+import { forgetMonthlySli, getMonthlySli } from './sli.js';
 import { FORMATS, fileFor, fileNameFor } from './sliExport.js';
 
 /**
@@ -64,6 +65,12 @@ export async function emailReport(input: EmailRequest): Promise<EmailedReport> {
   await mailer.verify();
 
   const [strict, hcml] = await Promise.all([getMonthlySli(month, 'availability'), getMonthlySli(month, 'hcml-report')]);
+  // Mailing a report with no device in either profile would send an empty page as a success (BK-51). It is not kept either: a closed
+  // month is cached for a day, and every retry of the week would be answered with the empty report after the cause was put right.
+  if (strict.overall.hosts === 0 && hcml.overall.hosts === 0) {
+    forgetMonthlySli(month);
+    throw new EmptyReportError();
+  }
   const now = input.now ?? new Date();
   const files = formats.map((format) => ({ format, fileName: fileNameFor(month, format), body: fileFor(format, strict, hcml, now, style) }));
   const doc = buildSlaReportDoc(strict, hcml, now, style);

@@ -1,10 +1,10 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { MailDisabledError, MailError } from '../clients/mail.js';
-import { config, emailRefusal, mailNow } from '../core/config.js';
+import { config, emailRefusal, mailNow, signInRefusal } from '../core/config.js';
 import { MAX_RECIPIENTS } from '../core/mailConfig.js';
 import { checkRecipients, domainsOf } from '../core/recipients.js';
 import { emailReportBody, recipientsBody } from '../core/schemas.js';
-import { BadRequestError } from '../core/validate.js';
+import { BadRequestError, EmptyReportError } from '../core/validate.js';
 import { actor, auditEmail } from '../security/audit.js';
 import { tooManySends } from '../security/mailLimit.js';
 import { addSend, clearRecipients, ListInUseError, saveRecipients, savedRecipients } from '../services/mailState.js';
@@ -43,7 +43,7 @@ export async function sliMailRoutes(app: FastifyInstance): Promise<void> {
 
   // Administrators only (auth.ts). Replaces the portal's own list, with the checks every list has.
   app.put('/api/sli/recipients', { schema: { body: recipientsBody } }, async (req) => {
-    if (emailRefusal()) throw new MailDisabledError(emailRefusal());
+    if (signInRefusal()) throw new MailDisabledError(signInRefusal());
     const body = req.body as Record<string, unknown>;
     if (Object.keys(body).some((key) => key !== 'recipients')) throw new BadRequestError('Only recipients is accepted.');
     const list = checkRecipients(body.recipients, { allowedDomains: config.mail.allowedDomains, min: 1 });
@@ -54,7 +54,7 @@ export async function sliMailRoutes(app: FastifyInstance): Promise<void> {
 
   // Administrators only (auth.ts). Empties the portal's own list; the one MAIL_TO started with applies again.
   app.delete('/api/sli/recipients', async (req, reply) => {
-    if (emailRefusal()) throw new MailDisabledError(emailRefusal());
+    if (signInRefusal()) throw new MailDisabledError(signInRefusal());
     // With the schedule on and nobody else to fall back on, the next monthly send would have no one to go to.
     let removed: number;
     try {
@@ -105,7 +105,7 @@ export async function sliMailRoutes(app: FastifyInstance): Promise<void> {
     try {
       sent = await emailReport({ month, formats, to, style, sentBy: user });
     } catch (err) {
-      const reason = err instanceof MailError ? err.kind : 'error';
+      const reason = err instanceof MailError ? err.kind : err instanceof EmptyReportError ? 'empty' : 'error';
       auditEmail(req, { ...base, bytes: 0, recipients: 0, refused: 0, outcome: 'failed', reason });
       await note(req, { ...record, outcome: 'failed', recipients: 0, refused: 0, bytes: 0, reason });
       throw err;

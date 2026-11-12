@@ -136,7 +136,8 @@ function pending(extra: Partial<Problem> = {}) {
   return { onClose, onDone, view, answer: (id = '1') => answer({ ok: true, eventids: [id], action: 6 }), fail: (e: Error | string) => fail(typeof e === 'string' ? new Error(e) : e) };
 }
 const confirmButton = () => screen.getByRole('button', { name: /Confirm|Sending/ });
-const overlay = (view: { container: HTMLElement }) => view.container.querySelector('.drawer-overlay') as HTMLElement;
+// The dialog is drawn on the page, outside the container the test renders into (UX-46).
+const overlay = () => document.querySelector('.drawer-overlay') as HTMLElement;
 
 describe('AckDialog closed before Zabbix answers (FR-24)', () => {
 
@@ -219,14 +220,14 @@ describe('AckDialog while a request is out (FR-33)', () => {
 describe('AckDialog and the backdrop (UX-08)', () => {
   it('closes on a click outside the dialog when nothing was typed', () => {
     const dialog = pending();
-    fireEvent.click(overlay(dialog.view));
+    fireEvent.click(overlay());
     expect(dialog.onClose).toHaveBeenCalledTimes(1);
   });
 
   it('keeps the dialog on a click outside it when a message was typed, so the words are not thrown away', async () => {
     const dialog = pending();
     await userEvent.type(screen.getByLabelText(/Message/), 'I am on it');
-    fireEvent.click(overlay(dialog.view));
+    fireEvent.click(overlay());
     expect(dialog.onClose).not.toHaveBeenCalled();
     expect(screen.getByLabelText(/Message/)).toHaveValue('I am on it');
   });
@@ -234,7 +235,7 @@ describe('AckDialog and the backdrop (UX-08)', () => {
   it('ignores a click outside it while sending', async () => {
     const dialog = pending();
     await userEvent.click(screen.getByRole('button', { name: 'Confirm' }));
-    fireEvent.click(overlay(dialog.view));
+    fireEvent.click(overlay());
     expect(dialog.onClose).not.toHaveBeenCalled();
   });
 
@@ -289,7 +290,7 @@ describe('AckDialog with nothing to send', () => {
   it('sends nothing when it is submitted with the keyboard in that state', async () => {
     pending();
     await userEvent.click(screen.getByRole('checkbox', { name: /Acknowledge/ }));
-    fireEvent.submit(screen.getByRole('dialog'));
+    fireEvent.submit(screen.getByRole('dialog').querySelector('form')!);
     expect(api.acknowledge).not.toHaveBeenCalled();
   });
 });

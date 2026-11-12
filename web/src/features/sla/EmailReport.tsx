@@ -3,7 +3,7 @@ import { api, HttpFailure } from '../../api';
 import { UnreadableAnswer } from '../../guards';
 import type { EmailInfo, EmailSent, ReportFileFormat } from '../../types';
 import { roleAllows, useAuth } from '../../shared/hooks/useAuth';
-import { domainsList, joinAddresses, splitAddresses, wordsList } from './addresses';
+import { domainsList, joinAddresses, SEE_EACH_OTHER, splitAddresses, wordsList } from './addresses';
 import FileChoices, { nounOf } from './FileChoices';
 import ReportDialog, { useReveal } from './ReportDialog';
 import ReportSchedule from './ReportSchedule';
@@ -60,7 +60,8 @@ function EmailDialog({
   month: string;
   info: EmailInfo;
   onClose: () => void;
-  onKept: () => void;
+  /** The saved list changed, or a send kept the list. A list is the one the portal answered with. */
+  onKept: (list?: string[]) => void;
   /** The send is still out and the person is leaving it: the page takes over from here. */
   onLeave: () => void;
   /** How the send ended, called once, whether or not the dialog is still there. */
@@ -132,7 +133,7 @@ function EmailDialog({
       : '';
   useReveal(statusBox, status);
   useReveal(errorBox, error);
-  const limit = [`Up to ${info.max} addresses, one on each line or separated by commas.`, info.allowedDomains.length > 0 ? `Only addresses at ${domainsList(info.allowedDomains)} are accepted.` : '']
+  const limit = [`Up to ${info.max} addresses, one on each line or separated by commas.`, info.allowedDomains.length > 0 ? `Only addresses at ${domainsList(info.allowedDomains)} are accepted.` : '', SEE_EACH_OTHER]
     .filter(Boolean)
     .join(' ');
 
@@ -199,7 +200,8 @@ function EmailDialog({
         onChanged={(list) => {
           // The box follows the saved list, unless the person has typed a list of their own.
           setTo((box) => (box === joinAddresses(info.recipients) ? joinAddresses(list) : box));
-          onKept();
+          // The page takes the answer at once and ignores a look that was asked before it, so the list in `info` is never an old one (FR-37).
+          onKept(list);
         }}
       />
       {!info.kept && <p className="muted">This portal has no data folder, so it forgets the list when it restarts.</p>}
@@ -249,11 +251,22 @@ export default function EmailReport({ month, disabled = false }: { month: string
       mounted.current = false;
     };
   }, []);
+  // Looks can overlap, and one that was asked before a later change or look reads an older list: only the last one asked is taken.
+  const latest = useRef(0);
   const refresh = () => {
+    const mine = ++latest.current;
     api
       .sliEmailInfo()
-      .then((i) => mounted.current && setInfo(i))
+      .then((i) => mounted.current && mine === latest.current && setInfo(i))
       .catch(() => undefined);
+  };
+  /** The list the portal answered a change with is the list from then on, even if the look at the portal that follows fails (FR-37). */
+  const kept = (list?: string[]) => {
+    if (list) {
+      latest.current++;
+      setInfo((i) => (i ? { ...i, recipients: list } : i));
+    }
+    refresh();
   };
 
   if (!admin || !info?.enabled) return null;
@@ -264,7 +277,7 @@ export default function EmailReport({ month, disabled = false }: { month: string
         <button type="button" className="btn ghost sm" disabled={disabled || sending} aria-haspopup="dialog" onClick={() => setOpen(true)}>
           Email report
         </button>
-        <ReportSchedule info={info} onSaved={refresh} />
+        <ReportSchedule info={info} onSaved={kept} />
       </div>
       {away && (
         <div className={`notice${away.outcome?.ok === false ? ' warn' : ''}`} role={away.outcome?.ok === false ? 'alert' : 'status'}>
@@ -281,7 +294,7 @@ export default function EmailReport({ month, disabled = false }: { month: string
           month={month}
           info={info}
           onClose={() => setOpen(false)}
-          onKept={refresh}
+          onKept={kept}
           onLeave={() => {
             setOpen(false);
             setAway({ month, outcome: null });

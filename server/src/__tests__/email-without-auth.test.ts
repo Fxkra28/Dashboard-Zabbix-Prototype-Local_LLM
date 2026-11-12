@@ -30,6 +30,7 @@ const { sliMailRoutes } = await import('../routes/sliMail.js');
 const { sliScheduleRoutes } = await import('../routes/sliSchedule.js');
 const { sendNotice, emailReport } = await import('../services/sliMail.js');
 const { MailDisabledError } = await import('../clients/mail.js');
+const { resolveMail } = await import('../core/mailConfig.js');
 const { createReportSchedule } = await import('../services/reportSchedule.js');
 const { portalState, usePortalState } = await import('../services/portalState.js');
 
@@ -102,6 +103,21 @@ describe('the schedule page with sign-in off (reviewer, 11 November)', () => {
     expect(res.json()).toMatchObject({ available: false, schedule: null, recipients: [], next: null, sends: [], allowedDomains: [] });
     expect(res.json().why).toMatch(WHY);
     expect(res.body).not.toMatch(/carla|boss|a1/);
+  });
+
+  it('shows none of it either when no mail settings exist, since a list kept earlier is not for whoever reaches the portal (SC-49)', async () => {
+    const configured = { ...config.mail };
+    Object.assign(config.mail, resolveMail({}));
+    try {
+      await keepPeople();
+      const res = await app.inject({ method: 'GET', url: '/api/sli/schedule' });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ available: false, schedule: null, recipients: [], next: null, sends: [], allowedDomains: [] });
+      expect(res.json().why).toMatch(WHY);
+      expect(res.body).not.toMatch(/carla|boss|a1/);
+    } finally {
+      Object.assign(config.mail, configured);
+    }
   });
 
   it('shows it all again with the opt-in', async () => {
@@ -193,5 +209,43 @@ describe('the monthly schedule with sign-in off', () => {
   it('is not turned away for want of sign-in once the opt-in is given', () => {
     config.auth.allowEmailWithoutAuth = true;
     expect(schedule().availability().why).not.toMatch(WHY);
+  });
+});
+
+describe('the saved list of recipients while sign-in is off (SC-49)', () => {
+  const put = () => app.inject({ method: 'PUT', url: '/api/sli/recipients', payload: { recipients: ['planted@example.org'] } });
+  const del = () => app.inject({ method: 'DELETE', url: '/api/sli/recipients' });
+  const mailSetUp = { ...config.mail };
+
+  afterEach(() => Object.assign(config.mail, mailSetUp));
+
+  it.each([
+    ['mail is set up', true],
+    ['no mail setting is present', false],
+  ])('refuses to save a list, and keeps the state as it was, when %s', async (_why, enabled) => {
+    config.mail.enabled = enabled;
+    const res = await put();
+    expect(res.statusCode).toBe(503);
+    expect(res.json().message).toMatch(WHY);
+    expect(portalState().read().mail.recipients).toEqual([]);
+  });
+
+  it('refuses to delete the list, whether or not mail is set up', async () => {
+    await portalState().change((d) => {
+      d.mail.recipients = ['kept@example.org'];
+    });
+    config.mail.enabled = false;
+    const res = await del();
+    expect(res.statusCode).toBe(503);
+    expect(res.json().message).toMatch(WHY);
+    expect(portalState().read().mail.recipients).toEqual(['kept@example.org']);
+  });
+
+  it('saves a list once the opt-in says that is meant', async () => {
+    config.auth.allowEmailWithoutAuth = true;
+    config.mail.enabled = false;
+    const res = await put();
+    expect(res.statusCode).toBe(200);
+    expect(portalState().read().mail.recipients).toEqual(['planted@example.org']);
   });
 });

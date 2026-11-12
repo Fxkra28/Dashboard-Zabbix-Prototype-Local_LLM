@@ -139,6 +139,11 @@ describe('the dialog, before anything is sent', () => {
     expect(dialog).toHaveTextContent('Only addresses at example.org or hcml.co.id are accepted.');
   });
 
+  it('says that the report goes as one message, so that each person sees the other addresses (SC-50)', async () => {
+    const { dialog } = await open();
+    expect(dialog).toHaveTextContent('The report goes as one message, so each person can see the other addresses.');
+  });
+
   it('says nothing about domains when any will do', async () => {
     const { dialog } = await open();
     expect(dialog).not.toHaveTextContent(/Only addresses at/);
@@ -735,6 +740,164 @@ describe('the saved list view in the Email dialog (FR-31)', () => {
     expect(within(dialog).getAllByText(/Only addresses at example\.org are accepted\./).length).toBeGreaterThan(0);
     // The dialog says it once, above; the view does not say it again.
     expect(within(dialog).getAllByText(/forgets the list when it restarts/)).toHaveLength(1);
+  });
+});
+
+
+describe('the saved list follows the answer of each change at once (FR-37)', () => {
+  let save: MockInstance<typeof api.sliRecipientsSave>;
+  /** What the portal holds: every change writes it, and every look at it reads it. */
+  let server: string[];
+  const view = (dialog: HTMLElement) => within(dialog).getByRole('button', { name: /Saved list/ });
+  const removeOf = (dialog: HTMLElement, a: string) => within(dialog).queryByRole('button', { name: `Remove ${a} from the saved list` });
+  const box = (dialog: HTMLElement) => within(dialog).getByRole('textbox', { name: 'Send to' });
+
+  beforeEach(() => {
+    server = [...on.recipients];
+    save = vi.spyOn(api, 'sliRecipientsSave').mockImplementation(async (list) => {
+      server = [...list];
+      return { recipients: list, saved: list.length };
+    });
+    info.mockImplementation(async () => ({ ...on, recipients: [...server] }));
+  });
+
+  async function add(user: ReturnType<typeof userEvent.setup>, dialog: HTMLElement, address: string) {
+    const field = within(dialog).getByRole('textbox', { name: 'Add an address to the saved list' });
+    await waitFor(() => expect(field).toBeEnabled());
+    await user.type(field, address);
+    await user.click(within(dialog).getByRole('button', { name: 'Add' }));
+  }
+
+  it('shows the list the portal answered with, and works the next change out from it, when the look afterwards fails', async () => {
+    info.mockResolvedValueOnce(on).mockRejectedValue(new Error('down'));
+    const { user, dialog } = await open();
+    await user.click(view(dialog));
+    await user.click(removeOf(dialog, 'ana@example.org')!);
+    await waitFor(() => expect(info).toHaveBeenCalledTimes(2));
+    expect(removeOf(dialog, 'ana@example.org')).toBeNull();
+    expect(view(dialog)).toHaveTextContent('Saved list (1 person)');
+    await add(user, dialog, 'cici@example.org');
+    await waitFor(() => expect(save).toHaveBeenLastCalledWith(['budi@example.org', 'cici@example.org']));
+  });
+
+  it('works the next change out from the list the portal answered with, while the look afterwards is still out', async () => {
+    const slow = deferred<Info>();
+    info.mockResolvedValueOnce(on).mockReturnValueOnce(slow.promise);
+    const { user, dialog } = await open();
+    await user.click(view(dialog));
+    await user.click(removeOf(dialog, 'ana@example.org')!);
+    await waitFor(() => expect(save).toHaveBeenCalledWith(['budi@example.org']));
+    await add(user, dialog, 'cici@example.org');
+    await waitFor(() => expect(save).toHaveBeenLastCalledWith(['budi@example.org', 'cici@example.org']));
+  });
+
+  it('is not turned back by a look that was asked before the last change and comes late', async () => {
+    const late = deferred<Info>();
+    info.mockResolvedValueOnce(on).mockReturnValueOnce(late.promise);
+    const { user, dialog } = await open();
+    await user.click(view(dialog));
+    await user.click(removeOf(dialog, 'ana@example.org')!);
+    await waitFor(() => expect(save).toHaveBeenCalledWith(['budi@example.org']));
+    await add(user, dialog, 'cici@example.org');
+    await waitFor(() => expect(info).toHaveBeenCalledTimes(3));
+    // The first look read the list as it was before either change.
+    await act(async () => late.resolve({ ...on }));
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await user.click(await button());
+    const again = await screen.findByRole('dialog', { name: 'Email the SLA report' });
+    expect(box(again)).toHaveValue('budi@example.org\ncici@example.org');
+  });
+
+  it('starts the next dialog from the last answer, whatever the look afterwards said', async () => {
+    info.mockResolvedValueOnce(on).mockRejectedValue(new Error('down'));
+    const { user, dialog } = await open();
+    await user.click(view(dialog));
+    await user.click(removeOf(dialog, 'ana@example.org')!);
+    await waitFor(() => expect(info).toHaveBeenCalledTimes(2));
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await user.click(await button());
+    const again = await screen.findByRole('dialog', { name: 'Email the SLA report' });
+    expect(box(again)).toHaveValue('budi@example.org');
+  });
+
+  it('shows the list that a send kept in the view under the box, as soon as the page has it', async () => {
+    info.mockResolvedValueOnce(on).mockResolvedValue({ ...on, recipients: ['citra@example.org'] });
+    email.mockResolvedValue(sentTo(1, 0, { remembered: true }));
+    const { user, dialog } = await open();
+    await user.clear(box(dialog));
+    await user.type(box(dialog), 'citra@example.org');
+    await user.click(within(dialog).getByRole('checkbox', { name: 'Remember this list for next time' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Send report' }));
+    await said(dialog, /The list is saved\./);
+    await waitFor(() => expect(view(dialog)).toHaveTextContent('Saved list (1 person)'));
+    await user.click(view(dialog));
+    expect(removeOf(dialog, 'citra@example.org')).not.toBeNull();
+    expect(removeOf(dialog, 'ana@example.org')).toBeNull();
+  });
+
+  it('changes the box that held the saved list by the answer of each change, not by the look afterwards', async () => {
+    info.mockResolvedValueOnce(on).mockRejectedValue(new Error('down'));
+    const { user, dialog } = await open();
+    await user.click(view(dialog));
+    await user.click(removeOf(dialog, 'ana@example.org')!);
+    await waitFor(() => expect(box(dialog)).toHaveValue('budi@example.org'));
+    await add(user, dialog, 'cici@example.org');
+    await waitFor(() => expect(box(dialog)).toHaveValue('budi@example.org\ncici@example.org'));
+  });
+});
+
+describe('what the Schedule dialog tells the page about the list (FR-37)', () => {
+  const schedule = {
+    available: true,
+    why: '',
+    timezone: 'Asia/Jakarta',
+    schedule: null,
+    recipients: ['ana@example.org', 'budi@example.org'],
+    next: null,
+    sends: [],
+    max: 10,
+    maxNotify: 3,
+    allowedDomains: [],
+  };
+  const emailBox = (d: HTMLElement) => within(d).getByRole('textbox', { name: 'Send to' });
+
+  beforeEach(() => {
+    vi.spyOn(api, 'sliSchedule').mockResolvedValue(schedule);
+  });
+
+  it('gives the page the list a change in its Saved list view answered with, though the look afterwards fails', async () => {
+    vi.spyOn(api, 'sliRecipientsSave').mockImplementation(async (list) => ({ recipients: list, saved: list.length }));
+    info.mockResolvedValueOnce(on).mockRejectedValue(new Error('down'));
+    const user = userEvent.setup();
+    render(<EmailReport month="2026-08" />);
+    await user.click(await screen.findByRole('button', { name: 'Schedule' }));
+    const sd = await screen.findByRole('dialog', { name: 'Send the SLA report every month' });
+    await user.click(await within(sd).findByRole('button', { name: /Saved list/ }));
+    await user.click(within(sd).getByRole('button', { name: 'Remove ana@example.org from the saved list' }));
+    await waitFor(() => expect(info).toHaveBeenCalledTimes(2));
+    await user.click(within(sd).getByRole('button', { name: 'Close' }));
+
+    await user.click(screen.getByRole('button', { name: 'Email report' }));
+    const again = await screen.findByRole('dialog', { name: 'Email the SLA report' });
+    expect(emailBox(again)).toHaveValue('budi@example.org');
+  });
+
+  it('gives the page the list the schedule was saved with, though the look afterwards fails', async () => {
+    vi.spyOn(api, 'sliScheduleSave').mockResolvedValue({ ...schedule, recipients: ['dewi@example.org'] });
+    info.mockResolvedValueOnce(on).mockRejectedValue(new Error('down'));
+    const user = userEvent.setup();
+    render(<EmailReport month="2026-08" />);
+    await user.click(await screen.findByRole('button', { name: 'Schedule' }));
+    const sd = await screen.findByRole('dialog', { name: 'Send the SLA report every month' });
+    await user.click(await within(sd).findByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sd).toHaveTextContent('Saved.'));
+    await user.click(within(sd).getByRole('button', { name: 'Close' }));
+
+    await user.click(screen.getByRole('button', { name: 'Email report' }));
+    const again = await screen.findByRole('dialog', { name: 'Email the SLA report' });
+    expect(emailBox(again)).toHaveValue('dewi@example.org');
   });
 });
 

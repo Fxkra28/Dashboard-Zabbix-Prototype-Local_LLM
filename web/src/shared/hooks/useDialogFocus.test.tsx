@@ -175,6 +175,20 @@ describe('useDialogFocus', () => {
     for (const handler of mine) expect(removed.mock.calls.some(([type, h]) => type === 'keydown' && h === handler)).toBe(true);
   });
 
+  it('keeps the page behind it from scrolling while it is open, and gives that back when it closes (UX-43)', () => {
+    open({ startAtFirst: true });
+    expect(document.documentElement.style.overflow).toBe('hidden');
+    fireEvent.click(screen.getByRole('button', { name: 'Last' }));
+    expect(document.documentElement.style.overflow).toBe('');
+  });
+
+  it('gives the scroll back when the page goes away with the dialog still open', () => {
+    open();
+    expect(document.documentElement.style.overflow).toBe('hidden');
+    cleanup();
+    expect(document.documentElement.style.overflow).toBe('');
+  });
+
   it('stops catching Tab once it has closed', () => {
     open({ startAtFirst: true });
     fireEvent.click(screen.getByRole('button', { name: 'Last' }));

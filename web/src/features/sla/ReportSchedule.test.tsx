@@ -210,6 +210,13 @@ describe('a schedule not set yet', () => {
     );
     expect(dialog).toHaveTextContent('The same list is the one the Email report button starts with.');
   });
+
+  it('says that the report goes as one message, so that each person sees the other addresses (SC-50)', async () => {
+    const { dialog } = await open(base());
+    expect(dialog).toHaveTextContent('The report goes as one message, so each person can see the other addresses.');
+    // Read with the box by a screen reader in forms mode, as in the Email dialog.
+    expect(within(dialog).getByRole('textbox', { name: 'Send to' })).toHaveAccessibleDescription(/can see the other addresses/);
+  });
 });
 
 describe('a schedule that is set', () => {
@@ -545,6 +552,10 @@ describe('sendLine, the words for one send', () => {
     expect(sendLine(record({ outcome: 'failed', attempts: 7, reason: 'login' }), tz)).toBe(`October 2026: not sent (the mail login was refused). The last try was ${when(at)} by the schedule.`);
   });
 
+  it('says that the report had no device in it, for a month whose report was empty (BK-51)', () => {
+    expect(sendLine(record({ outcome: 'failed', attempts: 3, reason: 'empty' }), tz)).toBe(`October 2026: not sent (the report had no device in it). The last try was ${when(at)} by the schedule.`);
+  });
+
   it('says a month was missed, with no time', () => {
     expect(sendLine(record({ outcome: 'missed', attempts: 0, reason: 'not running' }), tz)).toBe('October 2026: missed. The portal was not running in the week after it was due.');
   });
@@ -554,7 +565,7 @@ describe('sendLine, the words for one send', () => {
     expect(sendLine(record({ outcome: 'failed' }), tz)).toBe(`October 2026: not sent. The last try was ${when(at)} by the schedule.`);
   });
 
-  it.each(['login', 'connect', 'timeout', 'tls', 'recipients', 'rejected', 'other', 'zabbix', 'error'])('has words for the reason %s', (reason) => {
+  it.each(['login', 'connect', 'timeout', 'tls', 'recipients', 'rejected', 'other', 'zabbix', 'empty', 'error'])('has words for the reason %s', (reason) => {
     expect(sendLine(record({ outcome: 'failed', reason }), tz)).toMatch(/not sent \(/);
   });
 

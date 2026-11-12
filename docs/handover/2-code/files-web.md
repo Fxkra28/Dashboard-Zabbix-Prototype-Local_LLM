@@ -4,7 +4,7 @@
 |---|---|---|---|
 | Developers | about 30 min | [Server files, one card each](files-server.md) | [Tools files, one card each](files-tools.md) |
 
-Every code file of the web app, its stylesheet parts and its checks has one card on this page, 178 in all, grouped by folder and in alphabetical order. A card is the file in a few lines. The sentence under its heading says what the file is for and where the handbook walks through it, and a person wrote it. The block below that sentence is written by `npm run handover:build` from the code, so it cannot drift: the file's size, its exports with the first sentence of each comment, what it imports, who imports it, and which tests import it.
+Every code file of the web app, its stylesheet parts and its checks has one card on this page, 179 in all, grouped by folder and in alphabetical order. A card is the file in a few lines. The sentence under its heading says what the file is for and where the handbook walks through it, and a person wrote it. The block below that sentence is written by `npm run handover:build` from the code, so it cannot drift: the file's size, its exports with the first sentence of each comment, what it imports, who imports it, and which tests import it.
 
 Use the page when you know a file name and want to know what it is for and what would be hit if you changed it. The A to Z index of every name is [the symbols page](symbols.md). The same cards for the server and for the tools are [Server files](files-server.md) and [Tools files](files-tools.md).
 
@@ -145,7 +145,7 @@ Tests that import it: none
 Re-derives the contrast of every token pair and fails on an illegible one. Walked through in [Tests and checkers](tests-and-checkers.md), [Web app: the stylesheet](web-styles.md).
 
 <!-- gen:card web/scripts/tokens.check.mjs -->
-704 lines, 16 exports. Imported by 1 file.
+705 lines, 16 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -156,15 +156,15 @@ Re-derives the contrast of every token pair and fails on an illegible one. Walke
 | `parseTokens` | function | 89 | `function parseTokens(css)` | The custom properties declared in each token block, by the selector that opens it. |
 | `resolve` | function | 124 | `function resolve(name, theme, base)` | Follow `var(--x)` chains inside one theme, falling back to the light theme. |
 | `PAIRS` | constant | 140 | `const PAIRS` | Every pair the interface actually renders. |
-| `checkContrast` | function | 216 | `function checkContrast(blocks)` |  |
-| `checkRawColors` | function | 250 | `function checkRawColors(css)` | A raw colour anywhere but a token block. |
-| `scalesOf` | function | 280 | `function scalesOf(tokens)` | The scales in a token block: the values a raw number may take, by family. |
-| `checkRawSizes` | function | 319 | `function checkRawSizes(css, tokens)` | Values off their scale. |
-| `checkBreakpoints` | function | 364 | `function checkBreakpoints(css, tokens)` | A media query's width is a --bp-* token's: min-width at it, max-width 0.02 px under it. |
-| `checkStatusText` | function | 390 | `function checkStatusText(css)` |  |
-| `TSX_EXCEPTIONS` | constant | 405 | `const TSX_EXCEPTIONS` | Off-scale sizes in the TSX files that are known and accepted, by file under src/ and the declaration, with how many: `'features/x/X.tsx':... |
-| `scanTsx` | function | 418 | `function scanTsx(source, tokens)` | What a TSX file does that the tokens exist to prevent. |
-| `checkTsx` | function | 467 | `function checkTsx(source, file, tokens, exceptions = TSX_EXCEPTIONS)` | The problems in one TSX file, after the known exceptions are allowed for. |
+| `checkContrast` | function | 217 | `function checkContrast(blocks)` |  |
+| `checkRawColors` | function | 251 | `function checkRawColors(css)` | A raw colour anywhere but a token block. |
+| `scalesOf` | function | 281 | `function scalesOf(tokens)` | The scales in a token block: the values a raw number may take, by family. |
+| `checkRawSizes` | function | 320 | `function checkRawSizes(css, tokens)` | Values off their scale. |
+| `checkBreakpoints` | function | 365 | `function checkBreakpoints(css, tokens)` | A media query's width is a --bp-* token's: min-width at it, max-width 0.02 px under it. |
+| `checkStatusText` | function | 391 | `function checkStatusText(css)` |  |
+| `TSX_EXCEPTIONS` | constant | 406 | `const TSX_EXCEPTIONS` | Off-scale sizes in the TSX files that are known and accepted, by file under src/ and the declaration, with how many: `'features/x/X.tsx':... |
+| `scanTsx` | function | 419 | `function scanTsx(source, tokens)` | What a TSX file does that the tokens exist to prevent. |
+| `checkTsx` | function | 468 | `function checkTsx(source, file, tokens, exceptions = TSX_EXCEPTIONS)` | The problems in one TSX file, after the known exceptions are allowed for. |
 
 Imports: `web/scripts/tokens.export.mjs`
 
@@ -294,14 +294,14 @@ Tests that import it: none
 The calls behind Explain and the Assistant: two explanations, the streamed chat and its warm-up. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/api/assistant.ts -->
-96 lines, 4 exports. Imported by 1 file.
+99 lines, 4 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `ExplainSlaQuery` | type | 8 | `type ExplainSlaQuery = \| { slaid: string; serviceid?: string } \| { source: 'derived'; month?: string; profile?:...` |  |
 | `chatStream` | function | 19 | `async function chatStream(messages: ChatMessage[], on: { onContext?: (c: ChatContext) => void; onToken: (t: string)...` | The assistant. |
-| `chatWarm` | function | 76 | `async function chatWarm(): Promise<void>` | Ask the BFF to load the local model now, so the first question does not wait for it. |
-| `assistantApi` | constant | 80 | `const assistantApi` |  |
+| `chatWarm` | function | 79 | `async function chatWarm(): Promise<void>` | Ask the BFF to load the local model now, so the first question does not wait for it. |
+| `assistantApi` | constant | 83 | `const assistantApi` |  |
 
 Imports: `api/client.ts`, `api/session.ts`, `guards/index.ts`, `types/index.ts`
 
@@ -426,7 +426,7 @@ Imports: `api/assistant.ts`, `api/client.ts`, `api/dashboard.ts`, `api/graphs.ts
 
 Imported by: `features/assistant/Assistant.tsx`, `features/assistant/ExplainPanel.tsx`, `features/assistant/useAi.ts`, `features/assistant/useModel.ts`, `features/auth/Login.tsx`, `features/dashboard/Overview.tsx`, `features/dashboard/useHostsView.ts`, `features/graphs/HostDetail.tsx`, `features/graphs/ItemPicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/hosts/LatestData.tsx`, `features/meters/useMeters.ts`, and 23 more
 
-Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/aiLimitMessage.test.ts`, `__tests__/backForward.test.ts`, `__tests__/backForwardUser.test.ts`, `__tests__/chatStreamEnd.test.ts`, `__tests__/countPills.test.tsx`, `__tests__/guardedReads.test.tsx`, `__tests__/hostListFailure.test.tsx`, and 50 more
+Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/aiLimitMessage.test.ts`, `__tests__/backForward.test.ts`, `__tests__/backForwardUser.test.ts`, `__tests__/chatStreamEnd.test.ts`, `__tests__/chatStreamRefusal.test.ts`, `__tests__/countPills.test.tsx`, `__tests__/dialogOverlays.test.tsx`, and 52 more
 <!-- /gen -->
 
 ### `web/src/api/meters.ts`
@@ -618,21 +618,21 @@ Tests that import it: `__tests__/OperatorWording.test.tsx`, `features/assistant/
 The slide-over that explains one problem or one SLA figure in plain words. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/features/assistant/ExplainPanel.tsx -->
-254 lines, 3 exports. Imported by 3 files.
+258 lines, 3 exports. Imported by 3 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `ProblemExplainPanel` | component | 95 | `function ProblemExplainPanel({ problem, onClose, }: { problem: Problem; onClose: () => void; })` | Tags + notification wording for one problem. |
-| `DerivedSlaScope` | interface | 171 | `interface DerivedSlaScope` | One scope of the portal-derived monthly SLA (source=derived on the BFF). |
-| `SlaExplainPanel` | component | 183 | `function SlaExplainPanel(props: \| { sla: Pick<Sla, 'slaid' \| 'name'> & { slo: Sla['slo'] \| number }; serviceid?:...` |  |
+| `ProblemExplainPanel` | component | 99 | `function ProblemExplainPanel({ problem, onClose, }: { problem: Problem; onClose: () => void; })` | Tags + notification wording for one problem. |
+| `DerivedSlaScope` | interface | 175 | `interface DerivedSlaScope` | One scope of the portal-derived monthly SLA (source=derived on the BFF). |
+| `SlaExplainPanel` | component | 187 | `function SlaExplainPanel(props: \| { sla: Pick<Sla, 'slaid' \| 'name'> & { slo: Sla['slo'] \| number }; serviceid?:...` |  |
 
 Imports: `api/index.ts`, `features/assistant/AiDataNotice.tsx`, `features/assistant/ModelOfflineNotice.tsx`, `shared/components/NoData.tsx`, `shared/components/StatusBadge.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useDialogFocus.ts`, `shared/lib/severity.ts`, `types/index.ts`
 
-Packages: `react`
+Packages: `react`, `react-dom`
 
 Imported by: `features/problems/Problems.tsx`, `features/sla/Services.tsx`, `features/sla/Sla.tsx`
 
-Tests that import it: `features/assistant/aiNotice.test.tsx`, `features/assistant/modelNotice.test.tsx`
+Tests that import it: `__tests__/dialogOverlays.test.tsx`, `features/assistant/aiNotice.test.tsx`, `features/assistant/modelNotice.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/assistant/Markdown.tsx`
@@ -1042,13 +1042,13 @@ Tests that import it: none
 The chart: draws the series with ECharts, with its tooltip and the Show data table. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/graphs/TimeSeriesChart.tsx -->
-512 lines, 3 exports. Imported by 2 files.
+516 lines, 3 exports. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `seriesColors` | function | 64 | `function seriesColors(): string[]` | The four series colours, read out of the stylesheet rather than written here, because ECharts paints to a canvas and a canvas cannot resolve... |
 | `default` | component | 102 | `function TimeSeriesChart({ series, from, to, height = 320, dataOpen, onDataOpenChange, }: { series: GraphSeries[]...` | Line chart for 1 to 4 /api/graph series. |
-| `GraphView` | component | 443 | `function GraphView({ itemids, range, height, empty = 'No data in this range.', }: { itemids: string[]; range:...` | Fetch + stale note + chart for a set of items over a range. |
+| `GraphView` | component | 447 | `function GraphView({ itemids, range, height, empty = 'No data in this range.', }: { itemids: string[]; range:...` | Fetch + stale note + chart for a set of items over a range. |
 
 Imports: `api/index.ts`, `features/graphs/RangePicker.tsx`, `features/graphs/StaleNote.tsx`, `features/graphs/chartCsv.ts`, `features/graphs/chartTable.ts`, `features/graphs/unitScales.ts`, `features/graphs/useThemeChange.ts`, `shared/components/NoData.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useReportTimeZone.ts`, `shared/lib/csv.ts`, `shared/lib/severity.ts`, `shared/lib/time.ts`, `shared/lib/units.ts`, `theme.ts`, and 1 more
 
@@ -1056,7 +1056,7 @@ Packages: `echarts`, `echarts-for-react`, `react`
 
 Imported by: `features/graphs/HostDetail.tsx`, `features/network/Network.tsx`
 
-Tests that import it: `features/graphs/GraphView.test.tsx`, `features/graphs/TimeSeriesChart.test.tsx`, `features/graphs/TimeSeriesChartSeries.test.tsx`, `features/graphs/chartZone.test.tsx`, `features/graphs/graphZone.test.tsx`, `features/graphs/unitScales.test.tsx`, `features/graphs/useThemeChange.test.tsx`, `features/network/networkPorts.test.tsx`
+Tests that import it: `features/graphs/GraphView.test.tsx`, `features/graphs/TimeSeriesChart.test.tsx`, `features/graphs/TimeSeriesChartSeries.test.tsx`, `features/graphs/TimeSeriesChartTooltip.test.tsx`, `features/graphs/chartZone.test.tsx`, `features/graphs/graphZone.test.tsx`, `features/graphs/unitScales.test.tsx`, `features/graphs/useThemeChange.test.tsx`, and 1 more
 <!-- /gen -->
 
 ### `web/src/features/graphs/chartCsv.ts`
@@ -1452,19 +1452,19 @@ Tests that import it: `features/network/mapLabels.test.ts`
 The acknowledge and close dialog: the portal's only write. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/problems/AckDialog.tsx -->
-205 lines, 1 export. Imported by 1 file.
+210 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `default` | component | 27 | `function AckDialog({ problem, onClose, onDone, }: { problem: Problem; onClose: () => void; /** Called once Zabbix...` |  |
+| `default` | component | 28 | `function AckDialog({ problem, onClose, onDone, }: { problem: Problem; onClose: () => void; /** Called once Zabbix...` |  |
 
 Imports: `api/index.ts`, `shared/components/StatusBadge.tsx`, `shared/hooks/useDialogFocus.ts`, `shared/lib/freshness.ts`, `types/index.ts`
 
-Packages: `react`
+Packages: `react`, `react-dom`
 
 Imported by: `features/problems/Problems.tsx`
 
-Tests that import it: `features/problems/AckDialog.test.tsx`
+Tests that import it: `__tests__/dialogOverlays.test.tsx`, `features/problems/AckDialog.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/problems/AckPill.tsx`
@@ -1904,12 +1904,12 @@ Tests that import it: `__tests__/reportZoneUi.test.tsx`, `features/sla/ReportDow
 The Email report and Schedule buttons and the dialog for emailing a month's report by hand. It asks the server whether email is on and shows itself only to administrators. In the dialog the person ticks the files (PDF, Excel, a zip of CSV files), types the addresses and may keep the list for next time, and afterwards it says in words which files went to how many people, or why they did not. When a send or a schedule has kept a list it asks the server again, so the next dialog starts from that list.
 
 <!-- gen:card web/src/features/sla/EmailReport.tsx -->
-294 lines, 2 exports. Imported by 2 files.
+307 lines, 2 exports. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `LEAVE_AFTER_MS` | constant | 35 | `const LEAVE_AFTER_MS = 30_000` | A send that takes longer than this can be left: the page goes on waiting, and says where the result will be. |
-| `default` | component | 223 | `function EmailReport({ month, disabled = false }: { month: string; disabled?: boolean })` |  |
+| `default` | component | 225 | `function EmailReport({ month, disabled = false }: { month: string; disabled?: boolean })` |  |
 
 Imports: `api/index.ts`, `features/sla/FileChoices.tsx`, `features/sla/ReportDialog.tsx`, `features/sla/ReportDownload.tsx`, `features/sla/ReportSchedule.tsx`, `features/sla/SavedList.tsx`, `features/sla/addresses.ts`, `features/sla/reportStyle.ts`, `guards/index.ts`, `shared/hooks/useAuth.ts`, `types/index.ts`
 
@@ -1945,7 +1945,7 @@ Tests that import it: `features/sla/FileChoices.test.tsx`
 The frame the report dialogs share, in the shape of the Acknowledge dialog: a backdrop, a head, a body and a foot. Escape, the cross and the backdrop close it, unless work is under way; a press that begins inside and ends on the backdrop does not. It also holds `useReveal`, which brings a result into view when the foot stays put while the body scrolls.
 
 <!-- gen:card web/src/features/sla/ReportDialog.tsx -->
-90 lines, 3 exports. Imported by 3 files.
+87 lines, 3 exports. Imported by 3 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -1959,7 +1959,7 @@ Packages: `react`, `react-dom`
 
 Imported by: `features/sla/EmailReport.tsx`, `features/sla/ReportSchedule.tsx`, `features/sla/ReportStyleButton.tsx`
 
-Tests that import it: `features/sla/ReportDialog.test.tsx`
+Tests that import it: `__tests__/dialogOverlays.test.tsx`, `features/sla/ReportDialog.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/sla/ReportDownload.tsx`
@@ -1991,12 +1991,12 @@ Tests that import it: `features/sla/ReportDownload.test.tsx`
 The Schedule button and its dialog, for administrators. One dialog from the press to the close: it reads the schedule, then is the form for the day, the time, the files, the people, who to tell and the style, with the next send and the last twelve under it. Saving sends everything in one request.
 
 <!-- gen:card web/src/features/sla/ReportSchedule.tsx -->
-324 lines, 2 exports. Imported by 1 file.
+327 lines, 2 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `sendLine` | function | 58 | `function sendLine(r: SendRecord, tz: string): string` |  |
-| `default` | component | 314 | `function ReportSchedule({ info, onSaved }: { info: EmailInfo; onSaved?: () => void })` |  |
+| `sendLine` | function | 59 | `function sendLine(r: SendRecord, tz: string): string` |  |
+| `default` | component | 317 | `function ReportSchedule({ info, onSaved }: { info: EmailInfo; onSaved?: (list?: string[]) => void })` |  |
 
 Imports: `api/index.ts`, `features/sla/FileChoices.tsx`, `features/sla/ReportDialog.tsx`, `features/sla/ReportDownload.tsx`, `features/sla/SavedList.tsx`, `features/sla/StyleFields.tsx`, `features/sla/addresses.ts`, `features/sla/reportStyle.ts`, `guards/index.ts`, `shared/lib/time.ts`, `types/index.ts`
 
@@ -2145,14 +2145,15 @@ Tests that import it: none
 Small text helpers the email and schedule dialogs share: split a box of addresses into a list, put a list back as lines, and write a list of words as a sentence.
 
 <!-- gen:card web/src/features/sla/addresses.ts -->
-17 lines, 4 exports. Imported by 3 files.
+20 lines, 5 exports. Imported by 3 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `splitAddresses` | function | 2 | `const splitAddresses = (text: string): string[] =>` | Text typed in a box, as a list of addresses: commas, semicolons, spaces and line breaks all separate them. |
 | `joinAddresses` | function | 5 | `const joinAddresses = (list: readonly string[]): string =>` | A list of addresses as the box shows it: one on each line. |
 | `wordsList` | function | 8 | `function wordsList(items: readonly string[]): string` | "a", "a and b", "a, b and c". |
-| `domainsList` | function | 14 | `function domainsList(domains: readonly string[]): string` | The domains an address may be in, as a sentence part: "example.org", "example.org or hcml.co.id". |
+| `SEE_EACH_OTHER` | constant | 14 | `const SEE_EACH_OTHER` | What a person should know before a list is typed: the report is one message, and a message shows its To line (SC-50). |
+| `domainsList` | function | 17 | `function domainsList(domains: readonly string[]): string` | The domains an address may be in, as a sentence part: "example.org", "example.org or hcml.co.id". |
 
 Imports: none
 
@@ -2211,15 +2212,15 @@ Tests that import it: `features/sla/EmailReport.test.tsx`, `features/sla/ReportD
 Types made from the API description by a tool; never edited by hand. Walked through in [Web app: the API client, the types and the guards](web-api-types-guards.md).
 
 <!-- gen:card web/src/generated/openapi.ts -->
-4563 lines, generated, never edited by hand. Imported by 0 files.
+4566 lines, generated, never edited by hand. Imported by 0 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `paths` | interface | 6 | `interface paths` |  |
-| `webhooks` | type | 1389 | `type webhooks = Record<string, never>` |  |
-| `components` | interface | 1390 | `interface components` |  |
-| `$defs` | type | 2578 | `type $defs = Record<string, never>` |  |
-| `operations` | interface | 2579 | `interface operations` |  |
+| `webhooks` | type | 1390 | `type webhooks = Record<string, never>` |  |
+| `components` | interface | 1391 | `interface components` |  |
+| `$defs` | type | 2579 | `type $defs = Record<string, never>` |  |
+| `operations` | interface | 2580 | `interface operations` |  |
 
 Imports: none
 
@@ -2785,6 +2786,24 @@ Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/hostListF
 
 ## `web/src/shared/hooks`
 
+### `web/src/shared/hooks/scrollLock.ts`
+
+Keeps the page behind a dialog from scrolling. No chapter walks through it, so this card and the comment at the top of the file are its account.
+
+<!-- gen:card web/src/shared/hooks/scrollLock.ts -->
+28 lines, 1 export. Imported by 1 file.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `lockScroll` | function | 9 | `function lockScroll(): () => void` |  |
+
+Imports: none
+
+Imported by: `shared/hooks/useDialogFocus.ts`
+
+Tests that import it: `shared/hooks/scrollLock.test.ts`
+<!-- /gen -->
+
 ### `web/src/shared/hooks/useAsync.ts`
 
 Fetch with loading and error state, an abort on leave, and optional polling. Walked through in [Web app: the shell and the shared code](web-shell-and-shared.md).
@@ -2852,14 +2871,14 @@ Tests that import it: none
 Moves focus into a dialog and back when it closes. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/shared/hooks/useDialogFocus.ts -->
-93 lines, 2 exports. Imported by 4 files.
+96 lines, 2 exports. Imported by 4 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `focusMain` | function | 8 | `function focusMain(): void` | Focus the main content. |
-| `useDialogFocus` | hook | 33 | `function useDialogFocus(dialog: RefObject<HTMLElement>, initial?: RefObject<HTMLElement>): void` | What a modal dialog owes a keyboard user (WCAG 2.4.3): focus moves in on open, Tab and Shift+Tab stay inside, and focus returns to whatever opened... |
+| `focusMain` | function | 9 | `function focusMain(): void` | Focus the main content. |
+| `useDialogFocus` | hook | 34 | `function useDialogFocus(dialog: RefObject<HTMLElement>, initial?: RefObject<HTMLElement>): void` | What a modal dialog owes a keyboard user (WCAG 2.4.3): focus moves in on open, Tab and Shift+Tab stay inside, and focus returns to whatever opened... |
 
-Imports: none
+Imports: `shared/hooks/scrollLock.ts`
 
 Packages: `react`
 
@@ -3149,7 +3168,7 @@ Tests that import it: `__tests__/copiedHelpers.test.ts`, `__tests__/mainZone.tes
 Zabbix units turned into human text. Walked through in [Web app: the shell and the shared code](web-shell-and-shared.md).
 
 <!-- gen:card web/src/shared/lib/units.ts -->
-156 lines, 8 exports. Imported by 11 files.
+161 lines, 8 exports. Imported by 11 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -3159,8 +3178,8 @@ Zabbix units turned into human text. Walked through in [Web app: the shell and t
 | `formatPercent` | function | 42 | `function formatPercent(v: number \| null \| undefined, measure: PercentMeasure): string` |  |
 | `formatDuration` | function | 76 | `function formatDuration(totalSeconds: number): string` |  |
 | `dur` | function | 92 | `function dur(totalSeconds: number): string` | Seconds → the coarsest unit that still reads naturally: 45s, 12m, 3.5h, 2.1d. |
-| `formatValue` | function | 119 | `function formatValue(v: number \| null \| undefined, units?: string): string` |  |
-| `formatAxis` | function | 151 | `function formatAxis(v: number, units?: string): string` | Short axis label: same families, fewer decimals. |
+| `formatValue` | function | 122 | `function formatValue(v: number \| null \| undefined, units?: string): string` |  |
+| `formatAxis` | function | 156 | `function formatAxis(v: number, units?: string): string` | Short axis label: same families, fewer decimals. |
 
 Imports: `shared/lib/time.ts`
 
@@ -3317,7 +3336,7 @@ Tests that import it: none
 The login wrapper, the Explain slide-over, modal dialogs, notices and the role chip. Walked through in [Web app: the stylesheet](web-styles.md).
 
 <!-- gen:card web/src/styles/08-explain-modal-notices.css -->
-354 lines, stylesheet part. Imported by 0 files.
+363 lines, stylesheet part. Imported by 0 files.
 
 Imports: none
 
@@ -3457,7 +3476,7 @@ Tests that import it: none
 The soft look of 26 October: raised and pressed surfaces, the 3:1 edges and the motion. Walked through in [Web app: the stylesheet](web-styles.md).
 
 <!-- gen:card web/src/styles/18-soft-depth.css -->
-207 lines, stylesheet part. Imported by 0 files.
+208 lines, stylesheet part. Imported by 0 files.
 
 Imports: none
 
@@ -3471,7 +3490,7 @@ Tests that import it: none
 Makes every control at least 44 pixels where the pointer is a finger. Walked through in [Web app: the stylesheet](web-styles.md).
 
 <!-- gen:card web/src/styles/19-touch.css -->
-78 lines, stylesheet part. Imported by 0 files.
+90 lines, stylesheet part. Imported by 0 files.
 
 Imports: none
 
@@ -3730,7 +3749,7 @@ Imports: `types/assistant.ts`, `types/auth.ts`, `types/dashboard.ts`, `types/gra
 
 Imported by: `api/assistant.ts`, `api/dashboard.ts`, `api/graphs.ts`, `api/hosts.ts`, `api/meters.ts`, `api/network.ts`, `api/problems.ts`, `api/reports.ts`, `api/shell.ts`, `api/sla.ts`, `features/assistant/Assistant.tsx`, `features/assistant/ExplainPanel.tsx`, `features/dashboard/HostsView.tsx`, `features/dashboard/Overview.tsx`, and 57 more
 
-Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/countPills.test.tsx`, `__tests__/guardedReads.test.tsx`, `__tests__/openapiTypes.test.ts`, `__tests__/pagePastEnd.test.tsx`, `__tests__/reportZoneUi.test.tsx`, `__tests__/sharedPages.test.tsx`, `__tests__/sharedPieces.test.tsx`, and 35 more
+Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/countPills.test.tsx`, `__tests__/guardedReads.test.tsx`, `__tests__/openapiTypes.test.ts`, `__tests__/pagePastEnd.test.tsx`, `__tests__/reportZoneUi.test.tsx`, `__tests__/sharedPages.test.tsx`, `__tests__/sharedPieces.test.tsx`, and 36 more
 <!-- /gen -->
 
 ### `web/src/types/meters.ts`

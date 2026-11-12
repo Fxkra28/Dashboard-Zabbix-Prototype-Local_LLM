@@ -4,12 +4,14 @@ title = "HCML portal secret scan"
 [extend]
 useDefault = true
 
-# Two made-up test values, each named by its own text so that a real secret in the same file, or the same kind of
+# Three made-up test values, each named by its own text so that a real secret in the same file, or the same kind of
 # secret anywhere else, is still found: a throwaway TLS key for the pinned-TLS tests (server/src/__tests__/helpers/
-# tlsTestCerts.ts), and a JWT-shaped string that the log-redaction test hands to the logger (logging.test.ts).
+# tlsTestCerts.ts), a JWT-shaped string that the log-redaction test hands to the logger (logging.test.ts), and a
+# password that the test of the list of common passwords says is not common (passwords.test.ts).
 [allowlist]
-description = "Made-up test values: a throwaway TLS key and a sample JWT. Neither opens anything."
+description = "Made-up test values: a throwaway TLS key, a sample JWT and a sample password. None opens anything."
 regexes = [
   '''-----BEGIN PRIVATE KEY-----\s*MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgkjgAf7Lx4FihDvoL''',
   '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiJub2MiLCJyb2xlIjoidmlld2VyIn0\.c2lnbmF0dXJl''',
+  '''^zabbix-2026-long-one$''',
 ]

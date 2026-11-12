@@ -78,7 +78,7 @@ flowchart TB
     subgraph D2["2 &middot; The BFF: portal-bff"]
         direction LR
         RTOK["<b>read token</b><br>read-only Zabbix user<br>never leaves this process"]
-        CACHE["<b>TTL cache</b><br>problems 5 s &middot; sites 15 s<br>hosts 30 s &middot; SLA 60 s<br>coalesced &middot; LRU 500"]
+        CACHE["<b>TTL cache</b><br>a time of its own for each:<br>problems, sites, hosts, SLA<br>coalesced &middot; LRU 500"]
         DERIVE["<b>the derived layer</b><br>sites &middot; links &middot; incidents<br>host state &middot; monthly SLA<br><i>no table exists for any of it</i>"]
         SHAPE["<b>one clean shape</b><br>enriched, typed, compressed"]
 
@@ -117,7 +117,7 @@ flowchart TB
 
     ZAPI ==>|"JSON-RPC, read"| RTOK
     SHAPE ==>|"HTTP + brotli"| NGINX
-    SHAPE -.->|"SSE every 5 s: a frame<br>only when something changed"| LIVE
+    SHAPE -.->|"SSE on each tick: a frame<br>only when something changed"| LIVE
     DERIVE -.->|"host, trigger, severity, opdata,<br>plus tags on the Explain path only"| SNAP
     ANSWER -.-> SCREEN
     SCREEN -->|"acknowledge / close<br>operator role"| WTOK
@@ -141,4 +141,4 @@ flowchart TB
     class NGINX,SCREEN,LIVE browser
     class WTOK,ZWRITE written
     class MODEL,LEAVES derived
-%% source-hash: df0d1e9b425e
+%% source-hash: 96246cbfade0

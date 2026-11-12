@@ -178,8 +178,8 @@ export function resolveMail(env: MailEnv): MailSettings {
 
   // A name that carries an address or a bracket could be read as another sender in the mail program's list.
   const fromNameText = usable('fromName');
-  if (fromNameText && (fromNameText.length > MAX_SENDER_NAME || /[<>"\\@]/.test(fromNameText))) {
-    bad('FROM_NAME', `must be a name of up to ${MAX_SENDER_NAME} characters with no < > " \\ or @ in it`);
+  if (fromNameText && (fromNameText.length > MAX_SENDER_NAME || /[<>"\\@]/.test(fromNameText) || UNSEEN.test(fromNameText) || /[\p{Zl}\p{Zp}]/u.test(fromNameText))) {
+    bad('FROM_NAME', `must be a name of up to ${MAX_SENDER_NAME} characters with no < > " \\ or @ and no invisible character in it`);
   }
 
   const domainList = usable('allowedDomains').split(/[\s,;]+/).filter(Boolean).map((d) => d.toLowerCase());

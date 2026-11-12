@@ -23,7 +23,7 @@ They are not BFF settings and not read from `.env` by the running container, and
 when left out. `portal-bff` has a healthcheck on `/api/health` (it passes while the process answers,
 whether or not Zabbix does, so a Zabbix outage never restarts the BFF) and `init: true`, and
 `portal-web` starts once the BFF is healthy. Read the body, not the status, to see Zabbix: `ready.ok` (a signed-in call has it; an anonymous `curl` gets `ready` as `true` or `false`).
-To rebuild both portals from the commit and check them, run `deploy/rebuild.sh` in `hcml-portal` (this copy has no git; [§23](23-hardening-timeouts-rate-limiting-headers.md)), with `--dry-run` first.
+To rebuild both portals from the commit and check them, run `deploy/rebuild.sh` in `hcml-portal` ([§23](23-hardening-timeouts-rate-limiting-headers.md)), with `--dry-run` first.
 
 Four things about the Docker path that are easy to get wrong, and were:
 

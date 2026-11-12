@@ -90,6 +90,11 @@ export function logEmail(log: LineLog, user: string, report: EmailAudit, ip?: st
   else log.info(line, 'report email sent');
 }
 
+/** A month the monthly schedule passed by with no send tried, usually because the portal was not running: it is not a failed send (BK-55). */
+export function logSkipped(log: LineLog, user: string, report: Omit<EmailAudit, 'outcome'>): void {
+  log.warn({ event: 'report_skipped', user, ...report, outcome: 'missed' }, 'report email skipped: no send was tried before its week ended');
+}
+
 export function auditEmail(req: FastifyRequest, report: EmailAudit): void {
   logEmail(req.log, actor(req), report, req.ip);
 }

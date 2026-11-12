@@ -42,7 +42,7 @@ export async function warmUp(log: Pick<FastifyBaseLogger, 'info' | 'warn'>, step
       await read();
       log.info({ view, ms: Date.now() - t0 }, 'warm-up: read');
     } catch (err) {
-      log.warn({ view, reason: err instanceof Error ? err.message : String(err) }, 'warm-up: could not read it; its first visit will');
+      log.warn({ view, reason: err instanceof Error ? err.message : String(err) }, 'warm-up: could not read it; its first visit will be slow');
     }
   }
   log.info({ ms: Date.now() - started }, 'warm-up: done');

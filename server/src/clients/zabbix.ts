@@ -60,9 +60,12 @@ export class ZabbixApiError extends Error {
   readonly code = 'zabbix_error';
   /** For the BFF log only (it names ZBX_URL); never part of a response. */
   readonly detail?: string;
-  constructor(message: string, detail?: string) {
+  /** The request went out and what came back does not say whether Zabbix applied it: for a write, the change may have been made (BK-53). */
+  readonly maybeApplied: boolean;
+  constructor(message: string, detail?: string, maybeApplied = false) {
     super(message);
     this.detail = detail;
+    this.maybeApplied = maybeApplied;
   }
 }
 
@@ -106,6 +109,25 @@ async function send(payload: string, token: string, timeoutMs: number): Promise<
   return { ok: res.ok, status: res.status, statusText: res.statusText, body: await res.text() };
 }
 
+/** System codes of a connection that failed before it could carry a request: it never opened, or its certificate was refused first. */
+const NEVER_SENT = new Set([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EAI_FAIL',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ENETDOWN',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'ERR_INVALID_URL',
+]);
+const CERTIFICATE_REFUSED = /^(?:ERR_TLS_|CERT_|DEPTH_ZERO_SELF_SIGNED_CERT$|SELF_SIGNED_CERT_IN_CHAIN$|UNABLE_TO_)/;
+
+/** Whether a failure with this system code came before the request left, so that a write cannot have been applied. */
+export function requestNeverLeft(code: unknown): boolean {
+  return typeof code === 'string' && (NEVER_SENT.has(code) || CERTIFICATE_REFUSED.test(code));
+}
+
 async function call<T>(method: string, params: unknown, token: string, timeoutMs: number): Promise<T> {
   let res: Reply;
   try {
@@ -130,6 +152,8 @@ async function call<T>(method: string, params: unknown, token: string, timeoutMs
       `Could not reach Zabbix for ${method}${typeof code === 'string' ? ` (${code})` : ''}. ` +
         'Check ZBX_URL and that the Zabbix frontend is running.',
       `ZBX_URL=${config.zbxUrl}: ${cause instanceof Error ? cause.message : String(cause)}`,
+      // A refused or unresolved connection never carried the request; a reset or a drop part-way may have.
+      !requestNeverLeft(code),
     );
   }
 
@@ -137,6 +161,7 @@ async function call<T>(method: string, params: unknown, token: string, timeoutMs
     throw new ZabbixApiError(
       `${method}: HTTP ${res.status} ${res.statusText}`,
       `ZBX_URL=${config.zbxUrl} answered: ${snippet(res.body)}`,
+      true,
     );
   }
 
@@ -154,6 +179,7 @@ async function call<T>(method: string, params: unknown, token: string, timeoutMs
       `${method}: Zabbix returned a non-JSON response. Check that ZBX_URL points at api_jsonrpc.php ` +
         'and that the Zabbix frontend is not out of memory.',
       `ZBX_URL=${config.zbxUrl} answered: ${snippet(res.body)}`,
+      true,
     );
   }
 

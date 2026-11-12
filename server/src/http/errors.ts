@@ -8,7 +8,7 @@ import {
 import { AiBusyError, AiDisabledError, AiUpstreamError } from '../clients/ai.js';
 import { MailDisabledError, MailError } from '../clients/mail.js';
 import { StateWriteError } from '../core/state.js';
-import { BadRequestError, ScheduleUnavailableError } from '../core/validate.js';
+import { BadRequestError, EmptyReportError, ScheduleUnavailableError } from '../core/validate.js';
 import { validationProblem } from '../core/schemas.js';
 
 /**
@@ -75,13 +75,17 @@ export function registerErrorHandler(app: FastifyInstance): void {
     }
 
     if (err instanceof MailDisabledError) {
-      req.log.warn('a report email was asked for, but email is not set up');
+      req.log.warn('email, or its saved list, was asked for, but it is off on this portal');
       return reply.code(503).send({ error: 'mail_disabled', message: err.message });
     }
     if (err instanceof MailError) {
       // `detail` is what the mail server said: the log gets it, the response never does.
       req.log.error({ detail: err.detail, kind: err.kind }, 'the mail server did not take the report');
       return reply.code(502).send({ error: 'mail_error', message: err.message });
+    }
+    if (err instanceof EmptyReportError) {
+      req.log.warn('a report email was asked for, but the report had no device in it');
+      return reply.code(502).send({ error: 'empty_report', message: err.message });
     }
     if (err instanceof ScheduleUnavailableError) {
       return reply.code(503).send({ error: 'schedule_unavailable', message: err.message });

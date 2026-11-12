@@ -1,4 +1,5 @@
 import { useEffect, type RefObject } from 'react';
+import { lockScroll } from './scrollLock';
 
 /**
  * Focus the main content. It is focusable only while it holds focus: a
@@ -28,10 +29,11 @@ const FOCUSABLE =
  * open, Tab and Shift+Tab stay inside, and focus returns to whatever opened it
  * on close. When the opener is gone, or disappears afterwards (the Ack button
  * of a problem just closed, once the list refreshes), focus goes to the main
- * content instead of falling to <body>.
+ * content instead of falling to <body>. The page behind does not scroll while it is open.
  */
 export function useDialogFocus(dialog: RefObject<HTMLElement>, initial?: RefObject<HTMLElement>): void {
   useEffect(() => {
+    const unlock = lockScroll();
     const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     (initial?.current ?? dialog.current)?.focus();
     // The element it was told to focus can be disabled, and focus would stay behind the dialog.
@@ -57,6 +59,7 @@ export function useDialogFocus(dialog: RefObject<HTMLElement>, initial?: RefObje
     };
     document.addEventListener('keydown', onKey);
     return () => {
+      unlock();
       document.removeEventListener('keydown', onKey);
       if (!opener?.isConnected) return focusMain();
       opener.focus();

@@ -143,8 +143,9 @@ a.btn.ghost {
     opacity: 1;
   }
 }
+/* Not `both`: held after it ends, the animation can keep a transform on every child, and a dialog drawn inside one is framed by it, not by the window (UX-46). */
 .content > * {
-  animation: soft-rise var(--dur-4) var(--ease-out) both;
+  animation: soft-rise var(--dur-4) var(--ease-out) backwards;
 }
 .content > *:nth-child(2) {
   animation-delay: var(--stagger);

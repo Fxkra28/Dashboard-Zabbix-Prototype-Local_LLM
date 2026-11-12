@@ -2,7 +2,7 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Developers | about 50 min | [Server: network and capacity](server-network-and-capacity.md) | [Server: live and assistant](server-live-and-assistant.md) |
+| Developers | about 55 min | [Server: network and capacity](server-network-and-capacity.md) | [Server: live and assistant](server-live-and-assistant.md) |
 
 An SLA figure says what share of the time a device was up. HCML's Zabbix has no services configured, so Zabbix's own SLA engine has nothing to measure. The portal measures it instead, from the ICMP availability triggers that every device already carries, and calls the result the derived SLA. It is read-only and creates nothing in Zabbix. The engine is in `server/src/sli/`. The reports that sit on it, and the ones that read incident history, are in `server/src/services/`.
 
@@ -336,8 +336,8 @@ export function coveredFromTrends(
 
 `server/src/sli/maintenance.ts`. Turns Zabbix's maintenance periods into windows for each host.
 
-<!-- gen:snippet server/src/sli/maintenance.ts#maintenanceByHost sha=cc2105763d7c -->
-`server/src/sli/maintenance.ts:119-156`
+<!-- gen:snippet server/src/sli/maintenance.ts#maintenanceByHost sha=09d686a55657 -->
+`server/src/sli/maintenance.ts:119-172`
 
 ```ts
 export async function maintenanceByHost(
@@ -357,13 +357,29 @@ export async function maintenanceByHost(
   const groupids = [...new Set(relevant.flatMap((m) => (m.hostgroups ?? []).map((g) => g.groupid)))];
   const hostsByGroup = new Map<string, string[]>();
   if (groupids.length) {
+    type ZGroup = { groupid: string; name?: string; hosts?: { hostid: string }[] };
+    const idsOf = (g: ZGroup) => (g.hosts ?? []).map((h) => h.hostid);
     onCall();
-    const groups = await zbx<{ groupid: string; hosts?: { hostid: string }[] }[]>('hostgroup.get', {
-      groupids,
-      output: ['groupid'],
-      selectHosts: ['hostid'],
-    });
-    for (const g of groups) hostsByGroup.set(g.groupid, (g.hosts ?? []).map((h) => h.hostid));
+    const named = await zbx<ZGroup[]>('hostgroup.get', { groupids, output: ['groupid', 'name'], selectHosts: ['hostid'] });
+    for (const g of named) hostsByGroup.set(g.groupid, idsOf(g));
+    // Zabbix selects the groups nested under a group a maintenance names ("Parent/Child"), with their hosts (BK-46).
+    const parents = named.filter((g) => typeof g.name === 'string' && g.name !== '');
+    if (parents.length) {
+      onCall();
+      const below = await zbx<ZGroup[]>('hostgroup.get', {
+        search: { name: parents.map((g) => `${g.name}/`) },
+        searchByAny: true,
+        startSearch: true,
+        output: ['groupid', 'name'],
+        selectHosts: ['hostid'],
+      });
+      // Zabbix's search ignores case; a group name does not.
+      for (const parent of parents) {
+        for (const g of below) {
+          if (g.name?.startsWith(`${parent.name}/`)) hostsByGroup.set(parent.groupid, [...(hostsByGroup.get(parent.groupid) ?? []), ...idsOf(g)]);
+        }
+      }
+    }
   }
 
   const byHost = new Map<string, Interval[]>();
@@ -381,7 +397,7 @@ export async function maintenanceByHost(
 ```
 <!-- /gen -->
 
-1. It makes one `maintenance.get`, and one `hostgroup.get` only when a maintenance names host groups. A maintenance reaches the hosts it names and the hosts in its groups.
+1. It makes one `maintenance.get`, and one `hostgroup.get` only when a maintenance names host groups, with a second to find the groups nested under those, whose names start with a named group's name and a slash. A maintenance reaches the hosts it names, the hosts in its groups and the hosts in the groups nested under them, as in Zabbix (BK-46). Zabbix's search ignores case and a group name does not, so the name is checked again, in full and by case.
 2. `maintenanceWindows` (above it in the file) turns each maintenance's schedule into concrete windows inside the range. A one-time period runs from its start date. Daily, weekly and monthly periods start `start_time` seconds after midnight in the SLA zone. Every occurrence is cut to the maintenance's own active dates.
 3. Two limits are stated in the report's basis. The periods are read as Zabbix defines them now, so an edited or deleted period changes past months too. And a maintenance's tag filter, which only narrows which problems Zabbix suppresses, is ignored: a host in maintenance is out of the measurement.
 
@@ -703,13 +719,15 @@ Tests: `api-hygiene.test.ts` checks its shape against the API description.
 
 `server/src/services/sli.ts`. The one place a report is asked for, so that every caller shares it.
 
-<!-- gen:snippet server/src/services/sli.ts#getMonthlySli sha=322936b77efa -->
-`server/src/services/sli.ts:27-39`
+<!-- gen:snippet server/src/services/sli.ts#getMonthlySli sha=0e3319c525b3 -->
+`server/src/services/sli.ts:35-49`
 
 ```ts
 export function getMonthlySli(month: string, profile: SliProfile): Promise<SliReport> {
-  const { to } = monthBounds(month, config.sla.timezone);
+  const { from, to } = monthBounds(month, config.sla.timezone);
   const now = Math.floor(Date.now() / 1000);
+  // Before the gate: a month nobody can report is refused at once, and does not wait for a place behind cold months (BK-50).
+  checkPeriodStart(from, now);
   // Three phases, each with its own key: a report computed while the month was still running, or in the minutes after it
   // ended while Zabbix still gets its last values (the monthly send waits as long), must not be kept for a day as the final figure.
   const phase = to + SETTLE_SECONDS <= now ? 'closed' : to <= now ? 'settling' : 'open';
@@ -718,15 +736,16 @@ export function getMonthlySli(month: string, profile: SliProfile): Promise<SliRe
   const key = `derived-sli:${profile}:${month}:${phase}`;
   // A closed month costs a full recompute and cannot change: pinned, so a run
   // of graph keys cannot push it out of the cache.
-  return cached(key, ttl, () => computeSli({ month, profile }), { staleMs: ttl, staleIfError: true, pin: closed });
+  return cached(key, ttl, () => sliReads.run(() => computeSli({ month, profile })), { staleMs: ttl, staleIfError: true, pin: closed });
 }
 ```
 <!-- /gen -->
 
-1. A closed month cannot change once Zabbix has had ten minutes (`SETTLE_SECONDS`) for its last values, so its report is kept a day and pinned, which keeps a run of graph keys from pushing it out of the cache. The current month moves, and so do the ten minutes after it, so those are kept five minutes.
+1. A closed month cannot change once Zabbix has had ten minutes (`SETTLE_SECONDS`) for its last values, so its report is kept a day and pinned, which keeps a run of graph keys from pushing it out of the cache. The current month moves, and so do the ten minutes after it, so those are kept five minutes. A report that is not cached is computed behind `sliReads`, a gate of two (`SLI_AT_ONCE`), so that a caller who asks for every month of both profiles at once starts two reads and the rest wait (BK-50); a cached report does not wait, and two callers for one key still share one computation.
 2. For as long again after that, the old report is answered at once while a new one is computed in the background, and if the new one fails the old one is served. A report takes seconds to compute, so nobody should wait for it twice.
 3. The key holds the phase as well as the month: `open`, `settling` (the month has ended and Zabbix is still getting its last values, which the monthly send waits for) or `closed`. A report computed in the first two must not be kept for a day as that month's final figure.
-4. `parseProfile` in the same file turns the `profile` query value into a profile, or the default, or a 400.
+4. A month that cannot be reported, one that has not started or is older than about a year, is refused with a 400 before the gate (`checkPeriodStart`), so it never waits for a place behind cold months. `forgetMonthlySli` drops what is kept for a month, in both methods and every phase, and the email path calls it when a report came back empty, so the next try reads Zabbix again (BK-51).
+5. `parseProfile` in the same file turns the `profile` query value into a profile, or the default, or a 400.
 
 Tests: `sli-cache.test.ts` and `sla-summary.test.ts`.
 

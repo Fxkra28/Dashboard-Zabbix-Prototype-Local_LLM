@@ -3,8 +3,8 @@ import { ZabbixAuthError, ZabbixTimeoutError, ZabbixApiError } from '../clients/
 import { addressDomain, plainAddress } from '../core/mailConfig.js';
 import { checkRecipients, domainsOf } from '../core/recipients.js';
 import { StateWriteError, type Schedule, type SendRecord, type StateStore } from '../core/state.js';
-import { BadRequestError } from '../core/validate.js';
-import { logEmail, type EmailAudit } from '../security/audit.js';
+import { BadRequestError, EMPTY_REPORT_WORDS, EmptyReportError } from '../core/validate.js';
+import { logEmail, logSkipped, type EmailAudit } from '../security/audit.js';
 import { CATCH_UP_SECONDS, planNext, retryDelay, skippedSlots, type Plan, type SkippedSlot } from '../sli/schedule.js';
 import type { EmailedReport, EmailRequest } from './sliMail.js';
 
@@ -89,6 +89,7 @@ const OTHER_WORDS = 'The report could not be made. The reason is in the portal l
 function reasonOf(err: unknown): string {
   if (err instanceof MailError) return err.kind;
   if (err instanceof ZabbixApiError || err instanceof ZabbixTimeoutError || err instanceof ZabbixAuthError) return 'zabbix';
+  if (err instanceof EmptyReportError) return 'empty';
   if (err instanceof BadRequestError) return 'recipients';
   return 'error';
 }
@@ -102,10 +103,20 @@ function detailOf(err: unknown): string {
 
 function reasonWords(reason: string | undefined): string {
   if (reason === 'zabbix') return ZABBIX_WORDS;
+  if (reason === 'empty') return EMPTY_REPORT_WORDS;
   if (reason !== undefined && ['login', 'connect', 'timeout', 'tls', 'recipients', 'rejected', 'other'].includes(reason)) return failureWords(reason as MailFailure);
   return OTHER_WORDS;
 }
 
+// After a timeout the mail server may have taken the message, so only a certain failure may say that nobody has it (BK-52).
+const NOBODY_HAS_IT = 'Nobody has received it.';
+const MAY_HAVE_IT = 'It may have reached some or all of the people.';
+
+/**
+ * Whether a month's message may have been handed over although the record says it failed: a try that ended in a timeout, now or earlier
+ * (`unsure`), or a try that never ended, as when the portal stopped in the middle of a send (a try was made, and no reason was written).
+ */
+const mayHaveGone = (r: SendRecord): boolean => r.unsure === true || r.reason === 'timeout' || (r.attempts > 0 && r.reason === undefined);
 const BY_HAND = 'You can send the report by hand: open the SLA page, choose the month and press Email report.';
 const BY_HAND_EACH = 'You can send each report by hand: open the SLA page, choose the month and press Email report.';
 const FOOT = 'This message is automatic. Replies are not read.';
@@ -132,7 +143,7 @@ function failedNotice(record: SendRecord, tz: string): { subject: string; text: 
       `The portal stopped trying to send the SLA report for ${monthWords(record.month)}.`,
       `It tried ${record.attempts} times; the last try was at ${momentText(record.at, tz)}.`,
       `Why: ${reasonWords(record.reason)}`,
-      `Nobody has received it. ${BY_HAND}`,
+      `${mayHaveGone(record) ? MAY_HAVE_IT : NOBODY_HAS_IT} ${BY_HAND}`,
       FOOT,
       '',
     ].join('\n'),
@@ -152,14 +163,18 @@ function missedNotice(month: string, slot: number, tz: string): { subject: strin
   };
 }
 
-function skippedNotice(slots: readonly SkippedSlot[], tz: string): { subject: string; text: string } {
+function skippedNotice(slots: readonly SkippedSlot[], ended: readonly SendRecord[], tz: string): { subject: string; text: string } {
+  const unsure = ended.filter(mayHaveGone).map((r) => r.month);
+  const others = unsure.length < slots.length ? '; the others were not sent' : '';
   return {
     subject: `HCML SLA reports for ${monthList(slots.map((s) => s.month))} were not sent`,
     text: [
       `The portal did not send the SLA reports for ${slots.length} months. Each is listed with the time it was due.`,
       ...slots.map((s) => `${monthWords(s.month)}: due ${momentText(s.slot, tz)}`),
       'The portal was not running, or could not finish the send, in the week after each of these times.',
-      `Nobody has received them. ${BY_HAND_EACH}`,
+      unsure.length === 0
+        ? `Nobody has received them. ${BY_HAND_EACH}`
+        : `${unsure.length === 1 ? 'The report for' : 'The reports for'} ${monthList(unsure)} may have reached some or all of the people${others}. ${BY_HAND_EACH}`,
       FOOT,
       '',
     ].join('\n'),
@@ -272,7 +287,7 @@ export function createReportSchedule(deps: ScheduleDeps): ReportSchedule {
   /** Records a month as sent, and tells the people to tell when the mail server refused some of the addresses. */
   async function conclude(month: string, sent: EmailedReport): Promise<void> {
     const done = await put(month, (old) => {
-      const { nextAt: _nextAt, reason: _reason, ...rest } = old ?? unrecorded(month, sent);
+      const { nextAt: _nextAt, reason: _reason, unsure: _unsure, ...rest } = old ?? unrecorded(month, sent);
       return { ...rest, at: deps.now(), outcome: 'sent', recipients: sent.accepted, refused: sent.refused, bytes: sent.bytes };
     });
     taken.delete(month);
@@ -310,7 +325,9 @@ export function createReportSchedule(deps: ScheduleDeps): ReportSchedule {
         // The schedule moved while this send was out: the move gave the month up, and a retry would be for a slot nobody watches.
         if (old!.outcome === 'failed' && old!.reason === 'changed') return old!;
         const { nextAt: _nextAt, ...rest } = old!;
-        return { ...rest, at: deps.now(), outcome: final ? 'failed' : 'sending', reason, ...(final ? {} : { nextAt }) };
+        // A timeout may have come after the server took the message: the doubt stays through every later try, whatever it said.
+        const doubt = reason === 'timeout' ? { unsure: true as const } : {};
+        return { ...rest, at: deps.now(), outcome: final ? 'failed' : 'sending', reason, ...doubt, ...(final ? {} : { nextAt }) };
       });
       logEmail(deps.log, 'schedule', audit(failed, to, { reason, detail: detailOf(err) }));
       if (failed.reason === 'changed') return;
@@ -343,12 +360,15 @@ export function createReportSchedule(deps: ScheduleDeps): ReportSchedule {
           ? { ...old, outcome: 'failed', nextAt: undefined, noticed: 2 }
           : { ...base, at: t, outcome: 'missed', attempts: 0, recipients: 0, refused: 0, bytes: 0, reason: 'not running', noticed: 2 },
       );
-      logEmail(deps.log, 'schedule', audit(record, [], { reason: record.reason ?? 'expired' }));
+      const line = audit(record, [], { reason: record.reason ?? 'expired' });
+      // A month that was never tried is a skipped month, not a send that failed (BK-55).
+      if (record.outcome === 'missed') logSkipped(deps.log, 'schedule', line);
+      else logEmail(deps.log, 'schedule', line);
       ended.push(record);
     }
     const [only] = slots;
     if (only && slots.length === 1) await tell(schedule, only.attempted ? failedNotice(ended[0]!, deps.timezone) : missedNotice(only.month, only.slot, deps.timezone));
-    else await tell(schedule, skippedNotice(slots, deps.timezone));
+    else await tell(schedule, skippedNotice(slots, ended, deps.timezone));
   }
 
   async function look(): Promise<void> {

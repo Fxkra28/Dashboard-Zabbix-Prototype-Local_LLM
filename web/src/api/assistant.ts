@@ -2,7 +2,7 @@
 
 import type { SliProfile, ProblemExplanation, SlaExplanation, ChatContext, ChatDone, ChatMessage } from '../types';
 import { problemExplanationGuard, slaExplanationGuard } from '../guards';
-import { EXPLAIN_TIMEOUT_MS, qs, request } from './client';
+import { EXPLAIN_TIMEOUT_MS, HttpFailure, qs, request } from './client';
 import { CSRF, endSession, goToSignIn } from './session';
 
 export type ExplainSlaQuery =
@@ -38,8 +38,11 @@ export async function chatStream(
     throw new Error('Unauthorized');
   }
   if (!res.ok || !res.body) {
-    const b = (await res.json().catch(() => null)) as { error?: string; message?: string } | null;
-    throw new Error(b?.message ?? b?.error ?? `/api/chat: HTTP ${res.status}`);
+    const b = (await res.json().catch(() => null)) as { error?: unknown; message?: unknown } | null;
+    // Only words count, as in request(): an object would read as "[object Object]", and a route with a status is for a log.
+    const said = [b?.message, b?.error].find((v): v is string => typeof v === 'string' && v.trim() !== '');
+    const words = res.ok ? 'The portal answered with nothing. Ask again in a minute.' : `The portal did not answer (HTTP ${res.status}). Ask again in a minute.`;
+    throw new HttpFailure(said ?? words, res.status, said !== undefined);
   }
 
   const reader = res.body.getReader();

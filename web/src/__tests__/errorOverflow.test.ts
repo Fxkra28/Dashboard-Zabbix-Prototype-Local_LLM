@@ -19,3 +19,9 @@ describe('the error line of a dialog', () => {
     expect(declarations('.login-error')).toMatch(/overflow-wrap:\s*anywhere/);
   });
 });
+
+describe('the sub-line of a dialog and of a drawer (UX-44)', () => {
+  it('breaks a long name that has no place to break, such as a URL or a name with underscores', () => {
+    expect(declarations('.drawer-sub')).toMatch(/overflow-wrap:\s*anywhere/);
+  });
+});

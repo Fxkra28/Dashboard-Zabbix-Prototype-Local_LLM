@@ -50,6 +50,8 @@ export interface SendRecord {
   nextAt?: number;
   /** How many notices were sent for it, so a restart does not send them again. */
   noticed?: number;
+  /** A try ended with no word on whether the mail server took the message (a timeout), so no notice may say that nobody has it, whatever the later tries said. */
+  unsure?: true;
 }
 
 export interface PortalState {
@@ -120,10 +122,12 @@ function sendOf(v: unknown): SendRecord | null {
   if (v.reason !== undefined && (typeof v.reason !== 'string' || v.reason.length > 40)) return null;
   if (v.nextAt !== undefined && !moment(v.nextAt)) return null;
   if (v.noticed !== undefined && !whole(v.noticed, 0, 9)) return null;
+  if (v.unsure !== undefined && v.unsure !== true) return null;
   const record: SendRecord = { month: v.month, trigger: v.trigger, by: v.by, at: v.at, outcome: v.outcome as Outcome, attempts: v.attempts, formats, recipients: v.recipients, refused: v.refused, bytes: v.bytes };
   if (v.reason !== undefined) record.reason = v.reason as string;
   if (v.nextAt !== undefined) record.nextAt = v.nextAt as number;
   if (v.noticed !== undefined) record.noticed = v.noticed as number;
+  if (v.unsure === true) record.unsure = true;
   return record;
 }
 

@@ -17,6 +17,8 @@ export interface FakeSmtpOptions {
   refuse?: string[];
   /** Never says a word: for the tests of a client that gives up. */
   silent?: boolean;
+  /** Greets, then ignores every command: for the test of a check that must not wait out the long send timeout. */
+  ignoreCommands?: boolean;
   /** Does not offer STARTTLS although the mode is `starttls`: for the test of a client that insists on it. */
   withholdStarttls?: boolean;
 }
@@ -75,6 +77,7 @@ export async function startFakeSmtp(options: FakeSmtpOptions): Promise<FakeSmtp>
 
     const handle = (line: string) => {
       if (!encrypted) clearText.push(line);
+      if (options.ignoreCommands) return;
       if (waiting === 'plain') {
         waiting = null;
         const [, user = '', pass = ''] = unb64(line).split('\0');

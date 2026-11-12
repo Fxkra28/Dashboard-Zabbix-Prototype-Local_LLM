@@ -44,7 +44,7 @@ Tools that read a running portal and change nothing. `signedin_check.py` signs i
 | [`layout-sweep.mjs`](../../../tools/live/layout-sweep.mjs) | 94 | 0 | Opens every page at five widths and reports how far each runs past the window. |
 | [`load-test.mjs`](../../../tools/live/load-test.mjs) | 22 | 0 | Puts a steady load on the cached read endpoints and reports requests a second and latency. |
 | [`page-audit.mjs`](../../../tools/live/page-audit.mjs) | 199 | 0 | Opens every page and reports console errors, failed requests, policy violations, contrast, unnamed controls and load time. |
-| [`signedin_check.py`](../../../tools/live/signedin_check.py) | 202 | 0 | Signs in through nginx and checks health, the reports, the downloads, the stream and the problem list. |
+| [`signedin_check.py`](../../../tools/live/signedin_check.py) | 224 | 0 | Signs in through nginx and checks health, the reports, the downloads, the stream and the problem list. |
 | [`sse_hold.py`](../../../tools/live/sse_hold.py) | 139 | 0 | Holds a live stream for a number of seconds and says whether it stayed alive: a first frame, no close by the server, something at least every 20 seconds. |
 <!-- /gen -->
 
@@ -66,10 +66,10 @@ Its pieces: the scope (which files get a card), the model (the code read with Ty
 | File | Lines | Exports | What it is |
 |---|---|---|---|
 | [`blocks.mjs`](../../../tools/handover/lib/blocks.mjs) | 114 | 6 | The marker syntax of generated blocks, and the function that reads a page into text and blocks. |
-| [`document.mjs`](../../../tools/handover/lib/document.mjs) | 116 | 7 | Reads one handbook page, renders its blocks and keeps the reading time in its box. |
+| [`document.mjs`](../../../tools/handover/lib/document.mjs) | 114 | 6 | Reads one handbook page, renders its blocks and keeps the reading time in its box. |
 | [`model.mjs`](../../../tools/handover/lib/model.mjs) | 378 | 11 | Reads the code with TypeScript's parser: exports, imports, importers and tests. |
 | [`render.mjs`](../../../tools/handover/lib/render.mjs) | 233 | 11 | Turns the model into the tables, trees, indexes and quoted code of the generated blocks. |
-| [`scope.mjs`](../../../tools/handover/lib/scope.mjs) | 139 | 18 | Decides which files get a card, which folders get a description, and what is never listed. |
+| [`scope.mjs`](../../../tools/handover/lib/scope.mjs) | 128 | 16 | Decides which files get a card, which folders get a description, and what is never listed. |
 <!-- /gen -->
 
 ## deploy
@@ -80,8 +80,8 @@ Its pieces: the scope (which files get a card), the model (the code read with Ty
 <!-- gen:files deploy -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`rebuild.sh`](../../../deploy/rebuild.sh) | 322 | 0 | Rebuilds both portals from the commit, checks their settings first, tags the old images, and checks the new ones. |
-| [`watch.sh`](../../../deploy/watch.sh) | 401 | 0 | Checks that the portals and their containers answer and tells you when they do not; meant to run from a timer. |
+| [`rebuild.sh`](../../../deploy/rebuild.sh) | 349 | 0 | Rebuilds both portals from the commit, checks their settings first, tags the old images, and checks the new ones. |
+| [`watch.sh`](../../../deploy/watch.sh) | 424 | 0 | Checks that the portals and their containers answer and tells you when they do not; meant to run from a timer. |
 <!-- /gen -->
 
 `rebuild.sh` rebuilds both portals from the commit in the folder, the hosted copy first and then the local-model copy beside it. In a git checkout it refuses a tree whose source differs from the commit, because the build is named after the commit and a name that lies is worse than none; a folder with no git is built under the label `unknown`. `--allow-dirty` builds anyway and labels the build with `-dirty`. It checks the settings before it builds, saves the logs of the running containers, tags the images it replaces `rollback-<day><month>`, waits for both containers of each copy to be healthy, asks what an anonymous caller can see, and prints the one check it cannot make itself: the signed-in one. A copy that fails stops the run before the next one. `rebuild.sh --mark-good`, run once the signed-in check has passed, marks the running images `last-good`. If the build or its checks fail, the script lists `last-good` first, the build last marked good, and then the rollback tags it made. It never pushes anything.

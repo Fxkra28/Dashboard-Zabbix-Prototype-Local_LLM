@@ -173,7 +173,11 @@ services:
     logging: *default-logging
 
   portal-web:
-    build: ./web
+    build:
+      context: ./web
+      args:
+        # A new value each month makes the build run `apk upgrade` again instead of reusing its layer (IN-75); deploy/rebuild.sh sets it.
+        APK_ROUND: ${APK_ROUND:-}
     depends_on:
       portal-bff:
         condition: service_healthy

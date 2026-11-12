@@ -1076,7 +1076,7 @@ export interface paths {
          *     `recipients` is the list the portal has saved; until it has saved one, it is the list in `MAIL_TO`, which may be empty.
          *     `max` is the most addresses a list may hold, `allowedDomains` the only domains an address may be in (empty: any), and
          *     `kept` whether the saved list survives a restart of the portal (it does when `PORTAL_STATE_DIR` names a folder that outlives the container).
-         *     The saved list is changed with `PUT` and `DELETE /api/sli/recipients`. While sign-in is off, email is off too (`enabled: false`) unless `ALLOW_EMAIL_WITHOUT_AUTH=true`.
+         *     The saved list is changed with `PUT` and `DELETE /api/sli/recipients`. While sign-in is off, email is off too (`enabled: false`) unless `ALLOW_EMAIL_WITHOUT_AUTH=true`, and `PUT` and `DELETE /api/sli/recipients` answer 503 then, with or without mail settings.
          */
         get: operations["getSliEmail"];
         put?: never;
@@ -1092,7 +1092,8 @@ export interface paths {
          *     Checked in this order: the shape of the body (400), whether email is set up (503 `mail_disabled`), the month, the formats, the
          *     style and the recipients (400, each with a sentence that says what is wrong; a month that has not started, that is more than about 400 days back or that ended less than ten minutes ago, is one of them), the allowance of 5 sends an hour for each person
          *     (429 with `Retry-After`; only a request that gets this far is counted), the mail login (502 `mail_error`, before Zabbix is
-         *     asked, so a wrong password fails in a second), and then the two reports are read and the message is sent. A month that is
+         *     asked, so a wrong password fails in a second), and then the two reports are read and the message is sent. A month in which neither method
+         *     finds a device is not sent (502 `empty_report`). A month that is
          *     not cached can take as long as the download does.
          *
          *     Every send and every failure is logged with the user, the month, the formats, the size, the number of recipients and the
@@ -1448,7 +1449,7 @@ export interface components {
                 recipients: number;
                 refused: number;
                 bytes: number;
-                /** @description A word for why it failed: a mail failure kind, `zabbix`, `recipients`, `not running` or `error`. */
+                /** @description A word for why it failed: a mail failure kind, `zabbix`, `recipients`, `empty`, `not running` or `error`. */
                 reason?: string;
             }[];
             max: number;
@@ -3947,7 +3948,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description `mail_error`, the mail server did not take the report, or `zabbix_error`. The message says which setting to check. */
+            /** @description `mail_error`, the mail server did not take the report, `empty_report`, neither method found a device in that month, so the report would have been empty, or `zabbix_error`. The message says which setting to check, or where to look. */
             502: {
                 headers: {
                     [name: string]: unknown;
@@ -4432,8 +4433,10 @@ export interface operations {
             413: components["responses"]["PayloadTooLarge"];
             /**
              * @description `zabbix_error`. When Zabbix answered with an error, the message says that Zabbix refused the change and may already have
-             *     closed the problem, or the account may not be allowed to change it; Zabbix's own words go to the log. When Zabbix
-             *     could not be reached, it says the data source is not answering.
+             *     closed the problem, or the account may not be allowed to change it; Zabbix's own words go to the log. When the portal
+             *     cannot tell what Zabbix did with the request (an error page, a body that is not JSON-RPC, or a connection that failed
+             *     when the request may have left), it says the change may or may not have been made. When Zabbix could not be reached
+             *     at all, it says the data source is not answering.
              */
             502: {
                 headers: {

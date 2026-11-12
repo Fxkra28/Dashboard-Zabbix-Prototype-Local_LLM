@@ -43,8 +43,16 @@ def month_just_closed():
     return f'{year}-{mon:02d}'
 
 
+if len(sys.argv) < 2 or '-h' in sys.argv or '--help' in sys.argv:
+    print(__doc__.strip())
+    sys.exit(0 if len(sys.argv) > 1 else 2)
 base = sys.argv[1].rstrip('/')
-secs = int(option('--stream-seconds', '80'))
+if not base.startswith(('http://', 'https://')):
+    sys.exit('The first argument is the address of the portal, such as http://localhost:8081. --help shows the whole line.')
+try:
+    secs = int(option('--stream-seconds', '80'))
+except ValueError:
+    sys.exit('--stream-seconds is a whole number of seconds, such as 80')
 expect_mail = option('--expect-mail', 'any')
 if expect_mail not in ('on', 'off', 'any'):
     sys.exit('--expect-mail is on, off or any')
@@ -52,6 +60,20 @@ only_mail = '--only-mail' in sys.argv
 month = option('--month', month_just_closed())  # a closed month, for the report downloads
 if not re.fullmatch(r'\d{4}-(0[1-9]|1[0-2])', month):
     sys.exit('--month is YYYY-MM, such as 2026-10')
+
+
+def without_login(address):
+    """The address as it can be printed, with any login typed into it taken out."""
+    return re.sub(r'^(https?://)[^/@]*@', r'\1', address)
+
+
+missing = [name for name in ('PORTAL_USER', 'PORTAL_PASSWORD') if not os.environ.get(name)]
+if missing:
+    one = len(missing) == 1
+    sys.exit(
+        f"{' and '.join(missing)} {'is' if one else 'are'} not set. Set {'it' if one else 'them'} for this one command, with an administrator's account, as in:\n"
+        f'    PORTAL_USER=... PORTAL_PASSWORD=... python3 -I tools/live/signedin_check.py {without_login(base)}'
+    )
 user, pw = os.environ['PORTAL_USER'], os.environ['PORTAL_PASSWORD']
 
 jar = http.cookiejar.CookieJar()

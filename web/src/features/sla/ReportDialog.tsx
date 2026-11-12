@@ -31,10 +31,10 @@ export interface ReportDialogProps {
 
 export default function ReportDialog({ title, sub, busy = false, onClose, onSubmit, initialFocus, note, actions, children }: ReportDialogProps) {
   const titleId = useId();
-  const form = useRef<HTMLFormElement>(null);
+  const dialog = useRef<HTMLDivElement>(null);
   // Whether the press that ends in a click began on the backdrop: one that began in a box and slipped out must not close it.
   const pressedBackdrop = useRef(false);
-  useDialogFocus(form, initialFocus);
+  useDialogFocus(dialog, initialFocus);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !busy && onClose();
@@ -53,37 +53,34 @@ export default function ReportDialog({ title, sub, busy = false, onClose, onSubm
       }}
       onClick={() => !busy && pressedBackdrop.current && onClose()}
     >
+      {/* The role sits on a div: HTML lets a form take only search, none or presentation (UX-45). */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- only keeps the click from reaching the backdrop */}
-      <form
-        ref={form}
-        className="modal"
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        onClick={(e) => e.stopPropagation()}
-        onSubmit={(e) => {
-          e.preventDefault();
-          onSubmit?.(e);
-        }}
-      >
-        <header className="drawer-head">
-          <div>
-            <h2 id={titleId}>{title}</h2>
-            {sub && <div className="drawer-sub">{sub}</div>}
-          </div>
-          <button type="button" className="drawer-close" onClick={onClose} aria-label="Close the dialog" disabled={busy}>
-            ×
-          </button>
-        </header>
+      <div ref={dialog} className="modal" tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(e) => e.stopPropagation()}>
+        <form
+          className="modal-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSubmit?.(e);
+          }}
+        >
+          <header className="drawer-head" role="none">
+            <div>
+              <h2 id={titleId}>{title}</h2>
+              {sub && <div className="drawer-sub">{sub}</div>}
+            </div>
+            <button type="button" className="drawer-close" onClick={onClose} aria-label="Close the dialog" disabled={busy}>
+              ×
+            </button>
+          </header>
 
-        <div className="drawer-body">{children}</div>
+          <div className="drawer-body">{children}</div>
 
-        <footer className="drawer-foot modal-foot">
-          <span className="muted">{note}</span>
-          <span style={{ display: 'inline-flex', gap: 8 }}>{actions}</span>
-        </footer>
-      </form>
+          <footer className="drawer-foot modal-foot" role="none">
+            <span className="muted">{note}</span>
+            <span style={{ display: 'inline-flex', gap: 8 }}>{actions}</span>
+          </footer>
+        </form>
+      </div>
     </div>,
     document.body,
   );

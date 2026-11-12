@@ -82,7 +82,7 @@ change its schema in the same commit.
   session length in seconds: 43200 at the default 12 hours (`SESSION_HOURS`).
 - Two different rejected tokens. A bad portal JWT is `401 unauthorized`. A bad Zabbix API token is
   `503 zabbix_auth`.
-- Nothing ever returns 504. A Zabbix timeout is `503 zabbix_timeout`; only `zabbix_error` is 502.
+- Nothing ever returns 504. A Zabbix timeout is `503 zabbix_timeout`; `zabbix_error` is the 502 of a Zabbix failure, and `mail_error`, `ai_error` and `empty_report` are 502 too.
 - The slow report paths can answer 200 with an old copy, of any age, on an upstream failure,
   because they are served with `staleIfError`: `/api/reports/availability`, `/api/reports/noise`,
   `/api/reports/capacity` and everything built on the derived monthly SLA (`/api/sli`,

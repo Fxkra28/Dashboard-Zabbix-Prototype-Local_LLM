@@ -706,6 +706,9 @@ describe('computeSli: the hours after the last trend row, in an open month (BK-4
     const r = await computeSli({ month: '2026-09', profile: 'availability' });
     expect(r.hosts[0]!.covered).toBe(fromTrends + 2 * 3600 + 1200);
     expect(historyCalls().every((p) => p.time_from === HOUR - 2 * 3600)).toBe(true);
+    // The ping items count in whole numbers: the history read must ask for that type, or Zabbix answers with nothing.
+    expect(historyCalls().length).toBeGreaterThan(0);
+    expect(historyCalls().every((p) => p.history === 3)).toBe(true);
   });
 
   it('reads the hour in progress, and no more, when the last trend row is older than that', async () => {

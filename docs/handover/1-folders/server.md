@@ -87,15 +87,15 @@ What everything else stands on, and it imports nothing from the other folders. T
 |---|---|---|---|
 | [`acceptEncoding.ts`](../../../server/src/core/acceptEncoding.ts) | 18 | 2 | Reads a client's Accept-Encoding header and says whether gzip is allowed. |
 | [`cache.ts`](../../../server/src/core/cache.ts) | 356 | 15 | The in-memory cache: lifetimes, one fetch shared by concurrent callers, a size cap, an old copy kept while a slow refresh runs, and invalidation after a write. |
-| [`config.ts`](../../../server/src/core/config.ts) | 700 | 20 | Every setting read from the environment, typed, with the checks that refuse an unsafe start. |
+| [`config.ts`](../../../server/src/core/config.ts) | 708 | 21 | Every setting read from the environment, typed, with the checks that refuse an unsafe start. |
 | [`gate.ts`](../../../server/src/core/gate.ts) | 36 | 2 | Lets only so many heavy jobs run at once and queues the rest. |
 | [`mailConfig.ts`](../../../server/src/core/mailConfig.ts) | 233 | 12 | Reads the MAIL_ settings into one checked object, with the reasons when email is off. |
 | [`recipients.ts`](../../../server/src/core/recipients.ts) | 57 | 4 | Checks the addresses a person typed: plain, once each, within the limit and the allowed domains. |
 | [`reportChoices.ts`](../../../server/src/core/reportChoices.ts) | 24 | 8 | The file kinds a report comes in and how it is written: a decimal mark, a date shape, a CSV separator. |
 | [`schemas.ts`](../../../server/src/core/schemas.ts) | 215 | 11 | The JSON Schema of every POST body, and the rule that a query name may be sent only once. |
 | [`staleness.ts`](../../../server/src/core/staleness.ts) | 70 | 6 | Adds the headers that say an answer is an old copy, how old it is, or that a refresh is running. |
-| [`state.ts`](../../../server/src/core/state.ts) | 294 | 11 | The portal's small file of its own: saved recipients, the monthly schedule and a record of sends. |
-| [`validate.ts`](../../../server/src/core/validate.ts) | 55 | 6 | Parses ids and numbers from a query string and turns a bad one into a 400. |
+| [`state.ts`](../../../server/src/core/state.ts) | 298 | 11 | The portal's small file of its own: saved recipients, the monthly schedule and a record of sends. |
+| [`validate.ts`](../../../server/src/core/validate.ts) | 67 | 8 | Parses ids and numbers from a query string and turns a bad one into a 400. |
 <!-- /gen -->
 
 ### clients
@@ -108,9 +108,9 @@ Everything the server calls out to, and nothing else calls out. `zabbix.ts` is t
 |---|---|---|---|
 | [`ai.ts`](../../../server/src/clients/ai.ts) | 754 | 24 | The only place a model credential is used: Explain and the Assistant call hosted Claude or an OpenAI-compatible server from here, and every answer is checked against a schema. |
 | [`limits.ts`](../../../server/src/clients/limits.ts) | 215 | 11 | Per-person caps on the model: calls a minute, and for the hosted model the tokens a day. |
-| [`mail.ts`](../../../server/src/clients/mail.ts) | 165 | 10 | Sends the report as an attachment through the SMTP server the settings name. |
+| [`mail.ts`](../../../server/src/clients/mail.ts) | 177 | 11 | Sends the report as an attachment through the SMTP server the settings name. |
 | [`pinnedTls.ts`](../../../server/src/clients/pinnedTls.ts) | 155 | 8 | Connects to Zabbix with a certificate pinned by fingerprint until a set day, for the time its own certificate had expired. |
-| [`zabbix.ts`](../../../server/src/clients/zabbix.ts) | 189 | 8 | The only place Zabbix tokens are used: zbx reads with the read token, zbxWrite writes with the separate write token, and both give up after a timeout. |
+| [`zabbix.ts`](../../../server/src/clients/zabbix.ts) | 215 | 9 | The only place Zabbix tokens are used: zbx reads with the read token, zbxWrite writes with the separate write token, and both give up after a timeout. |
 <!-- /gen -->
 
 ### domain
@@ -135,7 +135,7 @@ Who may do and see what. `auth.ts` holds sign-in and sign-out, the session cooki
 <!-- gen:files server/src/security -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`audit.ts`](../../../server/src/security/audit.ts) | 95 | 7 | Who used what: one log line for each use of the AI and each report downloaded, and the name of whoever is acting. |
+| [`audit.ts`](../../../server/src/security/audit.ts) | 100 | 8 | Who used what: one log line for each use of the AI and each report downloaded, and the name of whoever is acting. |
 | [`auth.ts`](../../../server/src/security/auth.ts) | 562 | 22 | Sign-in and sign-out, the session cookie, the cross-site check, the role guard on every route, and the sign-in limits. |
 | [`mailLimit.ts`](../../../server/src/security/mailLimit.ts) | 28 | 3 | Five report emails an hour for each person. |
 | [`pageAccess.ts`](../../../server/src/security/pageAccess.ts) | 35 | 2 | Every page of the menu with the API route that fills it, and the role each needs. |
@@ -153,7 +153,7 @@ The rules every request passes, wired in by `index.ts` around the routes and hol
 | File | Lines | Exports | What it is |
 |---|---|---|---|
 | [`compress.ts`](../../../server/src/http/compress.ts) | 84 | 4 | Compresses JSON replies with brotli or gzip, chosen from the request, without a library. |
-| [`errors.ts`](../../../server/src/http/errors.ts) | 120 | 2 | Maps every error to a reply and says in plain words when Zabbix cannot be read. |
+| [`errors.ts`](../../../server/src/http/errors.ts) | 124 | 2 | Maps every error to a reply and says in plain words when Zabbix cannot be read. |
 | [`health.ts`](../../../server/src/http/health.ts) | 195 | 10 | The public health and ready routes: whether the server runs, which build it is, and whether Zabbix and the model answer. |
 | [`hostCheck.ts`](../../../server/src/http/hostCheck.ts) | 46 | 3 | With sign-in off, answers only to a Host header that names this machine. |
 | [`logging.ts`](../../../server/src/http/logging.ts) | 29 | 2 | Keeps a token out of the request log line. |
@@ -181,7 +181,7 @@ Where the work is. A service reads from Zabbix through the clients, rolls the an
 <!-- gen:files server/src/services -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`actions.ts`](../../../server/src/services/actions.ts) | 115 | 14 | The acknowledge and close write-back: validation, the write itself, and the audit line. |
+| [`actions.ts`](../../../server/src/services/actions.ts) | 118 | 15 | The acknowledge and close write-back: validation, the write itself, and the audit line. |
 | [`aging.ts`](../../../server/src/services/aging.ts) | 61 | 3 | Open problems by age, and the ones left unacknowledged longest. |
 | [`assistant.ts`](../../../server/src/services/assistant.ts) | 26 | 25 | The Assistant's entry point, which the route and the tests import and the pieces never do. |
 | [`assistantAnswer.ts`](../../../server/src/services/assistantAnswer.ts) | 212 | 5 | Asks the model with a conversation and returns the answer as it is written, from the hosted API or a local server. |
@@ -194,7 +194,7 @@ Where the work is. A service reads from Zabbix through the clients, rolls the an
 | [`capacity.ts`](../../../server/src/services/capacity.ts) | 341 | 7 | The capacity report: processor, memory, disk and interface use per host over a number of days, from trends. |
 | [`chat.ts`](../../../server/src/services/chat.ts) | 121 | 6 | The Assistant endpoint's logic: turns, history budget, warm slot and the streamed reply. |
 | [`devices.ts`](../../../server/src/services/devices.ts) | 46 | 3 | Every host as a device of one kind, for the Devices page. |
-| [`explain.ts`](../../../server/src/services/explain.ts) | 214 | 9 | The plain-language layer: reads one problem or one SLA figure and asks the model to explain it. |
+| [`explain.ts`](../../../server/src/services/explain.ts) | 218 | 10 | The plain-language layer: reads one problem or one SLA figure and asks the model to explain it. |
 | [`history.ts`](../../../server/src/services/history.ts) | 363 | 17 | The graph pipeline: reads history or trends in pages and returns chart-ready series. |
 | [`hosts.ts`](../../../server/src/services/hosts.ts) | 219 | 17 | Hosts, host groups, a host's items and the latest data, with the page limits. |
 | [`incidents.ts`](../../../server/src/services/incidents.ts) | 277 | 8 | Problem occurrences over a window, read once for the availability and noise reports, including outages that began before it. |
@@ -206,15 +206,15 @@ Where the work is. A service reads from Zabbix through the clients, rolls the an
 | [`net.ts`](../../../server/src/services/net.ts) | 238 | 10 | Network devices and their interfaces, from the SNMP interface items. |
 | [`noise.ts`](../../../server/src/services/noise.ts) | 157 | 6 | The alert-noise report: triggers that flap or fire too often to be useful. |
 | [`portalState.ts`](../../../server/src/services/portalState.ts) | 21 | 3 | The one state store the server uses, opened at start-up. |
-| [`reportPolicy.ts`](../../../server/src/services/reportPolicy.ts) | 32 | 6 | What the slow reports share: how long an answer is kept and how many run at once. |
-| [`reportSchedule.ts`](../../../server/src/services/reportSchedule.ts) | 429 | 3 | The monthly send: what is due each minute, retries for a week, and the notices. |
+| [`reportPolicy.ts`](../../../server/src/services/reportPolicy.ts) | 36 | 8 | What the slow reports share: how long an answer is kept and how many run at once. |
+| [`reportSchedule.ts`](../../../server/src/services/reportSchedule.ts) | 449 | 3 | The monthly send: what is due each minute, retries for a week, and the notices. |
 | [`reports.ts`](../../../server/src/services/reports.ts) | 183 | 7 | The Dashboard's counts, the data clock, problems by group and the top triggers. |
 | [`services.ts`](../../../server/src/services/services.ts) | 186 | 5 | The service tree, from Zabbix's services or derived from the estate. |
 | [`sites.ts`](../../../server/src/services/sites.ts) | 198 | 7 | The site view: hosts grouped by site, with each site's worst problem. |
 | [`sla.ts`](../../../server/src/services/sla.ts) | 112 | 8 | Zabbix's own SLA objects and their figures, read-only. |
-| [`sli.ts`](../../../server/src/services/sli.ts) | 39 | 2 | The derived monthly SLA, cached, for the routes. |
+| [`sli.ts`](../../../server/src/services/sli.ts) | 49 | 3 | The derived monthly SLA, cached, for the routes. |
 | [`sliExport.ts`](../../../server/src/services/sliExport.ts) | 84 | 7 | Chooses the format and file name of the monthly SLA download. |
-| [`sliMail.ts`](../../../server/src/services/sliMail.ts) | 90 | 6 | Tries the mail login, builds the file and the message, and sends them. |
+| [`sliMail.ts`](../../../server/src/services/sliMail.ts) | 97 | 6 | Tries the mail login, builds the file and the message, and sends them. |
 | [`stream.ts`](../../../server/src/services/stream.ts) | 365 | 17 | The live stream hub: one ticker for every connected screen, frames sent only on change, a keep-alive, and a cap on screens. |
 | [`topHosts.ts`](../../../server/src/services/topHosts.ts) | 87 | 6 | The busiest hosts right now by processor and memory. |
 | [`warmUp.ts`](../../../server/src/services/warmUp.ts) | 49 | 2 | Reads the slow views once after a start, one at a time, so the first visitor does not wait. |
@@ -229,7 +229,7 @@ HTTP only. A file here is the HTTP side of one area: it names the paths, reads t
 <!-- gen:files server/src/routes -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`actions.ts`](../../../server/src/routes/actions.ts) | 135 | 1 | Acknowledge and close: the portal's only write, for operators and admins. |
+| [`actions.ts`](../../../server/src/routes/actions.ts) | 140 | 1 | Acknowledge and close: the portal's only write, for operators and admins. |
 | [`analytics.ts`](../../../server/src/routes/analytics.ts) | 45 | 1 | The four heavy reports: availability, alert noise, ageing and capacity. |
 | [`chat.ts`](../../../server/src/routes/chat.ts) | 123 | 1 | The Assistant's streamed answer and its warm-up call. |
 | [`devices.ts`](../../../server/src/routes/devices.ts) | 6 | 1 | The device list: every host as a device of one kind. |
@@ -266,7 +266,7 @@ The derived SLA. HCML's Zabbix has no services configured, so the monthly availa
 | [`engine.ts`](../../../server/src/sli/engine.ts) | 874 | 17 | The derived SLA: monthly availability per host, computed from the ICMP triggers, with maintenance, gaps and coverage. |
 | [`events.ts`](../../../server/src/sli/events.ts) | 171 | 9 | Reads event history in slices so nothing is silently cut off. |
 | [`intervals.ts`](../../../server/src/sli/intervals.ts) | 70 | 7 | Interval arithmetic: merge, clip, intersect and complement. |
-| [`maintenance.ts`](../../../server/src/sli/maintenance.ts) | 156 | 4 | Turns Zabbix maintenance periods into concrete windows per host, so planned downtime can be left out. |
+| [`maintenance.ts`](../../../server/src/sli/maintenance.ts) | 172 | 4 | Turns Zabbix maintenance periods into concrete windows per host, so planned downtime can be left out. |
 | [`schedule.ts`](../../../server/src/sli/schedule.ts) | 108 | 12 | When the monthly report is due and what to do about it now. |
 | [`summary.ts`](../../../server/src/sli/summary.ts) | 75 | 2 | Plain-text lines about the derived SLA and services, for the Assistant's snapshot. |
 | [`time.ts`](../../../server/src/sli/time.ts) | 111 | 11 | Calendar months in a named time zone, as Unix seconds. |

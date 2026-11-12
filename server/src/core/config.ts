@@ -488,13 +488,21 @@ export function writeBackEnabled(): boolean {
   return Boolean(config.zbxWriteToken) && (config.auth.enabled || config.auth.allowWriteWithoutAuth);
 }
 
-/** Why email is refused although it is set up: sign-in is off and the opt-in is not given. Empty otherwise. Read live, like `writeBackEnabled`. */
-export function emailRefusal(): string {
-  if (!config.mail.enabled || config.auth.enabled || config.auth.allowEmailWithoutAuth) return '';
+/**
+ * Why the saved list of recipients and the schedule (and what the page shows of them) are refused: sign-in is off and the opt-in is not given. Empty otherwise,
+ * whether or not mail is set up, so that a list cannot be planted before it is (SC-49). Read live, like `writeBackEnabled`.
+ */
+export function signInRefusal(): string {
+  if (config.auth.enabled || config.auth.allowEmailWithoutAuth) return '';
   return (
     'Email is off while sign-in is off, because anyone who reaches the portal would count as an administrator. ' +
     'For local development only, set ALLOW_EMAIL_WITHOUT_AUTH=true in server/.env and restart the portal.'
   );
+}
+
+/** Why email is refused although it is set up: sign-in is off and the opt-in is not given. Empty otherwise. */
+export function emailRefusal(): string {
+  return config.mail.enabled ? signInRefusal() : '';
 }
 
 /** The mail settings as they apply now: `enabled` is false while email is refused, and `off` says why. */

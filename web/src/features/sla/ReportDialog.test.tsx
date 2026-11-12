@@ -147,7 +147,7 @@ describe('submitting', () => {
   it('stops the browser from submitting the form itself', () => {
     render(<Harness />);
     const submit = new Event('submit', { bubbles: true, cancelable: true });
-    screen.getByRole('dialog').dispatchEvent(submit);
+    screen.getByRole('dialog').querySelector('form')!.dispatchEvent(submit);
     expect(submit.defaultPrevented).toBe(true);
   });
 

@@ -43,8 +43,8 @@ not discovered by a reader.
 - Each running portal has a `JWT_SECRET` of its own since 13 October 2026 (SC-14). A token also names its
   portal (the issuer and audience come from the cookie name), so one minted by :8081 is refused on :8082
   either way; a secret for each copy means a leak of one cannot forge a session on the other.
-- `hcml-portal-ollama` is not under version control at all. Everything in it exists in one place
-  on one disk. B1.
+- `hcml-portal-ollama` had no version control until 11 November 2026. It has a repository of its own now,
+  so what it held before that day exists in one place on one disk. B1, IN-08.
 - The Anthropic API key was flagged for rotation on 10 September. The key the running hosted portal
   holds was refused by Anthropic on 16 October (401, `invalid x-api-key`), so it no longer works and
   Explain and the Assistant of that portal answer nothing until a valid one is in `.env`. FE-02, SC-01.

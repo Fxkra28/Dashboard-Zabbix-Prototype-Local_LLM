@@ -1,5 +1,5 @@
 import type { FastifyRequest } from 'fastify';
-import { ZabbixRefusedError, ZabbixTimeoutError } from '../clients/zabbix.js';
+import { ZabbixRefusedError, ZabbixTimeoutError, ZabbixApiError } from '../clients/zabbix.js';
 import { actor } from '../security/audit.js';
 
 /**
@@ -63,16 +63,19 @@ export async function logAttempt(req: FastifyRequest): Promise<void> {
 }
 
 export const WRITE_REFUSED = 'Zabbix refused the change. It may already be closed, or this account may not be allowed to change it.';
+export const WRITE_UNCLEAR = 'The portal could not tell whether Zabbix took the change, so it may or may not have been made. Look at the problem again before you try it again.';
 export const WRITE_MAY_HAVE_GONE = 'Zabbix did not answer in time, so the change may or may not have been made. Look at the problem again before you try it again.';
 
 /**
- * The answer for a write that failed in a way the general "not answering" would misstate: Zabbix refused it, or timed out with the change
- * possibly made. Zabbix's own words go to the log. Undefined for any other failure, which the error handler words as before.
+ * The answer for a write that failed in a way the general "not answering" would misstate: Zabbix refused it, or timed out or answered
+ * unreadably with the change possibly made. Zabbix's own words go to the log. Undefined for any other failure, which the error handler words as before.
  */
 export function writeFailure(err: unknown, requestId: string): { status: number; error: string; message: string } | undefined {
   const reference = `Tell an administrator and quote reference ${requestId}.`;
   if (err instanceof ZabbixRefusedError) return { status: 502, error: 'zabbix_error', message: `${WRITE_REFUSED} ${reference}` };
   if (err instanceof ZabbixTimeoutError) return { status: 503, error: 'zabbix_timeout', message: `${WRITE_MAY_HAVE_GONE} ${reference}` };
+  // An error page, or a connection that broke after the request went out: the outcome is unknown, as after a timeout.
+  if (err instanceof ZabbixApiError && err.maybeApplied) return { status: 502, error: 'zabbix_error', message: `${WRITE_UNCLEAR} ${reference}` };
   return undefined;
 }
 

@@ -102,6 +102,8 @@ a.btn.sm {
 .drawer-sub {
   font-size: var(--t-base);
   line-height: var(--lh-body);
+  /* A name with no break in it, such as a URL, wraps instead of running past the edge (UX-44). */
+  overflow-wrap: anywhere;
 }
 .drawer-close {
   border: none;
@@ -235,6 +237,13 @@ a.btn.sm {
     transform: translateY(8px) scale(0.99);
     opacity: 0;
   }
+}
+/* The form inside the dialog's own box (UX-45): it is the column, so the body still scrolls between head and foot. */
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .modal-foot {
   display: flex;
