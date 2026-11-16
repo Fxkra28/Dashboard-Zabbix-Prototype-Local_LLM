@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import Fastify, { type FastifyInstance } from 'fastify';
-import { SHUTDOWN_TIMEOUT_MS, closeWith, installShutdown } from '../http/shutdown.js';
+import { SHUTDOWN_TIMEOUT_MS, closeWith, installCrashLog, installShutdown } from '../http/shutdown.js';
 import { streamRoutes } from '../routes/stream.js';
 import { connectedClients } from '../services/stream.js';
 import { invalidate } from '../core/cache.js';
@@ -217,3 +217,58 @@ describe('index.ts', () => {
     expect(withoutComments('// installShutdown(app);\n').search(/^[ \t]*installShutdown\(app\);/m)).toBe(-1);
   });
 });
+
+// BK-68: Node prints a crash to stderr, which a rebuild deletes with the container; the server's own log file never saw it.
+describe('installCrashLog', () => {
+  const rig = () => {
+    const source = new EventEmitter();
+    const exit = vi.fn();
+    const app = { log: { fatal: vi.fn() } } as unknown as FastifyInstance & { log: { fatal: ReturnType<typeof vi.fn> } };
+    const off = installCrashLog(app, { source, exit });
+    return { source, exit, app, off };
+  };
+
+  it('listens for an uncaught exception and an unhandled rejection only, and takes them off again', () => {
+    const { source, off } = rig();
+    expect(source.eventNames().sort()).toEqual(['uncaughtException', 'unhandledRejection']);
+    off();
+    expect(source.eventNames()).toEqual([]);
+  });
+
+  it.each(['uncaughtException', 'unhandledRejection'] as const)('on %s writes one fatal line with the error and exits 1', (event) => {
+    const { source, exit, app } = rig();
+    const err = new Error('Zabbix client fell over');
+    source.emit(event, err);
+    expect(app.log.fatal).toHaveBeenCalledTimes(1);
+    const [fields, message] = app.log.fatal.mock.calls[0] as [{ err: Error }, string];
+    expect(fields.err).toBe(err);
+    expect(message).toContain(event);
+    expect(exit).toHaveBeenCalledExactlyOnceWith(1);
+  });
+
+  it('logs a reason that is not an Error as text, capped, and still exits 1', () => {
+    const text = rig();
+    text.source.emit('unhandledRejection', 'plain text reason');
+    const asText = (text.app.log.fatal.mock.calls[0][0] as { err: Error }).err;
+    expect(asText).toBeInstanceOf(Error);
+    expect(asText.message).toBe('plain text reason');
+    expect(text.exit).toHaveBeenCalledWith(1);
+
+    const object = rig();
+    object.source.emit('unhandledRejection', { code: 'E_ODD', big: 'x'.repeat(5_000) });
+    const asObject = (object.app.log.fatal.mock.calls[0][0] as { err: Error }).err;
+    expect(asObject.message.length).toBeLessThanOrEqual(500);
+    expect(asObject.message).toContain('E_ODD');
+    expect(object.exit).toHaveBeenCalledWith(1);
+  });
+
+  it('writes one line, not two, when a second crash follows the first while the process is going down', () => {
+    const { source, exit, app } = rig();
+    source.emit('uncaughtException', new Error('first'));
+    source.emit('unhandledRejection', new Error('second'));
+    expect(app.log.fatal).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledTimes(2);
+    expect(exit).toHaveBeenNthCalledWith(2, 1);
+  });
+});
+

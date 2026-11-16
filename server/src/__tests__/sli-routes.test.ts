@@ -432,6 +432,18 @@ describe('the verdict of an SLA explanation is the server\'s own comparison, wha
     invalidate('');
   });
 
+  it('sends a person whose Zabbix SLA has no services to the Derived SLA tab, by the name the page gives it', async () => {
+    const { invalidate } = await import('../core/cache.js');
+    invalidate('');
+    estate({
+      'sla.get': () => [{ slaid: '2', name: 'SLA:1', slo: '99', period: '1', status: '1' }],
+      'sla.getsli': () => ({ periods: [], serviceids: [], sli: [] }),
+    });
+    const answer = await zabbixSla();
+    expect((answer as { recommendation: string }).recommendation).toBe('Use the Derived SLA tab on the SLA page, or attach services to this SLA in Zabbix.');
+    invalidate('');
+  });
+
   it('does the same for one of Zabbix\'s own SLAs: met only when every service is at or over its objective', async () => {
     const { invalidate } = await import('../core/cache.js');
     invalidate('');

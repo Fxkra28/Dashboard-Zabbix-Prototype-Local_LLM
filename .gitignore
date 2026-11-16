@@ -5,6 +5,7 @@ build/
 server/.env
 web/.env
 *.log
+*.log.[0-9]*
 .DS_Store
 __pycache__/
 *.pyc
@@ -28,6 +29,9 @@ api-timing.json
 
 # What `npm test` writes in server/ and web/: how many tests ran, which tools/check/facts.check.mjs holds the documents' counts to.
 .test-counts.json
+
+# What `npm run test:coverage` writes in server/ and web/: the report of which lines the tests ran.
+coverage/
 
 # A copy or variant of a secret file, and the portal's state file (saved recipient addresses): never commit them.
 .env.*

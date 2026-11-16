@@ -145,13 +145,13 @@ export function topNoise(report: NoiseReport, top: number): NoiseReport {
   return report.triggers.length <= top ? report : { ...report, triggers: report.triggers.slice(0, top) };
 }
 
-/** The noisiest triggers. The full report is cached once; `top` only cuts what is sent. */
-export async function getNoiseReport(days: number, minSeverity: number, top: number) {
+/** The noisiest triggers. The full report is cached once; `top` only cuts what is sent. Typed: a viewer may ask for any days and floor (BK-70). */
+export async function getNoiseReport(days: number, minSeverity: number, top: number, signal?: AbortSignal) {
   const report = await cached(
     `noise:${days}:${minSeverity}`,
     REPORT_TTL,
-    () => heavy.run(() => getNoise(days, minSeverity)),
-    staleReport(REPORT_TTL),
+    (f) => heavy.run(() => getNoise(days, minSeverity), f),
+    { ...staleReport(REPORT_TTL), typed: true, signal },
   );
   return topNoise(report, top);
 }

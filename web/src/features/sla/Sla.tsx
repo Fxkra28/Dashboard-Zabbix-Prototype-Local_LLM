@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../api';
 import { useAsync } from '../../shared/hooks/useAsync';
@@ -14,19 +14,25 @@ import EmailReport from './EmailReport';
 import ReportDownload from './ReportDownload';
 import {
   CoverageText,
-  DERIVED_BANNER,
+  DERIVED_SLA_BANNER,
   GapsNote,
   METHOD_LABEL,
   METHOD_NOTE,
   MethodToggle,
   MonthSelect,
   NoDataPill,
+  ROLLING_WINDOWS,
   SliPill,
+  webNote,
   fmtDur,
   fmtPct,
   lastClosedMonth,
+  rollingDays,
 } from './Sli';
-import { staleCopyOf, staleWhen } from '../../shared/lib/freshness';
+import ResponseTab from './Response';
+import RollingSla from './Rolling';
+import { sitesBelowCard } from './sitesBelow';
+import { momentWords, staleCopyOf, staleWhen } from '../../shared/lib/freshness';
 import { naturalCompare } from '../../shared/lib/sites';
 import { recentMonths } from '../../shared/lib/time';
 import { useReportTimeZone } from '../../shared/hooks/useReportTimeZone';
@@ -275,9 +281,9 @@ function GroupTable({
   );
 }
 
-type SortKey = 'name' | 'site' | 'category' | 'sli' | 'downtime' | 'coverage';
+type SortKey = 'name' | 'site' | 'category' | 'sli' | 'downtime' | 'incidents' | 'longest' | 'coverage';
 
-const SORT_KEYS: SortKey[] = ['name', 'site', 'category', 'sli', 'downtime', 'coverage'];
+const SORT_KEYS: SortKey[] = ['name', 'site', 'category', 'sli', 'downtime', 'incidents', 'longest', 'coverage'];
 /** URL form of the device sort: `sli` ascending, `-sli` descending. */
 const SORTS = SORT_KEYS.flatMap((k) => [k, `-${k}`]);
 
@@ -305,6 +311,10 @@ function DeviceTable({ report }: { report: SliReport }) {
           return h.sli ?? 0;
         case 'downtime':
           return h.downtime;
+        case 'incidents':
+          return h.incidents;
+        case 'longest':
+          return h.longest;
         case 'coverage':
           return h.coverage;
       }
@@ -366,6 +376,8 @@ function DeviceTable({ report }: { report: SliReport }) {
               {head('category', 'Category')}
               {head('sli', 'Availability')}
               {head('downtime', 'Downtime')}
+              {head('incidents', 'Incidents')}
+              {head('longest', 'Longest')}
               {head('coverage', 'Coverage')}
             </tr>
           </thead>
@@ -382,6 +394,8 @@ function DeviceTable({ report }: { report: SliReport }) {
                   <SliPill sli={h.sli} target={report.target} dataStatus={h.dataStatus} />
                 </td>
                 <td className="muted nowrap">{h.sli === null ? <NoData /> : fmtDur(h.downtime)}</td>
+                <td className="muted">{h.sli === null ? <NoData /> : h.incidents}</td>
+                <td className="muted nowrap">{h.sli === null ? <NoData /> : fmtDur(h.longest)}</td>
                 <td>
                   <CoverageText coverage={h.coverage} />
                 </td>
@@ -466,9 +480,15 @@ function PathsTable({ report }: { report: SliReport }) {
 }
 
 function WebTable({ report }: { report: SliReport }) {
+  const note = webNote(report);
   return (
     <div className="panel">
       <h2>Web checks</h2>
+      {note && (
+        <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+          {note}
+        </div>
+      )}
       {report.web.length ? (
         <TableWrap label="Web checks">
           <table className="data compact">
@@ -567,15 +587,17 @@ const budgetUsed = (pct: number) => {
 function DerivedKpis({
   strict,
   hcml,
-  shown,
+  hcmlError,
 }: {
   strict: SliReport;
   hcml: SliReport | null;
-  shown: SliReport;
+  /** Why the HCML read failed, so that its card does not stay at "calculating" (FR-52). */
+  hcmlError: string | null;
 }) {
   const target = strict.target;
   const o = strict.overall;
-  const below = shown.sites.filter((s) => s.meeting === false);
+  // The strict method only, like the cards beside it and like the report files, whichever method the tables use (FR-50).
+  const sitesCard = sitesBelowCard(strict.sites, target);
   const allowance = 100 - target;
   const used = o.sli === null || allowance <= 0 ? null : ((100 - o.sli) / allowance) * 100;
   const hcmlSli = hcml?.overall.sli ?? null;
@@ -591,13 +613,15 @@ function DerivedKpis({
       />
       <KpiCard
         label="HCML report method"
-        value={hcml ? fmtPct(hcmlSli, PERCENT_DP.availability, target) : '…'}
+        value={hcml ? fmtPct(hcmlSli, PERCENT_DP.availability, target) : hcmlError ? '—' : '…'}
         sub={
           hcml
             ? `ping loss only · ${hcml.overall.meeting ? 'met' : 'missed'} ${target}%`
-            : 'calculating…'
+            : hcmlError
+              ? `Not available: ${hcmlError}`
+              : 'calculating…'
         }
-        accent="var(--primary-light)"
+        accent="var(--mid)"
       />
       <KpiCard
         label="Devices measured"
@@ -605,17 +629,10 @@ function DerivedKpis({
         sub={`${o.hosts - o.withData} without data (not counted)`}
       />
       <KpiCard
-        label="Sites below target"
-        value={below.length}
-        sub={
-          below.length
-            ? below
-                .slice(0, 3)
-                .map((s) => s.name)
-                .join(', ') + (below.length > 3 ? ` +${below.length - 3}` : '')
-            : `all sites at or above ${target}%`
-        }
-        accent={below.length ? 'var(--danger)' : 'var(--good)'}
+        label="Sites below target (strict)"
+        value={sitesCard.value}
+        sub={sitesCard.sub}
+        accent={sitesCard.value ? 'var(--danger)' : 'var(--good)'}
       />
       <KpiCard
         label="Error budget used"
@@ -646,17 +663,28 @@ function HcmlStaleNote({ strict, hcml }: { strict: SliReport; hcml: SliReport | 
 
 const PROFILES: SliProfile[] = ['availability', 'hcml-report'];
 
-function DerivedSla() {
+const OPEN_MONTH_REFRESH_MS = 5 * 60_000;
+
+/** One calendar month by both methods: the report with its files, its email and its Explain. */
+function MonthlySla({
+  month,
+  setMonth,
+  method,
+  setMethod,
+}: {
+  month: string;
+  setMonth: (m: string) => void;
+  method: SliProfile;
+  setMethod: (m: SliProfile) => void;
+}) {
   const zone = useReportTimeZone();
-  const months = useMemo(() => recentMonths(12, zone), [zone]);
-  // Month and method live in the URL, so Back from a device graph returns to the same report.
-  const [month, setMonth] = useUrlState<string>('month', lastClosedMonth(), { options: months });
-  const [method, setMethod] = useUrlState<SliProfile>('method', 'availability', { options: PROFILES });
   const [explaining, setExplaining] = useState<DerivedSlaScope | null>(null);
   const aiEnabled = useAiEnabled();
 
-  const strictQ = useAsync<SliReport>(() => api.sli(month, 'availability'), [month]);
-  const hcmlQ = useAsync<SliReport>(() => api.sli(month, 'hcml-report'), [month]);
+  // The server keeps a month that is still running for five minutes; a tab left open reads it again about as often (FR-51).
+  const running = month === recentMonths(1, zone)[0];
+  const strictQ = useAsync<SliReport>(() => api.sli(month, 'availability'), [month], running ? OPEN_MONTH_REFRESH_MS : undefined);
+  const hcmlQ = useAsync<SliReport>(() => api.sli(month, 'hcml-report'), [month], running ? OPEN_MONTH_REFRESH_MS : undefined);
   const shownQ = method === 'availability' ? strictQ : hcmlQ;
 
   // A stale month's report must not sit under the new month's heading.
@@ -678,12 +706,12 @@ function DerivedSla() {
   return (
     <>
       <div className="notice sli-banner">
-        <strong>{DERIVED_BANNER}.</strong> Computed in the portal from each device’s ICMP triggers,
-        monthly in {zone} time; nothing is written to Zabbix.
+        <strong>{DERIVED_SLA_BANNER}.</strong> Computed in the portal from each device’s ICMP triggers,
+        monthly in {zone} time{strict?.generatedAt ? `, as of ${momentWords(strict.generatedAt * 1000)}` : ''}; nothing is written to Zabbix.
       </div>
 
       <div className="controls">
-        <MonthSelect value={month} onChange={setMonth} />
+        <MonthSelect rolling value={month} onChange={setMonth} label="Period" />
         <MethodToggle value={method} onChange={setMethod} label="Tables use" />
         {aiEnabled && (
           <FieldSpacer>
@@ -706,11 +734,12 @@ function DerivedSla() {
         data={strict}
         updatedAt={strictQ.updatedAt}
         loadingLabel="Measuring the month…"
+        onRetry={strictQ.reload}
       >
         {(s) => (
           <>
             <HcmlStaleNote strict={s} hcml={hcml} />
-            <DerivedKpis strict={s} hcml={hcml} shown={shown ?? s} />
+            <DerivedKpis strict={s} hcml={hcml} hcmlError={hcmlQ.error} />
             <p className="sli-method-note">
               <strong>Why two figures?</strong> {METHOD_NOTE}
               {!s.closed && <em> This month is still running: figures so far.</em>}
@@ -728,6 +757,7 @@ function DerivedSla() {
           data={shown}
           updatedAt={shownQ.updatedAt}
           loadingLabel={`Calculating with the ${METHOD_LABEL[method]}…`}
+          onRetry={shownQ.reload}
         >
           {(r) => (
             <div className="grid sli-grid">
@@ -763,9 +793,39 @@ function DerivedSla() {
 }
 
 
-const TABS = ['', 'derived', 'zabbix'] as const;
-/** The two tabs, left to right: the order the arrow keys walk. */
-const SOURCES = ['derived', 'zabbix'] as const;
+/** The period is a month, or the last 7 or 30 days; both ride in the one `month` value of the address, and the method with them. */
+function DerivedSla() {
+  const zone = useReportTimeZone();
+  const months = useMemo(() => recentMonths(12, zone), [zone]);
+  const periods = useMemo(() => [...ROLLING_WINDOWS.map((w) => w.key), ...months], [months]);
+  // Period and method live in the URL, so Back from a device graph returns to the same report.
+  // The default is the last closed month, which moves on the 1st: it is written into the address so that a shared link keeps the month (FR-53).
+  const [period, setPeriod] = useUrlState<string>('month', lastClosedMonth(), { options: periods, keepDefault: true });
+  const [method, setMethod] = useUrlState<SliProfile>('method', 'availability', { options: PROFILES });
+  const days = rollingDays(period);
+  const isMonth = days === null;
+  // A month and a window are drawn by different views, so the select the person is on is drawn again; focus goes back to the new one.
+  const refocus = useRef(false);
+  const pick = (next: string) => {
+    const crossing = (rollingDays(next) === null) !== isMonth;
+    refocus.current = crossing && document.activeElement?.hasAttribute('data-period') === true;
+    setPeriod(next);
+  };
+  useLayoutEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    document.querySelector<HTMLSelectElement>('select[data-period]')?.focus();
+  }, [isMonth]);
+  return days === null ? (
+    <MonthlySla month={period} setMonth={pick} method={method} setMethod={setMethod} />
+  ) : (
+    <RollingSla days={days} period={period} setPeriod={pick} method={method} setMethod={setMethod} />
+  );
+}
+
+const TABS = ['', 'derived', 'zabbix', 'response'] as const;
+type View = 'derived' | 'zabbix' | 'response';
+const VIEW_LABEL: Record<View, string> = { derived: 'Derived SLA', zabbix: 'Zabbix SLAs', response: 'Response' };
 
 export default function SlaPage() {
   // Whether Zabbix's own SLAs have data doesn't change while the page is open: ask once.
@@ -773,68 +833,67 @@ export default function SlaPage() {
   // '' = the default for this Zabbix: its own SLAs when they have data, else derived.
   const [tab, setTab] = useUrlState<(typeof TABS)[number]>('tab', '', { options: TABS });
   const real = source.data?.real ?? false;
-  const current = tab || (real ? 'zabbix' : 'derived');
+  // The views, left to right: the order the arrow keys walk. Zabbix's own SLAs come in only when they have data.
+  const views: View[] = real ? ['derived', 'zabbix', 'response'] : ['derived', 'response'];
+  const wanted: View = tab === '' ? (real ? 'zabbix' : 'derived') : tab;
+  const current: View = views.includes(wanted) ? wanted : 'derived';
 
   // The ARIA tabs pattern: one tab stop for the list, arrow keys between tabs, a panel they control.
   const tabsId = useId();
   const tabButtons = useRef<Record<string, HTMLButtonElement | null>>({});
-  const tabId = (source: string) => `${tabsId}-tab-${source}`;
+  const tabId = (view: string) => `${tabsId}-tab-${view}`;
   const panelId = `${tabsId}-panel`;
   const onTabKeys = (e: React.KeyboardEvent) => {
-    const at = SOURCES.indexOf(current === 'zabbix' ? 'zabbix' : 'derived');
+    // Alt or Cmd with an arrow is the browser's Back and Forward.
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    const at = views.indexOf(current);
     const to =
-      e.key === 'ArrowRight' ? (at + 1) % SOURCES.length
-      : e.key === 'ArrowLeft' ? (at - 1 + SOURCES.length) % SOURCES.length
+      e.key === 'ArrowRight' ? (at + 1) % views.length
+      : e.key === 'ArrowLeft' ? (at - 1 + views.length) % views.length
       : e.key === 'Home' ? 0
-      : e.key === 'End' ? SOURCES.length - 1
+      : e.key === 'End' ? views.length - 1
       : null;
     if (to === null) return;
     e.preventDefault();
-    setTab(SOURCES[to]);
-    tabButtons.current[SOURCES[to]]?.focus();
+    setTab(views[to]);
+    tabButtons.current[views[to]]?.focus();
   };
-  const content = current === 'zabbix' && real ? <ZabbixSlas /> : <DerivedSla />;
+  const content = current === 'zabbix' ? <ZabbixSlas /> : current === 'response' ? <ResponseTab /> : <DerivedSla />;
 
   return (
     <>
-      {real ? (
-        // eslint-disable-next-line jsx-a11y/interactive-supports-focus -- the tabs inside hold the focus; the list only hears the arrow keys
-        <div className="seg sli-tabs" role="tablist" aria-label="SLA source" onKeyDown={onTabKeys}>
-          {SOURCES.map((source) => (
-            <button
-              key={source}
-              ref={(el) => {
-                tabButtons.current[source] = el;
-              }}
-              id={tabId(source)}
-              role="tab"
-              type="button"
-              aria-selected={current === source}
-              aria-controls={panelId}
-              tabIndex={current === source ? 0 : -1}
-              className={current === source ? 'on' : ''}
-              onClick={() => setTab(source)}
-            >
-              {source === 'derived' ? 'Derived monthly SLA' : 'Zabbix SLAs'}
-            </button>
-          ))}
+      {/* eslint-disable-next-line jsx-a11y/interactive-supports-focus -- the tabs inside hold the focus; the list only hears the arrow keys */}
+      <div className="seg sli-tabs" role="tablist" aria-label="SLA view" onKeyDown={onTabKeys}>
+        {views.map((view) => (
+          <button
+            key={view}
+            ref={(el) => {
+              tabButtons.current[view] = el;
+            }}
+            id={tabId(view)}
+            role="tab"
+            type="button"
+            aria-selected={current === view}
+            aria-controls={panelId}
+            tabIndex={current === view ? 0 : -1}
+            className={current === view ? 'on' : ''}
+            onClick={() => setTab(view)}
+          >
+            {VIEW_LABEL[view]}
+          </button>
+        ))}
+      </div>
+
+      {!real && current === 'derived' && source.data && (
+        <div className="muted sli-source-note">
+          Zabbix has {source.data.slas} SLA{source.data.slas === 1 ? '' : 's'} with{' '}
+          {source.data.services ? `${count(source.data.services, 'service')} but no measurements` : 'no services attached'}
+          , so this page shows the SLA derived in the portal.
         </div>
-      ) : (
-        source.data && (
-          <div className="muted sli-source-note">
-            Zabbix has {source.data.slas} SLA{source.data.slas === 1 ? '' : 's'} with{' '}
-            {source.data.services ? `${count(source.data.services, 'service')} but no measurements` : 'no services attached'}
-            , so this page shows the SLA derived in the portal.
-          </div>
-        )
       )}
 
-      {/* One wrapper either way: swapping it in when the source answers would remount the panel and fetch its report twice. */}
-      <div
-        {...(real
-          ? { role: 'tabpanel', id: panelId, 'aria-labelledby': tabId(current === 'zabbix' ? 'zabbix' : 'derived') }
-          : {})}
-      >
+      {/* One wrapper whatever the views: a view appearing when the source answers would otherwise remount the panel and fetch its report twice. */}
+      <div role="tabpanel" id={panelId} aria-labelledby={tabId(current)}>
         {content}
       </div>
 

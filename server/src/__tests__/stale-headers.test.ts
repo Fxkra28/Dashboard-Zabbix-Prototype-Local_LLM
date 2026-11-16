@@ -3,7 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { cached, invalidate, REFRESH_RETRY_MS } from '../core/cache.js';
 import { registerCompression } from '../http/compress.js';
 import { registerErrorHandler } from '../http/errors.js';
-import { AGE_HEADER, STALE_HEADER, noteStale, registerStaleHeaders } from '../core/staleness.js';
+import { AGE_HEADER, REFRESHING_HEADER, STALE_HEADER, noteStale, registerStaleHeaders } from '../core/staleness.js';
 
 /**
  * An answer that is an old copy kept because Zabbix failed
@@ -17,6 +17,7 @@ vi.mock('../sli/engine.js', async (importOriginal) => {
 });
 
 const { sliRoutes } = await import('../routes/sli.js');
+const { analyticsRoutes } = await import('../routes/analytics.js');
 
 const NOW = new Date('2026-10-02T03:00:00Z');
 const DAY = 86_400_000;
@@ -164,6 +165,40 @@ describe('stale headers per request', () => {
     later(30_000);
     const res = await app.inject({ url: '/hit' });
     expect(res.headers[STALE_HEADER.toLowerCase()]).toBeUndefined();
+    await app.close();
+  });
+});
+
+describe('the availability report past its lifetime (BK-73)', () => {
+  /** What the engine answers, as far as the report reads it. */
+  const derived = (marker: string) => ({ marker, from: 1, end: 2, hosts: [], profile: 'availability', month: '2026-08', target: 99.9, overall: {}, categories: [], sites: [], gaps: [], noDataWindows: [] });
+
+  it('answers a window with its last copy, marked refreshing and aged', async () => {
+    const app = await appWith(analyticsRoutes);
+    computeMock.mockResolvedValue(derived('window'));
+    expect((await app.inject({ url: '/api/reports/availability?days=7' })).headers[REFRESHING_HEADER.toLowerCase()]).toBeUndefined();
+
+    later(150_000); // past the 120 s it is kept, inside the 120 s it may be served while a new one is read
+    const res = await app.inject({ url: '/api/reports/availability?days=7' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers[REFRESHING_HEADER.toLowerCase()]).toBe('true');
+    expect(res.headers[AGE_HEADER.toLowerCase()]).toBe('150');
+    await app.close();
+  });
+
+  it('answers a month as /api/sli does, past its lifetime, with neither header and no generatedAt', async () => {
+    const app = await appWith(analyticsRoutes);
+    computeMock.mockResolvedValue(derived('august'));
+    const live = await app.inject({ url: '/api/reports/availability?month=2026-08' });
+    expect(live.statusCode).toBe(200);
+
+    later(DAY + 60_000); // past the day a closed month is kept, inside the day it may be served while a new one is read
+    const res = await app.inject({ url: '/api/reports/availability?month=2026-08' });
+    expect(res.statusCode).toBe(200);
+    expect(res.headers[REFRESHING_HEADER.toLowerCase()]).toBeUndefined();
+    expect(res.headers[AGE_HEADER.toLowerCase()]).toBeUndefined();
+    expect(res.headers[STALE_HEADER.toLowerCase()]).toBeUndefined();
+    expect(res.json()).not.toHaveProperty('generatedAt');
     await app.close();
   });
 });

@@ -40,3 +40,49 @@ describe('the target beside a service’s figure', () => {
     expect(rule).toMatch(/color:\s*var\(--muted\)/);
   });
 });
+
+// UX-54: the asterisk was drawn at opacity 0.7, which the pairs the checker computes cannot see: about 3.1 to 1 in a Met pill in the light theme.
+describe('the asterisk that marks a figure measured on partial data', () => {
+  const rule = /\.sli-partial\s*\{([^}]*)\}/.exec(stylesheet)?.[1] ?? '';
+
+  it('is drawn at full strength, in the pill’s own colour, and not faded by opacity', () => {
+    expect(rule).not.toBe('');
+    expect(rule).not.toMatch(/opacity/);
+    expect(rule).not.toMatch(/\bcolor:/);
+  });
+
+  it('therefore sits in the pairs the checker does compute: the pill’s status word on the pill’s chip', () => {
+    for (const status of ['good', 'danger']) expect(has(`--${status}-text`, `--${status}-bg`), `--${status}-text on --${status}-bg`).toBe(true);
+  });
+});
+
+
+// UX-59: the count in a Status button of the Network page was drawn at opacity 0.75, about 3.6 to 1 in both themes, and no pair of tokens describes it.
+describe('the count inside a segmented button', () => {
+  const rule = /\.seg-count\s*\{([^}]*)\}/.exec(stylesheet)?.[1] ?? '';
+
+  it('has a colour of its own and is not faded by opacity', () => {
+    expect(rule).not.toBe('');
+    expect(rule).not.toMatch(/opacity/);
+    expect(rule).toMatch(/color:\s*var\(--muted\)/);
+  });
+
+  it('therefore sits in the pairs the checker does compute: the muted text on the plane the buttons are drawn on', () => {
+    expect(has('--muted', '--surface')).toBe(true);
+  });
+});
+
+// UX-51: the room kept under the sticky bar was a fixed 72 px, and the bar wraps taller than that on a narrow window and at high zoom.
+describe('the room the page keeps under the sticky top bar', () => {
+  const rule = /\bhtml\s*\{([^}]*scroll-padding-top[^}]*)\}/.exec(stylesheet)?.[1] ?? '';
+
+  it('is the bar’s measured height, not a fixed number of pixels', () => {
+    expect(rule).not.toBe('');
+    expect(rule).toMatch(/scroll-padding-top:\s*calc\(var\(--topbar-h,\s*64px\)\s*\+\s*var\(--s-2\)\)/);
+    expect(rule).not.toMatch(/scroll-padding-top:\s*\d+px/);
+  });
+
+  it('starts from the 64px floor of the bar, so the room is right before the bar has been measured', () => {
+    expect(/\.topbar\s*\{[^}]*min-height:\s*64px/.test(stylesheet)).toBe(true);
+  });
+});

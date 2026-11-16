@@ -58,6 +58,8 @@ services:
       # Live screens allowed at once, overall and per signed-in user (services/stream.ts).
       STREAM_MAX_CLIENTS: ${STREAM_MAX_CLIENTS:-100}
       STREAM_MAX_PER_USER: ${STREAM_MAX_PER_USER:-5}
+      # Events one person may acknowledge or close in a minute, the two together (at least 50, one full request).
+      ACTION_EVENTS_PER_MINUTE: ${ACTION_EVENTS_PER_MINUTE:-200}
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8082}
       NET_GROUP_IDS: ${NET_GROUP_IDS:-}
       SITE_TAG: ${SITE_TAG:-site}
@@ -95,6 +97,10 @@ services:
       AI_PROVIDER: openai-compatible
       AI_API_KEY: ${AI_API_KEY:-}
       AI_BASE_URL: ${AI_BASE_URL:-http://host.docker.internal:11434/v1}
+      # The server refuses to start with a model outside this machine's own network, so one line in .env cannot undo
+      # what this copy is for; AI_ALLOW_REMOTE=true in .env is the owner's word that it is meant (SC-53).
+      AI_LOCAL_ONLY: 'true'
+      AI_ALLOW_REMOTE: ${AI_ALLOW_REMOTE:-}
       # No defaults for these two on purpose. config.ts picks a different one
       # per backend (claude-sonnet-4-6 / 30 s hosted, qwen3:8b / 120 s local),
       # and a default here would override that and silently ask Ollama for a
@@ -120,6 +126,9 @@ services:
       AI_DAILY_TOKENS_TOTAL: ${AI_DAILY_TOKENS_TOTAL:-2000000}
       # No MAIL_ settings here, on purpose: this copy exists so that nothing leaves the machine, so it never emails a report.
       # hcml-portal passes them. compose-env.test.ts pins the difference (ADR-0014).
+      # Where the portal keeps the web check figures of the months that have closed (services/closedWebStore.ts, ADR 0016): the volume at the bottom of this file.
+      # No recipients or schedule here: this copy never emails.
+      PORTAL_STATE_DIR: /data
       # Deployed, not scaffolded: default auth ON here.
       AUTH_ENABLED: ${AUTH_ENABLED:-true}
       # No default on purpose. The BFF refuses to start on the placeholder
@@ -139,6 +148,11 @@ services:
       # raised. Each default is config.ts's own; a test keeps the two equal.
       SESSION_HOURS: ${SESSION_HOURS:-12}
       SESSION_EPOCH: ${SESSION_EPOCH:-1}
+      # The BFF's own copy of its log, in the volume at the bottom of this file, so what was logged outlives a rebuild
+      # (core/logFile.ts). The two numbers set how much it keeps: this many files of this many megabytes each.
+      LOG_DIR: /var/log/portal
+      LOG_FILE_MAX_MB: ${LOG_FILE_MAX_MB:-20}
+      LOG_FILE_KEEP: ${LOG_FILE_KEEP:-10}
     expose:
       - "4000"
     # Healthy means the process answers. Whether Zabbix does too is `ready` in the
@@ -152,11 +166,14 @@ services:
       start_period: 15s
     # Least privilege. This container holds both Zabbix tokens and the AI key, so it
     # runs as the image's non-root node user, with every Linux capability dropped, a
-    # read-only root filesystem and no way to gain privileges. It writes no files; /tmp
-    # is a small in-memory scratch space.
+    # read-only root filesystem and no way to gain privileges. It writes only to two volumes, the web check figures of closed months
+    # at /data and its own copy of the log at /var/log/portal; /tmp is a small in-memory scratch space.
     read_only: true
     tmpfs:
       - /tmp:size=16m
+    volumes:
+      - portal-state:/data
+      - portal-logs:/var/log/portal
     cap_drop:
       - ALL
     security_opt:
@@ -219,3 +236,12 @@ services:
   # redis:
   #   image: redis:7-alpine
   #   restart: unless-stopped
+
+# The web check figures of the months that have closed (services/closedWebStore.ts), kept as they were when first read. A named volume, so it
+# outlives a rebuild. `docker compose down -v` deletes it, and so does removing the volume by hand; the figures are then taken again from Zabbix.
+volumes:
+  portal-state:
+
+# The BFF's own copy of its log (core/logFile.ts), kept by size and by count. A named volume, so it outlives a rebuild.
+# `docker compose down -v` deletes it, and so does removing the volume by hand.
+  portal-logs:

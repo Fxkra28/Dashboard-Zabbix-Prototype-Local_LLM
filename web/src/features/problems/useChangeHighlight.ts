@@ -6,21 +6,6 @@ export type ChangeMark = 'new' | 'cleared';
 /** How long a problem that appeared stays marked, and one that cleared stays on screen. */
 export const HIGHLIGHT_MS = 10_000;
 
-const REDUCED_MOTION = '(prefers-reduced-motion: reduce)';
-
-/** Whether the user has asked the system for less motion, following changes to the setting. */
-export function useReducedMotion(): boolean {
-  const [reduce, setReduce] = useState(() => window.matchMedia?.(REDUCED_MOTION).matches ?? false);
-  useEffect(() => {
-    const query = window.matchMedia?.(REDUCED_MOTION);
-    if (!query) return;
-    const onChange = () => setReduce(query.matches);
-    query.addEventListener('change', onChange);
-    return () => query.removeEventListener('change', onChange);
-  }, []);
-  return reduce;
-}
-
 /**
  * Problems that appeared in or cleared from the open list, for the wall
  * screen's short highlight (DESIGN.md section 9). A cleared problem

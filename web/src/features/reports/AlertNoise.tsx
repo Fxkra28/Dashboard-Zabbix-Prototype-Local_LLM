@@ -77,11 +77,12 @@ export default function AlertNoise() {
     return list.filter((t) => t.flags.includes(flag));
   }, [q.data, flag]);
 
-  // The rows on screen, so a filtered file says so in its name and is not mistaken for the full list.
+  // The rows on screen, so a filtered file says so in its name and is not mistaken for the full list. The days come from the report itself: a new period may still be loading (FR-54).
   const download = () => {
     const shown = flag === 'all' ? '' : `-${flag}`;
     const day = dayInZone(Date.now());
-    downloadCsv(`hcml-alert-noise-${days}d${shown}-${day}.csv`, csvRows(rows));
+    const held = q.data ? Math.round(q.data.windowSeconds / 86_400) : days;
+    downloadCsv(`hcml-alert-noise-${held}d${shown}-${day}.csv`, csvRows(rows));
   };
 
   return (
@@ -135,6 +136,7 @@ export default function AlertNoise() {
         stale={q.stale}
         updatedAt={q.updatedAt}
         loadingLabel="Replaying event history…"
+        onRetry={q.reload}
       >
         {(data) => {
           if (!data.totalEvents) {

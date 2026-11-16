@@ -2,6 +2,7 @@ import { zbx } from '../clients/zabbix.js';
 import { cached, cacheLogger } from '../core/cache.js';
 import { cachedProblems, openProblems } from '../domain/queries.js';
 import { collectingStatus, getCollecting } from '../domain/reachability.js';
+import { heavy } from './reportPolicy.js';
 
 /** One page of event history. Bounds the read and flags when it was hit. */
 const EVENT_LIMIT = 10_000;
@@ -11,9 +12,10 @@ const EVENT_LIMIT = 10_000;
  * The window is clamped by the caller and the fetch bounded, against real event history a
  * 20k unbounded read is slow and grows without limit.
  */
-export function getTopTriggers(days: number) {
+export function getTopTriggers(days: number, signal?: AbortSignal) {
   const from = Math.floor(Date.now() / 1000) - days * 86400;
-  return cached(`toptrig:${days}`, 60_000, async () => {
+  // Behind the gate of the heavy reports, and typed: a viewer may ask for any of 365 days (BK-61).
+  return cached(`toptrig:${days}`, 60_000, (f) => heavy.run(async () => {
     const events = await zbx<
       {
         objectid: string;
@@ -54,7 +56,7 @@ export function getTopTriggers(days: number) {
     // Say so when the window was busier than one page, otherwise the counts
     // silently understate and look authoritative.
     return { triggers: top, truncated: events.length >= EVENT_LIMIT, days };
-  });
+  }, f), { typed: true, signal });
 }
 
 /**

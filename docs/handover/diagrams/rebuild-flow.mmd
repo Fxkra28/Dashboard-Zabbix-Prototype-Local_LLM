@@ -5,12 +5,14 @@ flowchart TD
     %% deploy/rebuild.sh, in the order it runs. Start with the dry-run option: it prints every command and runs none.
     %% A folder with no git is built too (labelled unknown, no live tag). The script never marks last-good itself: that is the separate --mark-good run.
 
-    A["rebuild.sh"] --> B{"A git checkout?"}
+    A["rebuild.sh"] --> Z{"Docker installed,<br/>and answering within 20 s?"}
+    Z -->|"no"| Y["Stop: nothing was changed"]
+    Z -->|"yes"| B{"A git checkout?"}
     B -->|"no: the build is labelled unknown,<br/>and no live tag is made"| C
     B -->|"yes"| B2{"A clean tree?"}
     B2 -->|"changed files and<br/>no allow-dirty option"| X["Stop"]
     B2 -->|"clean, or dirty allowed:<br/>the build is labelled dirty"| C["Gate: parity check<br/>when both copies are there"]
-    C --> D["Gate: npm run verify<br/>unless skipped"]
+    C --> D["Gate: npm run verify in each copy,<br/>one after the other, unless skipped"]
     D --> E["Gate: docker can read<br/>each copy's settings"]
     E --> S["For each copy, the hosted one first:<br/>save its logs"]
     S --> F["Tag the images being replaced<br/>rollback-day-month"]
@@ -23,4 +25,4 @@ flowchart TD
     I -->|"all ok, the last copy"| J["On a clean git tree: make the<br/>local tag live-date, never pushed"]
     J --> L["Print the signed-in check<br/>that only a person can run"]
     L --> M["Later, by hand, once that check passes:<br/>rebuild.sh --mark-good keeps the images<br/>that run as last-good"]
-%% source-hash: ea8747acaf97
+%% source-hash: 5bad59fc872a

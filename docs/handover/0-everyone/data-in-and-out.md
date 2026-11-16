@@ -2,7 +2,7 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Everyone | about 8 min | [Can I trust it](can-i-trust-it.md) | [What HCML provides](what-hcml-provides.md) |
+| Everyone | about 10 min | [Can I trust it](can-i-trust-it.md) | [What HCML provides](what-hcml-provides.md) |
 
 > **Ringkasan**
 >
@@ -28,7 +28,9 @@ One thing: an acknowledgement or a closing of a problem, with a message that car
 |---|---|---|
 | The server's memory | The answers it got from Zabbix, so the next person does not wait | From seconds to a day, depending on the answer. All of it is lost when the server restarts |
 | The server's settings file | The accounts and their roles and passwords, the Zabbix tokens, the model key, the secret that signs sessions, thresholds and targets | Until someone edits it. It is not in the repository, and it is the one thing to back up by hand |
-| The server's logs | Each request with an id (the health check's are left out), the address it came from and its result. Each sign-in. Each acknowledgement, with the person's name and address. Each use of the AI and each report download or email, with who did it, what kind and how it ended, and never the question, the answer, a file or an address. A token in an address is hidden before it is written | Docker keeps up to five files of fifty megabytes for each container and then overwrites the oldest |
+| The server's logs | Each request with an id (the health check's are left out), the address it came from and its result. Each sign-in. Each acknowledgement, with the person's name and address. Each use of the AI and each report download or email, with who did it, what kind and how it ended, and never the question, the answer, a file or an address. A token in an address is hidden before it is written | Docker keeps up to five files of fifty megabytes for each container, overwrites the oldest, and deletes them when the container is made again. The server also keeps its own copy in a store that a rebuild leaves alone: up to ten files of twenty megabytes, the oldest dropped first |
+| The logs the rebuild script saves | Before the rebuild script replaces a container it saves that container's log, compressed, one file for each copy and each rebuild. They are the same lines as the server's logs above, so they hold the account names that signed in, and the addresses | The newest 30 of each copy, in a folder under the home folder of the person who runs the script, kept until a later rebuild trims them or someone deletes the folder. [Backup and restore](../../operations/backup-and-restore.md) names the folder and the setting for the number |
+| The watcher's folder | The last state of each portal and container the watcher script checks, the time of its last run, and a log of what it told someone: portal addresses and container names, and no estate data | A folder under the home folder of the person who runs it, which [the full-disk page](../../operations/full-disk.md) names. The log is never trimmed: it grows only when something changes |
 | The `portal-state` volume (the hosted copy only) | The saved addresses, the monthly schedule and a record of the last 24 sends, with counts and no address in the record | Until someone deletes the volume. No backup holds it unless it is copied out by hand |
 | The browser | A session cookie that the scripts on the page cannot read. The theme and whether the menu is collapsed. The Assistant conversation, in that tab only | The cookie until the session ends. The choices until the browser is cleared. The conversation until the tab closes or the person signs out |
 
@@ -49,11 +51,13 @@ The destination is Anthropic, an external AI service. Under every answer the pag
 
 These texts contain device names, site names and problem texts, which are whatever people typed into Zabbix. They contain no password, token or key. What the provider does with the text is outside the portal's control and outside this handbook. HCML should read the provider's terms before this copy is used with real data.
 
-Each person is limited to ten questions and ten explanations a minute. The hosted copy also has a daily budget of tokens, which are the units the provider bills by: by default half a million for each person and two million in all, counted from what the provider reports (or, when a reply carries no count, from an estimate of four characters to a token) and reset at midnight in the reporting time zone. Once a budget is used up, the portal refuses further requests until midnight and says so.
+Each person is limited to ten questions and ten explanations a minute. A model that bills by the call has a daily budget of tokens, which are the units the provider bills by: by default half a million for each person and two million in all, counted from what the provider reports (or, when a reply carries no count, from an estimate of four characters to a token) and reset at midnight in the reporting time zone. That is hosted Claude, and a model at an address outside the machine's own network; a model on the machine has no bill and no budget. Once a budget is used up, the portal refuses further requests until midnight and says so.
 
 ### The copy that uses a model on the machine
 
 The same texts are built and sent to a model that runs on the host machine itself, reached on its own address. Nothing leaves the machine. The page shows no notice, because there is nothing to disclose. This copy has no bill and no daily budget, and it never emails a report, as the report email below explains.
+
+That promise is kept by the server and not by the page. The settings of this copy say that it must send nothing away, and the server then refuses to start when the address of the model is outside this machine and its own network. A model counts as local when its address is the machine itself, a private address, a name of one word, or a name that ends in one of the endings that only resolve inside a network, so a model on another machine of HCML's own network passes, and a public address does not. Only the owner's explicit word, a second setting, lets an outside model through: the server then starts with a warning, the page says beside every answer that the text left the network. The daily token budget is still counted for hosted Claude only, so a paid gateway outside the network has no daily cap yet (BK-69) (SC-53). Whether a model on another machine of HCML's counts as local is the owner's to confirm: the rule above is the portal's own choice.
 
 ### The report email, in the copy that uses Claude
 
@@ -61,7 +65,7 @@ The copy that uses Claude can email the monthly SLA report. It is off until the 
 
 The report names every device and shows how each site did. Once it is in a mailbox, the portal cannot control who reads it, forwards it or keeps it. The message goes to the mail server named in the settings, and from there to the recipients' mail. Use a mail account made for the portal and not a personal one, and give the list only to people who may read the report. **Set the list of allowed domains** in the settings: without it, a stolen administrator sign-in could send the report to any address, five an hour. The copy that uses a model on the machine never emails a report: its settings file passes none of the mail settings to it, on purpose, so that nothing leaves the machine there.
 
-The server's log keeps one line for each attempt: who asked, the month, the formats, the size, how many people it reached and the domains they are in. It keeps no address, no subject and no file. The portal also keeps one small file of its own, on a volume: the saved addresses, the schedule and a short record of what was sent, with counts and no address in the record. The mail account's password sits in the settings file, with the other secrets.
+The server's log keeps one line for each attempt: who asked, the month, the formats, the size, how many people it reached and the domains they are in. It keeps no address, no subject and no file. The portal also keeps one small file of its own, on a volume (a folder that Docker keeps outside the containers, so that it is still there after a rebuild): the saved addresses, the schedule and a short record of what was sent, with counts and no address in the record. The mail account's password sits in the settings file, with the other secrets.
 
 ### If nothing may leave
 

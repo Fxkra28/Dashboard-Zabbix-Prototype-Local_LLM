@@ -22,10 +22,11 @@ The repository checked against itself. They are read-only, CI runs them, and eac
 | [`diagrams.check.mjs`](../../../tools/check/diagrams.check.mjs) | 136 | 8 | Fails when a diagram source changed after the stamp of its render, or a render has no source. |
 | [`diagrams.stamp.mjs`](../../../tools/check/diagrams.stamp.mjs) | 46 | 0 | Writes the stamp on a diagram source after its picture was re-rendered. |
 | [`erd.check.ts`](../../../tools/check/erd.check.ts) | 280 | 6 | Fails when the two forms of the database diagram disagree. |
-| [`facts.check.mjs`](../../../tools/check/facts.check.mjs) | 657 | 19 | Fails when a count the documents state is not the count the code has. |
+| [`facts.check.mjs`](../../../tools/check/facts.check.mjs) | 733 | 23 | Fails when a count the documents state is not the count the code has. |
 | [`handover.check.mjs`](../../../tools/check/handover.check.mjs) | 582 | 19 | Fails when the handbook is out of date with the code, incomplete, or carries something it should not. |
+| [`installed.check.mjs`](../../../tools/check/installed.check.mjs) | 50 | 0 | Checks that the packages installed in each copy are the versions its lock files name, before the tests that rest on them run. |
 | [`links.check.mjs`](../../../tools/check/links.check.mjs) | 300 | 4 | Fails on a broken relative link or a line citation that runs past its file. |
-| [`openapi.check.ts`](../../../tools/check/openapi.check.ts) | 802 | 14 | Fails when the API description and the routes the server registers disagree. |
+| [`openapi.check.ts`](../../../tools/check/openapi.check.ts) | 831 | 14 | Fails when the API description and the routes the server registers disagree. |
 | [`parity.check.mjs`](../../../tools/check/parity.check.mjs) | 243 | 8 | Lists every file that differs between the two copies and is not on the list of files meant to differ. |
 <!-- /gen -->
 
@@ -37,14 +38,14 @@ Tools that read a running portal and change nothing. `signedin_check.py` signs i
 <!-- gen:files tools/live -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`api-timing.py`](../../../tools/live/api-timing.py) | 51 | 0 | Times every read endpoint, cold and warm, with its size raw and compressed. |
+| [`api-timing.py`](../../../tools/live/api-timing.py) | 61 | 0 | Times every read endpoint, cold and warm, with its size raw and compressed. |
 | [`download-check.mjs`](../../../tools/live/download-check.mjs) | 96 | 0 | Clicks the download buttons in a browser and says whether each file arrived and what is in it. |
 | [`enforcing-csp-server.mjs`](../../../tools/live/enforcing-csp-server.mjs) | 34 | 0 | Serves the built web app with the production Content-Security-Policy, to try a policy change before a rebuild. |
 | [`keyboard-walk.mjs`](../../../tools/live/keyboard-walk.mjs) | 46 | 0 | Presses Tab through a page and reports stops with no focus ring and elements the keyboard cannot reach. |
 | [`layout-sweep.mjs`](../../../tools/live/layout-sweep.mjs) | 94 | 0 | Opens every page at five widths and reports how far each runs past the window. |
-| [`load-test.mjs`](../../../tools/live/load-test.mjs) | 22 | 0 | Puts a steady load on the cached read endpoints and reports requests a second and latency. |
+| [`load-test.mjs`](../../../tools/live/load-test.mjs) | 25 | 0 | Puts a steady load on the cached read endpoints and reports requests a second and latency. |
 | [`page-audit.mjs`](../../../tools/live/page-audit.mjs) | 199 | 0 | Opens every page and reports console errors, failed requests, policy violations, contrast, unnamed controls and load time. |
-| [`signedin_check.py`](../../../tools/live/signedin_check.py) | 224 | 0 | Signs in through nginx and checks health, the reports, the downloads, the stream and the problem list. |
+| [`signedin_check.py`](../../../tools/live/signedin_check.py) | 272 | 0 | Signs in through nginx and checks health, the reports, the downloads, the stream and the problem list. |
 | [`sse_hold.py`](../../../tools/live/sse_hold.py) | 139 | 0 | Holds a live stream for a number of seconds and says whether it stayed alive: a first frame, no close by the server, something at least every 20 seconds. |
 <!-- /gen -->
 
@@ -80,7 +81,7 @@ Its pieces: the scope (which files get a card), the model (the code read with Ty
 <!-- gen:files deploy -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`rebuild.sh`](../../../deploy/rebuild.sh) | 349 | 0 | Rebuilds both portals from the commit, checks their settings first, tags the old images, and checks the new ones. |
+| [`rebuild.sh`](../../../deploy/rebuild.sh) | 403 | 0 | Rebuilds both portals from the commit, checks their settings first, tags the old images, and checks the new ones. |
 | [`watch.sh`](../../../deploy/watch.sh) | 424 | 0 | Checks that the portals and their containers answer and tells you when they do not; meant to run from a timer. |
 <!-- /gen -->
 
@@ -98,7 +99,7 @@ Its pieces: the scope (which files get a card), the model (the code read with Ty
 <!-- folder .github/workflows -->
 `ci.yml` is the CI workflow. It has five jobs that run side by side, so a failure names its package: the server (install, audit, typecheck, lint, test, build), the web app (the same), the checks (everything under `tools/check` and the package checks), a secret scan of what is pushed, and a build of both Docker images with nginx's own syntax check. It pushes nothing, comments on nothing and deploys nothing. Every action is pinned to a full commit hash, and a test refuses one that is not.
 
-CI runs in the repository that is under git, `hcml-portal`. `hcml-portal-ollama` has no git and no CI of its own; the workflow file is kept in both so that they stay identical.
+Each copy is a repository of its own, `hcml-portal` and `hcml-portal-ollama` (the second since 11 November), and the workflow file is kept identical in both, so CI runs on a push to either.
 
 ## docs
 
@@ -140,7 +141,7 @@ The full data model in one diagram and in a form split by domain, with a table o
 Three views of the system in motion: what happens in the browser, what happens to one request inside the server, and where a number comes from. Read them in that order.
 
 <!-- folder docs/operations -->
-Three short runbooks: what to back up and how to restore it, how to put TLS in front of the portal, and what comes back after a machine restarts.
+Four short runbooks: what to back up and how to restore it, how to put TLS in front of the portal, what comes back after a machine restarts, and what fills the disk and what is safe to remove.
 
 <!-- folder docs/design-system -->
 The design rules, every token family and every component with its states. `tokens.json`, `_tokens.scss` and `component-tokens.md` are written by `npm run tokens:export` from the stylesheet and are never edited.

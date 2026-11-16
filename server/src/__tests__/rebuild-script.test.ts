@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -26,6 +26,19 @@ mkdirSync(bin);
 writeFileSync(
   join(bin, 'docker'),
   `#!/usr/bin/env bash
+# Is Docker running? FAKE_DOCKER_DOWN makes it fail as a stopped Docker Desktop does.
+if [ "$1" = info ]; then
+  [ -n "\${FAKE_DOCKER_DOWN:-}" ] && { echo "failed to connect to the docker API at unix:///var/run/docker.sock; check if the path is correct and if the daemon is running" >&2; exit 1; }
+  # FAKE_DOCKER_HANGS is a Docker that accepts the call and never answers, and ignores SIGALRM as the Go CLI does; only TERM or KILL ends it (IN-89).
+  if [ -n "\${FAKE_DOCKER_HANGS:-}" ]; then
+    [ -n "\${FAKE_DOCKER_PIDFILE:-}" ] && echo $$ >"$FAKE_DOCKER_PIDFILE"
+    trap '' ALRM
+    # FAKE_DOCKER_IGNORES_TERM is one that does not stop for TERM either: only KILL ends it.
+    [ -n "\${FAKE_DOCKER_IGNORES_TERM:-}" ] && trap '' TERM
+    exec sleep "$FAKE_DOCKER_HANGS"
+  fi
+  exit 0
+fi
 if [ "$1" = image ] && [ "$2" = inspect ]; then
   [ -n "\${FAKE_NO_IMAGES:-}" ] && exit 1
   case "$3" in *:latest) exit 0 ;; esac
@@ -38,7 +51,12 @@ if [ "$1" = compose ] && [ "$2" = --project-directory ] && [ "$4" = config ] && 
     exit 15
   fi
   if [ -n "\${FAKE_REQUIRED_MISSING:-}" ] && printf '%s' "$3" | grep -Eq "$FAKE_REQUIRED_MISSING"; then
-    echo "required variable JWT_SECRET is missing a value: set JWT_SECRET (sekrt-hint)" >&2
+    echo "required variable JWT_SECRET is missing a value: set a strong JWT_SECRET in .env before deploying (sekrt-hint)" >&2
+    exit 1
+  fi
+  # A mistake in docker-compose.yml itself, which names no .env (IN-90).
+  if [ -n "\${FAKE_YAML_ERROR:-}" ] && printf '%s' "$3" | grep -Eq "$FAKE_YAML_ERROR"; then
+    echo "yaml: line 6, column 11: mapping values are not allowed in this context" >&2
     exit 1
   fi
   exit 0
@@ -116,7 +134,7 @@ chmodSync(join(halfBin, 'curl'), 0o755);
 const git = (cwd: string, ...args: string[]) => spawnSync('git', args, { cwd, encoding: 'utf8' });
 
 /** A committed git tree named `name` that holds the script, with `siblings` beside it (copies with no git). */
-function tree(label: string, name = 'hcml-portal', siblings: string[] = []): string {
+function tree(label: string, name = 'hcml-portal', siblings: string[] = [], siblingsHaveGit = false): string {
   const parent = join(scratch, label);
   for (const dir of [name, ...siblings]) {
     mkdirSync(join(parent, dir, 'server'), { recursive: true });
@@ -139,6 +157,18 @@ function tree(label: string, name = 'hcml-portal', siblings: string[] = []): str
   git(root, 'config', 'user.name', 'Test');
   git(root, 'add', '-A');
   git(root, 'commit', '-q', '-m', 'first');
+  // The local-model copy is a repository of its own since 11 November (IN-81), with a history of its own: an extra commit, so that its HEAD is not the hosted copy's.
+  if (siblingsHaveGit) {
+    for (const dir of siblings) {
+      const sibling = join(parent, dir);
+      git(sibling, 'init', '-q');
+      git(sibling, 'config', 'user.email', 'test@example.com');
+      git(sibling, 'config', 'user.name', 'Test');
+      git(sibling, 'add', '-A');
+      git(sibling, 'commit', '-q', '-m', 'first');
+      git(sibling, 'commit', '-q', '--allow-empty', '-m', 'second');
+    }
+  }
   return root;
 }
 const head = (root: string) => git(root, 'rev-parse', '--short', 'HEAD').stdout.trim();
@@ -185,7 +215,7 @@ describe('deploy/rebuild.sh, as a dry run', () => {
     expect(r.stdout).toContain(`+ env BUILD_COMMIT=${sha} BUILD_TIME=`);
     expect(r.stdout).toContain(`docker compose --project-directory ${root} up -d --build`);
     expect(r.stdout).toMatch(new RegExp(`\\+ git -C ${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} tag -a live-\\d{4}-\\d{2}-\\d{2} ${sha} `));
-    expect(r.stdout).toContain('The tag is local. To make it public: git push origin live-');
+    expect(r.stdout).toContain(`The tag is local, in hcml-portal. To make it public: git -C ${root} push origin live-`);
     expect(r.stdout.trimEnd().endsWith('Dry run: nothing was changed.')).toBe(true);
     // A dry run makes no tag and no image: the one repository it touches still has no tag.
     expect(git(root, 'tag').stdout).toBe('');
@@ -279,9 +309,25 @@ describe('deploy/rebuild.sh, as a dry run', () => {
     const root = tree('bad-env', 'hcml-portal', ['hcml-portal-ollama']);
     const r = rebuild(root, ['--dry-run', '--skip-verify'], { FAKE_BAD_ENV: 'hcml-portal-ollama$' });
     expect(r.status).toBe(1);
-    expect(r.stderr).toContain('docker cannot read the settings of hcml-portal-ollama (line 9 of its .env)');
+    expect(r.stderr).toContain('docker cannot read the settings of hcml-portal-ollama (Docker names line 9 of its .env)');
     expect(r.stderr + r.stdout).not.toContain('sekrt');
     expect(r.stdout).not.toContain('+ docker tag');
+  });
+
+  // IN-90: the gate said "line N of its .env" for any message with a line in it, and sent the operator to the wrong file for a mistake in docker-compose.yml.
+  it('does not send the operator to the .env for a mistake in docker-compose.yml: it shows what docker says, which names no .env and holds no secret', () => {
+    const root = tree('yaml-error', 'hcml-portal', ['hcml-portal-ollama']);
+    const r = rebuild(root, ['--dry-run', '--skip-verify'], { FAKE_YAML_ERROR: 'hcml-portal$' });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('docker cannot read the settings of hcml-portal. Docker says: yaml: line 6, column 11: mapping values are not allowed in this context');
+    expect(r.stderr).not.toContain('.env');
+    expect(r.stdout).not.toContain('+ docker tag');
+  });
+
+  it('names the line as docker names it, and the .env only when docker names the .env', () => {
+    const r = rebuild(tree('names-env', 'hcml-portal', ['hcml-portal-ollama']), ['--dry-run', '--skip-verify'], { FAKE_BAD_ENV: 'hcml-portal-ollama$' });
+    expect(r.stderr).toContain('(Docker names line 9 of its .env)');
+    expect(r.stderr).toContain("docker's own message is not shown");
   });
 
   it('still says that docker cannot read the settings when its message holds no line number, and stops (reviewer, 11 November)', () => {
@@ -362,7 +408,7 @@ describe('deploy/rebuild.sh, as a dry run', () => {
     git(root, 'config', 'user.useConfigOnly', 'true');
     const r = rebuild(root, ['--skip-verify'], { ...healthy, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', HOME: scratch });
     expect(r.status).toBe(0);
-    expect(r.stdout).toMatch(/Could not make the tag live-\d{4}-\d{2}-\d{2}: git needs a name and address[^\n]* The build is live\./);
+    expect(r.stdout).toMatch(/Could not make the tag live-\d{4}-\d{2}-\d{2} in hcml-portal: git needs a name and address[^\n]* The build is live\./);
     expect(r.stdout).not.toContain('The tag is local.');
     expect(r.stdout).toContain('Still yours, because it needs a sign-in');
     expect(r.stdout).toContain('deploy/rebuild.sh --mark-good');
@@ -457,7 +503,7 @@ describe('deploy/rebuild.sh, as a dry run', () => {
     rmSync(join(root, '.git'), { recursive: true });
     const r = rebuild(root, ['--dry-run', '--skip-verify']);
     expect(r.status).toBe(0);
-    expect(r.stdout).toContain('is not a git checkout, so this build is labelled "unknown" and no live tag is made');
+    expect(r.stdout).toContain('is not a git checkout, so its build is labelled "unknown" and no live tag is made');
     expect(r.stdout).toContain('Build unknown,');
     expect(r.stdout).toContain('BUILD_COMMIT=unknown ');
     expect(r.stdout).not.toContain('-dirty');
@@ -694,3 +740,212 @@ describe('deploy/rebuild.sh and the logs of the containers it replaces (SC-42)',
     expect(files(join(scratch, 'default-logs')).some((f) => /^hcml-portal-\d/.test(f))).toBe(true);
   });
 });
+
+// IN-81: the script judged, labelled, tagged and tested the local-model copy by the hosted copy's git alone. Each copy has its own repository now.
+describe('deploy/rebuild.sh and the git of each copy (IN-81)', () => {
+  const both = (label: string) => tree(label, 'hcml-portal', ['hcml-portal-ollama'], true);
+  const upLine = (out: string, folder: string) => out.split('\n').find((l) => l.includes(`--project-directory ${folder} up -d --build`)) ?? '';
+
+  it('labels each copy by its own commit', () => {
+    const root = both('git-labels');
+    const local = `${root}-ollama`;
+    expect(head(local)).not.toBe(head(root));
+    const out = rebuild(root, ['--dry-run', '--skip-verify']).stdout;
+    expect(upLine(out, root)).toContain(`BUILD_COMMIT=${head(root)} `);
+    expect(upLine(out, local)).toContain(`BUILD_COMMIT=${head(local)} `);
+    expect(upLine(out, local)).not.toContain(head(root));
+  });
+
+  it('refuses when the local-model copy differs from its commit though the hosted one is clean, naming that copy', () => {
+    const root = both('git-local-dirty');
+    writeFileSync(join(`${root}-ollama`, 'server', 'a.ts'), 'changed\n');
+    const r = rebuild(root, ['--dry-run', '--skip-verify']);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('hcml-portal-ollama');
+    expect(r.stderr).toContain(`differ from ${head(`${root}-ollama`)}`);
+    expect(r.stdout).not.toContain('docker compose');
+  });
+
+  it('tells the owner to add every file to a commit, since new files are imported by tracked ones', () => {
+    const root = both('git-add-all');
+    writeFileSync(join(root, 'server', 'a.ts'), 'changed\n');
+    const r = rebuild(root, ['--dry-run', '--skip-verify']);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('git add -A');
+    expect(r.stderr).toContain('not git commit -a');
+  });
+
+  it('with --allow-dirty labels only the copy that differs, as dirty, and tags only the one that does not', () => {
+    const root = both('git-one-dirty');
+    const local = `${root}-ollama`;
+    writeFileSync(join(local, 'web', 'b.ts'), 'changed\n');
+    const r = rebuild(root, ['--dry-run', '--skip-verify', '--allow-dirty']);
+    expect(r.status).toBe(0);
+    expect(upLine(r.stdout, root)).toContain(`BUILD_COMMIT=${head(root)} `);
+    expect(upLine(r.stdout, local)).toContain(`BUILD_COMMIT=${head(local)}-dirty `);
+    expect(r.stdout).toMatch(new RegExp(`\\+ git -C ${root.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} tag -a live-`));
+    expect(r.stdout).not.toContain(`git -C ${local} tag -a`);
+  });
+
+  it('tags each clean copy in its own repository, with its own commit', () => {
+    const root = both('git-two-tags');
+    const local = `${root}-ollama`;
+    const out = rebuild(root, ['--dry-run', '--skip-verify']).stdout;
+    expect(out).toContain(`git -C ${root} tag -a live-`);
+    expect(out).toContain(` ${head(root)} -m `);
+    expect(out).toContain(`git -C ${local} tag -a live-`);
+    expect(out).toContain(` ${head(local)} -m `);
+  });
+
+  it('labels a copy that has no git "unknown", and tags nothing for it, however its neighbour is labelled', () => {
+    const root = tree('git-one-has-none', 'hcml-portal', ['hcml-portal-ollama']);
+    const r = rebuild(root, ['--dry-run', '--skip-verify']);
+    expect(r.status).toBe(0);
+    expect(upLine(r.stdout, root)).toContain(`BUILD_COMMIT=${head(root)} `);
+    expect(upLine(r.stdout, `${root}-ollama`)).toContain('BUILD_COMMIT=unknown ');
+    expect(r.stdout).toContain('is not a git checkout');
+    expect(r.stdout).not.toContain(`git -C ${root}-ollama tag`);
+  });
+
+  it('runs npm run verify in every copy, the hosted one first, and not once for both', () => {
+    const root = both('git-verify-both');
+    const out = rebuild(root, ['--dry-run']).stdout;
+    const hosted = out.indexOf(`+ npm --prefix ${root} run verify`);
+    const local = out.indexOf(`+ npm --prefix ${root}-ollama run verify`);
+    expect(hosted).toBeGreaterThan(-1);
+    expect(local).toBeGreaterThan(hosted);
+    expect(out).toContain('(typecheck, lint, tests, builds, the checkers)');
+  });
+
+  it('runs verify for one copy only when there is one', () => {
+    const root = tree('git-verify-alone');
+    const out = rebuild(root, ['--dry-run']).stdout;
+    expect(out.match(/^\+ npm --prefix .* run verify$/gm)).toHaveLength(1);
+  });
+});
+
+// IN-86: with Docker stopped (a routine thing here, IN-43) the script ran verify for minutes, then failed on the first docker call and said no image existed.
+describe('deploy/rebuild.sh with Docker stopped (IN-86)', () => {
+  const stopped = { FAKE_DOCKER_DOWN: '1' };
+
+  it('says Docker is not running, at once, before verify, the parity check or any other gate, and changes nothing', () => {
+    const root = tree('down-first', 'hcml-portal', ['hcml-portal-ollama']);
+    const r = rebuild(root, [], stopped);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('Docker is not running');
+    expect(r.stderr).toContain('Nothing was changed');
+    expect(r.stdout).not.toContain('npm --prefix');
+    expect(r.stdout).not.toContain('parity.check');
+    expect(r.stdout).not.toContain('docker tag');
+  });
+
+  it('does not go on to say that no image was tagged because none existed', () => {
+    const r = rebuild(tree('down-no-false'), ['--skip-verify'], stopped);
+    expect(r.stdout + r.stderr).not.toContain('none existed before this run');
+  });
+
+  it('stops the same way on a dry run and for --mark-good, which ask Docker too', () => {
+    for (const args of [['--dry-run', '--skip-verify'], ['--mark-good']]) {
+      const r = rebuild(tree(`down-${args[0].replace(/\W/g, '')}`), args, stopped);
+      expect(r.status, args.join(' ')).toBe(1);
+      expect(r.stderr, args.join(' ')).toContain('Docker is not running');
+    }
+  });
+
+  // IN-89: perl's alarm does not stop the Docker CLI, a Go program that ignores SIGALRM, and a missing docker passed the guard in silence.
+  describe('and with a Docker that never answers, or none at all (IN-89)', () => {
+    const alive = (pid: number) => {
+      try {
+        process.kill(pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    it('ends a Docker that never answers once REBUILD_DOCKER_TIMEOUT has passed, says so, and leaves it nowhere running', () => {
+      const pidFile = join(scratch, 'hung-docker.pid');
+      const started = Date.now();
+      const r = rebuild(tree('down-hangs'), ['--skip-verify'], { FAKE_DOCKER_HANGS: '60', FAKE_DOCKER_PIDFILE: pidFile, REBUILD_DOCKER_TIMEOUT: '1' });
+      expect(Date.now() - started).toBeLessThan(10_000);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('Docker is not running (docker info failed or did not answer within 1 seconds)');
+      expect(r.stderr).toContain('Nothing was changed');
+      expect(r.stderr).not.toContain('Terminated'); // bash 3.2 reports a call it was told to end, unless the script keeps it from the screen
+      expect(r.stdout).not.toContain('npm --prefix');
+      const pid = Number(readFileSync(pidFile, 'utf8').trim());
+      expect(pid).toBeGreaterThan(1);
+      expect(alive(pid)).toBe(false);
+    });
+
+    it('ends a Docker that does not stop for TERM either, with KILL', () => {
+      const pidFile = join(scratch, 'stubborn-docker.pid');
+      const started = Date.now();
+      const r = rebuild(tree('down-stubborn'), ['--skip-verify'], { FAKE_DOCKER_HANGS: '60', FAKE_DOCKER_IGNORES_TERM: '1', FAKE_DOCKER_PIDFILE: pidFile, REBUILD_DOCKER_TIMEOUT: '1' });
+      expect(Date.now() - started).toBeLessThan(10_000);
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('Docker is not running');
+      expect(alive(Number(readFileSync(pidFile, 'utf8').trim()))).toBe(false);
+    });
+
+    it('lets a Docker that answers within the limit through', () => {
+      const r = rebuild(tree('down-slow'), ['--dry-run', '--skip-verify'], { FAKE_DOCKER_HANGS: '0.3', REBUILD_DOCKER_TIMEOUT: '5' });
+      expect(r.status).toBe(0);
+    });
+
+    it('says so at once when no docker command is on the path, before any gate and without calling it Docker not running', () => {
+      const bare = join(scratch, 'bare-bin');
+      mkdirSync(bare, { recursive: true });
+      for (const tool of ['bash', 'dirname', 'basename', 'sed', 'head', 'tr', 'sleep', 'cat', 'git', 'perl', 'date', 'mktemp', 'node']) {
+        const found = (process.env.PATH ?? '').split(':').map((d) => join(d, tool)).find((p) => existsSync(p));
+        if (found && !existsSync(join(bare, tool))) symlinkSync(found, join(bare, tool));
+      }
+      const r = spawnSync(join(bare, 'bash'), [join(tree('down-missing'), 'deploy', 'rebuild.sh'), '--skip-verify'], {
+        encoding: 'utf8',
+        timeout: 20_000,
+        env: { PATH: bare, HOME: process.env.HOME ?? '', LOG_ARCHIVE_DIR: join(scratch, 'default-logs') },
+      });
+      expect(r.error).toBeUndefined();
+      expect(r.status).toBe(1);
+      expect(r.stderr).toContain('no docker command is on the PATH');
+      expect(r.stderr).toContain('Nothing was changed');
+      expect(r.stderr).not.toContain('Docker is not running');
+      expect(r.stdout).not.toContain('npm --prefix');
+    });
+
+    it('falls back to twenty seconds for a limit that is not a whole number above zero', () => {
+      const text = readFileSync(script, 'utf8');
+      expect(text).toContain('DOCKER_TIMEOUT=${REBUILD_DOCKER_TIMEOUT:-20}');
+      expect(text).toMatch(/\[ "\$DOCKER_TIMEOUT" -ge 1 \] \|\| DOCKER_TIMEOUT=20/);
+    });
+  });
+
+  it('goes on as before when Docker answers', () => {
+    const r = rebuild(tree('down-up'), ['--dry-run', '--skip-verify']);
+    expect(r.status).toBe(0);
+  });
+});
+
+// IN-79: what the person is sent to check after a build, for the copy that exists so that nothing leaves the machine.
+describe('deploy/rebuild.sh and the sign-in check it asks for (IN-79)', () => {
+  it('asks for the local-model copy to be checked as local and without mail, and puts no such words on the hosted copy', () => {
+    const root = tree('hint', 'hcml-portal', ['hcml-portal-ollama'], true);
+    const r = rebuild(root, ['--skip-verify'], { ...healthy, FAKE_PORT_BY_COPY: '1' });
+    expect(r.status).toBe(0);
+    const lines = r.stdout.split('\n').filter((l) => l.includes('signedin_check.py'));
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('http://127.0.0.1:8081');
+    expect(lines[0]).not.toContain('--expect-ai');
+    expect(lines[1]).toContain('http://127.0.0.1:8082 --expect-mail off --expect-ai local');
+  });
+
+  // DC-33: a password typed on a command line stays in the shell's history, so the hint reads it without echo.
+  it('tells the person to read the sign-in into the shell, and never to type the password into a command', () => {
+    const root = tree('hint-read', 'hcml-portal', ['hcml-portal-ollama'], true);
+    const r = rebuild(root, ['--skip-verify'], { ...healthy, FAKE_PORT_BY_COPY: '1' });
+    expect(r.stdout).toContain('read -r PORTAL_USER; read -rs PORTAL_PASSWORD; export PORTAL_USER PORTAL_PASSWORD');
+    expect(r.stdout).not.toMatch(/PORTAL_PASSWORD=/);
+    expect(r.stdout.indexOf('read -rs PORTAL_PASSWORD')).toBeLessThan(r.stdout.indexOf('signedin_check.py'));
+  });
+});
+

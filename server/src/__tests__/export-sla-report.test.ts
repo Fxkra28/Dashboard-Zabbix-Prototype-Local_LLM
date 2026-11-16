@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { naturalCompare } from '../domain/naming.js';
+import { DEFAULT_STYLE, type ReportStyle } from '../core/reportChoices.js';
 import { aggregate, type SliHost, type SliReport } from '../sli/engine.js';
-import { DERIVED_BANNER, METHOD_NOTE, buildSlaReportDoc, durationText, percentText, reportFileBase } from '../export/slaReport.js';
+import { DERIVED_SLA_BANNER, METHOD_NOTE, WEB_AGING_NOTE, WEB_KEPT_NOTE_AFTER, WEB_KEPT_NOTE_BEFORE, buildSlaReportDoc, durationText, percentText, reportFileBase } from '../export/slaReport.js';
 import type { Cell, ReportDoc, Table, Tone } from '../export/types.js';
 import { sampleSliReports } from './helpers/sliReportFixture.js';
 
@@ -20,10 +21,10 @@ const TARGET = 99;
 const NOW = new Date('2026-09-01T07:20:00Z');
 const at = (iso: string) => Date.parse(iso) / 1000;
 
-function build(edit?: (p: Pair) => void, now = NOW): ReportDoc {
+function build(edit?: (p: Pair) => void, now = NOW, style?: ReportStyle): ReportDoc {
   const p = sampleSliReports();
   edit?.(p);
-  return buildSlaReportDoc(p.strict, p.hcml, now);
+  return buildSlaReportDoc(p.strict, p.hcml, now, style);
 }
 
 function tableOf(doc: ReportDoc, title: string): Table {
@@ -1100,6 +1101,50 @@ describe('WAN paths', () => {
   });
 });
 
+describe('the web checks of a month that has closed (BK-60)', () => {
+  const METHOD_LINE = 'Strict method only: HCML’s report method does not measure web checks.';
+
+  it('say in the caption, after the line about the method, that old figures can change', () => {
+    expect(tableOf(build(), 'Web checks').caption).toBe(`${METHOD_LINE} ${WEB_AGING_NOTE}`);
+  });
+
+  it('say when the figures were taken, in the date style of the report, and that they are kept, once they are (ADR 0016)', () => {
+    // 2 November 2026, 08:15 in Jakarta
+    const taken = at('2026-11-02T08:15:00+07:00');
+    const doc = build((p) => {
+      p.strict.webTakenAt = taken;
+    });
+    expect(tableOf(doc, 'Web checks').caption).toBe(`${METHOD_LINE} ${WEB_KEPT_NOTE_BEFORE} 2 Nov 2026, ${WEB_KEPT_NOTE_AFTER}`);
+    expect(tableOf(doc, 'Web checks').caption).not.toContain(WEB_AGING_NOTE);
+  });
+
+  it('write that date as the style asks, and in the zone of the report, not of the machine', () => {
+    // 23:30 on 31 October in UTC is already 1 November in Jakarta
+    const taken = at('2026-10-31T23:30:00Z');
+    const doc = build(
+      (p) => {
+        p.strict.webTakenAt = taken;
+      },
+      NOW,
+      { ...DEFAULT_STYLE, date: 'iso' },
+    );
+    expect(tableOf(doc, 'Web checks').caption).toContain(`${WEB_KEPT_NOTE_BEFORE} 2026-11-01,`);
+  });
+
+  it('say it when the month has no scenarios too, since that can be what ageing out left', () => {
+    const doc = build((p) => {
+      p.strict.web = [];
+    });
+    expect(tableOf(doc, 'Web checks').caption).toBe(`${METHOD_LINE} ${WEB_AGING_NOTE}`);
+    expect(tableOf(doc, 'Web checks').empty).toBe('No web scenarios measured in this period.');
+  });
+
+  it('say nothing of it while the month is still running, when nothing has aged out', () => {
+    const doc = build((p) => retime(p, { month: '2026-09', closed: false, end: at('2026-08-20T00:00:00+07:00') }));
+    expect(tableOf(doc, 'Web checks').caption).toBe(METHOD_LINE);
+  });
+});
+
 describe('devices never measured', () => {
   const doc = build();
   const t = tableOf(doc, 'Devices never measured');
@@ -1138,13 +1183,18 @@ describe('the notes', () => {
 
   it('names the triggers each method counts and what happens to hours and devices without data', () => {
     expect(computed!.lines).toEqual([
-      `${DERIVED_BANNER}. Computed in the portal from each device’s ICMP triggers, monthly in Asia/Jakarta time; nothing is written to Zabbix.`,
+      `${DERIVED_SLA_BANNER}. Computed in the portal from each device’s ICMP triggers, monthly in Asia/Jakarta time; nothing is written to Zabbix.`,
       'Strict method: a device is down while any of these triggers is in problem: Unavailable by ICMP ping, High ICMP ping loss. HCML’s method counts only High ICMP ping loss.',
       'Hours in which nothing was collected are left out by the strict method and counted as up by HCML’s method.',
       'A device with too little collected data is left out by the strict method and counted as 100% by HCML’s method.',
       'Time inside a planned Zabbix maintenance window is left out by both methods, downtime and total alike.',
       'Estate-wide spans with no collected data, 7 h in all: 8 Aug 03:00 to 06:00, 19 Aug 22:00 to 20 Aug 02:00.',
     ]);
+  });
+
+  it('says the figures are not Zabbix’s own SLAs, and never that Zabbix has no services, which is false when it has some', () => {
+    expect(computed!.lines[0]).toMatch(/^Derived from ICMP availability triggers, not from Zabbix’s own SLAs\. Computed in the portal/);
+    expect(JSON.stringify(doc)).not.toMatch(/no services/);
   });
 
   it('says "by both methods" when both treat a thing the same way', () => {
@@ -1211,7 +1261,10 @@ describe('wording shared with the SLA page', () => {
   it.skipIf(!present)('uses the page’s method note and its banner, word for word', () => {
     const sli = readFileSync(sliSource, 'utf8');
     expect(METHOD_NOTE).toBe(literal(sli, 'METHOD_NOTE'));
-    expect(DERIVED_BANNER).toBe(literal(sli, 'DERIVED_BANNER'));
+    expect(DERIVED_SLA_BANNER).toBe(literal(sli, 'DERIVED_SLA_BANNER'));
+    expect(WEB_AGING_NOTE).toBe(literal(sli, 'WEB_AGING_NOTE'));
+    expect(WEB_KEPT_NOTE_BEFORE).toBe(literal(sli, 'WEB_KEPT_NOTE_BEFORE'));
+    expect(WEB_KEPT_NOTE_AFTER).toBe(literal(sli, 'WEB_KEPT_NOTE_AFTER'));
   });
 
   it.skipIf(!present)('uses the page’s reasons, empty messages and running note', () => {
@@ -1249,6 +1302,9 @@ describe('writing', () => {
       expect(JSON.stringify(d)).not.toMatch(DASH);
     }
     expect(METHOD_NOTE).not.toMatch(DASH);
-    expect(DERIVED_BANNER).not.toMatch(DASH);
+    expect(DERIVED_SLA_BANNER).not.toMatch(DASH);
+    expect(WEB_AGING_NOTE).not.toMatch(DASH);
+    expect(WEB_KEPT_NOTE_BEFORE).not.toMatch(DASH);
+    expect(WEB_KEPT_NOTE_AFTER).not.toMatch(DASH);
   });
 });

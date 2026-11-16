@@ -17,13 +17,19 @@ undo it on one container: `docker update --restart no <name>`.
 
 - Docker has to start. On a Mac that is Docker Desktop's setting "Start Docker Desktop when you sign in",
   and the Mac has to be signed in. Without it nothing comes back. This repository cannot read or set it.
+- For `hcml-portal-ollama`, Ollama has to be running on this Mac with its model installed. Ollama is an app on the Mac and
+  not a container, so it does not come back with Docker. After a restart run `ollama list`: the model named in `AI_MODEL`
+  (`qwen3:8b` unless set otherwise) must be in it, and `ollama ps` shows whether it is loaded. The portal says so too: a
+  signed-in `/api/health` carries `ready.model`, `down` when Ollama does not answer and `missing` when it answers without
+  the model (a forgotten `ollama pull`, a mistyped name), and the Explain panel and the Assistant show a line before a click that
+  would only fail (BK-66). For `missing` the cure is `ollama pull <the model>`, or the right name in `AI_MODEL`.
 - The Mac has to be on HCML's office network, where Zabbix's LAN address answers. Off it, the portals come
   back and say that Zabbix cannot be read. Nothing false is recorded meanwhile, because HCML's own Zabbix
   keeps collecting.
 - Each portal folder needs its `docker-compose.override.yml`. From the office network the name
   `zabbix.hcml.co.id` leads to a Zero Trust gateway that refuses the portal, so the file maps the name to
   Zabbix's LAN address for `portal-bff`, and the certificate is still checked against the name. The file
-  names an internal address, so it stays on the machine: `.git/info/exclude` keeps it out of git, and
+  names an internal address, so it stays on the machine: `.gitignore` keeps it out of git, and
   `docker compose` reads it by itself. Its form, with a placeholder where the address goes (Compose adds the line to the one in
   `docker-compose.yml`, so `host.docker.internal` stays):
 
@@ -52,8 +58,9 @@ what it read:
 
 That leaves pages that still wait on HCML's Zabbix. Measured on 30 October with the admin account, a first visit
 right after a start took 62 s for the noise report, 52 s for Services, 39 s for the availability report, 38 s for
-the SLA page, 33 s for the Dashboard's busiest hosts and 20 s for Graphs (before BK-25), and the 19 pages together 269 s; a few
-minutes later the same pages took 34 s in all. After ten minutes with nobody there they wait again (the reports keep
+the SLA page, 33 s for the Dashboard's busiest hosts and 20 s for Graphs (before BK-25), and every page together 269 s; a few
+minutes later the same pages took 34 s in all. (On 30 October the availability report was a page of its own; since
+12 November its figures are the last 7 and 30 days of the SLA page.) After ten minutes with nobody there they wait again (the reports keep
 their last copy only four minutes): the availability report 58 s, the noise report 48 s, the Dashboard 30 s, Graphs
 15 s (before BK-25) and Network 11 s. Graphs waited 15 to 22 s on every visit until 30 October, because its item list asked
 Zabbix for each item's last value one by one (tracker BK-25); it no longer does and opens in about 1 s.
@@ -96,7 +103,13 @@ HCML's own Zabbix can also watch the portal with a web scenario on `/bff/api/hea
 ```bash
 docker ps --format '{{.Names}}  {{.Status}}'      # four containers, every one healthy
 curl -s http://127.0.0.1:8081/bff/api/health       # {"ok":true,...}; :8082 for hcml-portal-ollama
+ollama list                                        # the local-model copy's model must be listed
 ```
+
+The checks that need a sign-in are in `tools/live/signedin_check.py`: with `--only-health` it asks only for the signed-in health and ready
+answers, which carry `ready.model` and `logFile` (whether the server's own log file is being written, IN-83), and with `--expect-ai local` it fails
+when the model of the local-model copy is outside this machine's network. It also fails a portal that cannot read Zabbix (`/api/ready` answers 503); to try an image where Zabbix cannot be reached, as off HCML's network, add `--expect-zabbix any`. Read the sign-in into the shell first
+(`read -r PORTAL_USER; read -rs PORTAL_PASSWORD; export PORTAL_USER PORTAL_PASSWORD`), so that the password stays out of its history.
 
 To check Zabbix itself from this Mac, ask it for its version at the LAN address that
 `docker-compose.override.yml` names, keeping the name so that the certificate is checked:

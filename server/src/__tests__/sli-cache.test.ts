@@ -55,7 +55,7 @@ describe('getMonthlySli keeps what it computes', () => {
     expect(new Set([strict, report, other]).size).toBe(3);
   });
 
-  it('keeps a closed month for a day, because it cannot change', async () => {
+  it('keeps a closed month for a day, because it changes rarely', async () => {
     const first = await getMonthlySli(CLOSED, 'availability');
     later(23 * HOUR);
     expect(await getMonthlySli(CLOSED, 'availability')).toBe(first);
@@ -125,7 +125,7 @@ describe('getMonthlySli under a flood of other keys (BK-13)', () => {
     for (let i = 0; i < MAX_ENTRIES + 20; i++) await cached(`graph:flood:${i}`, 60_000, async () => i);
   };
 
-  it('keeps a closed month, which costs a full recompute and cannot change', async () => {
+  it('keeps a closed month, which costs a full recompute and changes rarely', async () => {
     const first = await getMonthlySli(CLOSED, 'availability');
     await flood();
     expect(await getMonthlySli(CLOSED, 'availability')).toBe(first);

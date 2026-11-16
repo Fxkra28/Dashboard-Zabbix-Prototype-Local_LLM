@@ -21,6 +21,7 @@
  * that name each method; and the Configuration section of README.md names every environment variable the BFF reads.
  * The tracker is checked as a table: ten cells in every row (a pipe inside a code span splits a cell and moves every cell
  * after it along), a mark that fits its status, one row for each id, and the totals that its text and the open-items page state.
+ * The open-problems page of the handbook is checked against the open-items page: its two tables cover exactly the rows given to HCML alone and to the owner alone.
  *
  * It does not read what a sentence means. A number the forms above do not reach, and a line citation that still
  * exists but no longer says what the sentence does, are for a person.
@@ -205,6 +206,17 @@ export function testCounts(root) {
   return { serverTests: read('server'), webTests: read('web') };
 }
 
+/** What the checker adds to its line when it could not judge the test counts, so that a green run is not read as more than it was (IN-87). */
+export const countsNote = (judged) =>
+  judged ? '' : ' The test counts were not judged: no current .test-counts.json (npm test writes it), and npm run verify runs the tests first.';
+
+/** The pages App.tsx routes. A route whose element only sends an old address on (named ...Redirect, or a bare Navigate) is not a page. */
+export function countPages(app) {
+  const paths = [...app.matchAll(/<Route\s+path="([^"]+)"(?!\s+element=\{<(?:\w*Redirect|Navigate)\b)/g)].map((m) => m[1]).filter((p) => p !== '*');
+  const behindShell = app.includes('<Route element={<Layout />}') ? paths.filter((p) => p !== '/login').length : 0;
+  return { paths, pages: paths.length, behindShell };
+}
+
 /** Everything the code says, by name. */
 export function gatherFacts(root) {
   const endpoints = countEndpoints(root);
@@ -214,8 +226,7 @@ export function gatherFacts(root) {
   const conceptualFile = join(root, 'docs/erd/conceptual/ERD-Conceptual.md');
   const conceptual = existsSync(conceptualFile) ? countConceptual(readFileSync(conceptualFile, 'utf8')) : { entities: 0, associations: 0 };
   const app = existsSync(join(root, 'web/src/App.tsx')) ? readFileSync(join(root, 'web/src/App.tsx'), 'utf8') : '';
-  const paths = [...app.matchAll(/<Route\s+path="([^"]+)"/g)].map((m) => m[1]).filter((p) => p !== '*');
-  const behindShell = app.includes('<Route element={<Layout />}') ? paths.filter((p) => p !== '/login').length : 0;
+  const { pages, behindShell } = countPages(app);
   return {
     endpoints: endpoints.total,
     inModules: endpoints.inModules,
@@ -227,7 +238,7 @@ export function gatherFacts(root) {
     readMethods: calls.size - written.size,
     parts: countFiles(join(root, 'docs/setup'), /^\d{2}-.+\.md$/),
     adrs: countFiles(join(root, 'docs/architecture/adr'), /^\d{4}-.+\.md$/),
-    pages: paths.length,
+    pages,
     behindShell,
     deps: dependencies(root),
     serverTestFiles: countFiles(join(root, 'server/src'), /\.test\.ts$/),
@@ -465,8 +476,43 @@ export function checkOpenItemsTotals(text, totals) {
   return m.slice(1, 5).map(Number).join(', ') === want ? [] : [`docs/handover/5-reference/open-items.md  "${m[0]}" says ${m.slice(1, 5).join(', ')}; the tracker has ${want}`];
 }
 
+/** The rows of the open-items page that only HCML, or only the owner, can close. */
+export function openItemOwners(text) {
+  const by = { hcml: new Set(), owner: new Set() };
+  for (const line of text.split('\n')) {
+    const m = /^\| ([A-Z]{2}-\d\d) \|.*Who can close it: (HCML alone|owner alone)\s*\|?\s*$/.exec(line);
+    if (m) by[m[2] === 'HCML alone' ? 'hcml' : 'owner'].add(m[1]);
+  }
+  return by;
+}
+
+// Built from a string: a regex literal that holds an HTML comment opener does not parse in vitest's transform, which three tests use to import this file.
+const ROWS_COMMENT = new RegExp('<!--\\s*rows:([^>]*?)-->');
+
+/** A comment before each table of the open-problems page names its rows: they must be the ones the open-items page gives to HCML alone and to the owner alone, one table row each, and the opening sentence must count them. */
+export function checkOpenProblems(page, items) {
+  const want = openItemOwners(items);
+  const found = [];
+  const sections = [['hcml', 'HCML', 'What only HCML can close'], ['owner', 'the owner', 'What only the owner can close']];
+  const parts = page.split(/^## /m);
+  for (const [key, who, heading] of sections) {
+    const body = parts.find((p) => p.startsWith(heading)) ?? '';
+    const named = new Set((ROWS_COMMENT.exec(body)?.[1] ?? '').split(/\s+/).filter(Boolean));
+    const tableRows = Math.max(body.split('\n').filter((l) => l.startsWith('|')).length - 2, 0);
+    for (const id of want[key]) if (!named.has(id)) found.push(`the table for ${who} names no row for ${id}, which the open-items page gives to ${who} alone`);
+    for (const id of named) if (!want[key].has(id)) found.push(`the table for ${who} names ${id}, which the open-items page does not give to ${who} alone`);
+    if (tableRows !== named.size) found.push(`the table for ${who} has ${tableRows} rows for ${named.size} named`);
+  }
+  const said = /\b(\w+) for HCML and (\w+) for the owner\b/.exec(page);
+  if (said && (toNumber(said[1]) !== want.hcml.size || toNumber(said[2]) !== want.owner.size)) {
+    found.push(`the opening sentence says ${said[1]} for HCML and ${said[2]} for the owner, and the open-items page has ${want.hcml.size} and ${want.owner.size}`);
+  }
+  return found;
+}
+
 export function checkFacts(root) {
   const facts = gatherFacts(root);
+  const countsJudged = facts.serverTests !== null && facts.webTests !== null;
   const problems = [];
   let checked = 0;
   let past = 0;
@@ -507,7 +553,13 @@ export function checkFacts(root) {
     const items = join(root, 'docs/handover/5-reference/open-items.md');
     if (existsSync(items)) problems.push(...checkOpenItemsTotals(readFileSync(items, 'utf8'), found));
   }
-  return { docs: docs.length, checked, past, tables, problems, facts };
+  const openItemsPage = join(root, 'docs/handover/5-reference/open-items.md');
+  const openProblemsPage = join(root, 'docs/handover/5-reference/open-problems.md');
+  if (existsSync(openItemsPage) && existsSync(openProblemsPage)) {
+    tables++;
+    for (const p of checkOpenProblems(readFileSync(openProblemsPage, 'utf8'), readFileSync(openItemsPage, 'utf8'))) problems.push(`docs/handover/5-reference/open-problems.md  ${p}`);
+  }
+  return { docs: docs.length, checked, past, tables, problems, facts, countsJudged };
 }
 
 // Self-test of the statements: each sample, and the rules it must trip. The facts are made up.
@@ -603,6 +655,27 @@ for (const [sample, expected] of samples) {
     console.error('facts.check open-items self-test failed');
     process.exit(1);
   }
+  // The open-problems page covers the rows that only HCML or only the owner can close, one table row for each.
+  const given = ['| SC-01 | High | Done in part | A Who can close it: owner alone |', '| SC-23 | High | Not done | B Who can close it: HCML alone |', "| IN-13 | Medium | Done in part | C Who can close it: assistant, after the owner's word |"].join('\n');
+  const tableRow = '| x | y | z |\n';
+  const page = (hcml, owner, rowsH, rowsO, sentence = 'one for HCML and one for the owner') =>
+    `# T\n\nThese are ${sentence}, as of today.\n\n## What only HCML can close\n\n<!-- rows: ${hcml} -->\n\n| Kind | A | B |\n|---|---|---|\n${rowsH}\n## What only the owner can close\n\n<!-- rows: ${owner} -->\n\n| Kind | A | B |\n|---|---|---|\n${rowsO}`;
+  const problemCases = [
+    ['the rows that the open items give to each', page('SC-23', 'SC-01', tableRow, tableRow), 0],
+    ['a row of HCML left out', page('', 'SC-01', '', tableRow), 1],
+    ['a row that the open items do not give to HCML', page('SC-23 SC-99', 'SC-01', tableRow + tableRow, tableRow), 1],
+    ['a row the assistant does, which the page does not need', page('SC-23', 'SC-01', tableRow, tableRow), 0],
+    ['an id with no table row', page('SC-23', 'SC-01', '', tableRow), 1],
+    ['a table row with no id', page('SC-23', 'SC-01', tableRow + tableRow, tableRow), 1],
+    ['a sentence that counts wrongly', page('SC-23', 'SC-01', tableRow, tableRow, 'two for HCML and one for the owner'), 1],
+  ];
+  for (const [label, sample, expected] of problemCases) {
+    const found = checkOpenProblems(sample, given).length;
+    if (found !== expected) {
+      console.error(`facts.check open-problems self-test failed (${label}): ${found} problems, expected ${expected}`);
+      process.exit(1);
+    }
+  }
 }
 
 // Self-test of the readers, on a small tree made for the purpose.
@@ -646,12 +719,15 @@ for (const [sample, expected] of samples) {
   }
 }
 
-const root = resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..'));
-if (!statSync(root).isDirectory()) throw new Error(`Not a directory: ${root}`);
-const { docs, checked, past, tables, problems } = checkFacts(root);
-if (problems.length) {
-  for (const p of problems) console.error(p);
-  console.error(`\nfacts.check: ${problems.length} differences between the documents and the code, in ${docs} documents.`);
-  process.exit(1);
+// Run as a command only: a test imports the functions above.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  const root = resolve(process.argv[2] ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..'));
+  if (!statSync(root).isDirectory()) throw new Error(`Not a directory: ${root}`);
+  const { docs, checked, past, tables, problems, countsJudged } = checkFacts(root);
+  if (problems.length) {
+    for (const p of problems) console.error(p);
+    console.error(`\nfacts.check: ${problems.length} differences between the documents and the code, in ${docs} documents.`);
+    process.exit(1);
+  }
+  console.log(`facts.check: ${checked} statements in ${docs} documents and ${tables} tables agree with the code; ${past} more tell of the past and were left alone.${countsNote(countsJudged)}`);
 }
-console.log(`facts.check: ${checked} statements in ${docs} documents and ${tables} tables agree with the code; ${past} more tell of the past and were left alone.`);

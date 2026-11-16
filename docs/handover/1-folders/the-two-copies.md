@@ -2,7 +2,7 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Operators and developers | about 5 min | [Tools, deploy and docs](tools-deploy-docs.md) | [Where to change what](where-to-change-x.md) |
+| Operators and developers | about 6 min | [Tools, deploy and docs](tools-deploy-docs.md) | [Where to change what](where-to-change-x.md) |
 
 The portal lives in two folders, `hcml-portal` and `hcml-portal-ollama`. They hold the same code, byte for byte, and differ in a short list of files that describe or configure the copy. This page says what differs, why, how to tell which copy you are in, and how to keep them in step.
 
@@ -16,7 +16,7 @@ One thing decides it: which model writes the plain-language answers.
 | What leaves the machine | The text of a problem or an SLA figure, and the Assistant's snapshot of the estate, when someone asks, and the monthly report by email, when an administrator sends it and email is set up | Nothing. The fonts are served from the site in both copies, so nothing is fetched from outside either, and this copy never emails a report: its compose file passes no mail settings |
 | Address | Port 8081 on the loopback address | Port 8082 on the loopback address |
 | Session cookie | `hcml_session` | `hcml_session_ollama` |
-| Under git | Yes. CI is set up here (it has not run yet, IN-30), and the `live-<date>` tags are cut here | Yes, a repository of its own since 11 November 2026. Its shared files are still written by copying them from the other |
+| Under git | Yes. CI is set up here (it has not run yet, IN-30), and the `live-<date>` tag of this copy is cut here | Yes, a repository of its own since 11 November 2026, with the same CI file and its own `live-<date>` tag. Its shared files are still written by copying them from the other |
 
 Cookies ignore ports, so two portals on one machine would overwrite each other's session if they shared a cookie name. That is the reason for the second cookie name.
 
@@ -36,8 +36,8 @@ The settings that carry the difference are few. In `docker-compose.yml` they are
 | `docs/architecture/adr/0005-provider-neutral-ai-layer.md` | The consequences of the decision for each copy. |
 | `docs/flow/README.md`, `docs/flow/DataFlow.mmd`, `docs/flow/DataFlow.pdf` | Where the data goes depends on who writes the answer. |
 | `docs/schema/README.md`, `docs/schema/CDM.mmd`, `docs/schema/CDM.pdf`, `docs/schema/ERD.mmd`, `docs/schema/ERD.pdf`, `docs/schema/PDM.mmd`, `docs/schema/PDM.pdf` | The model draws the answer in red in the hosted copy, because its text leaves the machine. |
-| `docs/setup/11-running-deploying.md` | How each copy is run and deployed. |
-| `docs/setup/19-authentication-rbac.md` | The cookie name and the addresses in its examples. |
+| `docs/setup/11-running-deploying.md` | The web port in three lines, the sentence about rebuilding, and the sentence about what the copy keeps on a volume. |
+| `docs/setup/19-authentication-rbac.md` | The cookie name, and the admin row: the local-model copy has no email, so it says so. |
 
 Four more files differ and are never opened by any tool: `.env`, `.env.example`, `server/.env` and `server/.env.example`. They hold settings, and the real ones hold secrets. One more file exists in the local-model copy only: `docs/README_copy.md`, a snapshot of its README from September, kept for reference and not maintained.
 
@@ -45,18 +45,19 @@ Files that are meant to be the same, such as `docs/flow/ServerFlow.mmd` beside `
 
 ## Which copy am I in
 
-The folder name says it. So does the port in the address bar, the name of the session cookie in the browser's tools, and the opening lines of `README.md` and `docs/index.md`. A running portal reports its build at `/api/health` after sign-in, and the sidebar shows it in its footer. The two copies show the same commit, because the local-model copy is built from the hosted copy's commit.
+The folder name says it. So does the port in the address bar, the name of the session cookie in the browser's tools, and the opening lines of `README.md` and `docs/index.md`. A running portal reports its build at `/api/health` after sign-in, and the sidebar shows it in its footer. Each copy shows the commit of its own repository, so the two can show different ones.
 
 ## Keeping them in step
 
 A change to shared code lands in both folders, in the same piece of work. The order that avoids mistakes:
 
 1. Make the change in `hcml-portal`, the first copy, and get its checks green.
-2. Copy the shared files across with `rsync -a --delete`, and the exclude list that names the files above and `.env*`, `pic/`, `node_modules/`, `dist/`, `.git/`, `.DS_Store` and `*.tsbuildinfo`. Run it with `--dry-run` first and read what it would do. `--delete` removes a file from the destination that the source lacks, which is right for a deleted file and wrong for one that belongs to the destination only.
+2. Copy the shared files across with `rsync -a --delete`, and the exclude list that names the files above and `.env*`, `pic/`, `node_modules/`, `dist/`, `.git/`, `.DS_Store`, `*.tsbuildinfo` and `.test-counts.json`. Run it with `--dry-run` first and read what it would do. `--delete` removes a file from the destination that the source lacks, which is right for a deleted file and wrong for one that belongs to the destination only.
 3. Edit the per-copy files by hand in each folder, if the change touches what they say.
-4. Run `npm run verify` in both folders. Its last step is `parity.check`, which compares the two and fails on any difference that is not on the list.
-5. Commit in each folder, in its own repository. Since 11 November 2026 the second copy has a history of its own, so one commit does not cover both.
-6. Rebuild both ([the rebuild script](tools-deploy-docs.md#deploy) does it in order, the hosted copy first).
+4. If a `package.json` or a `package-lock.json` changed, run `npm run install:all` in the second folder: the copy step leaves `node_modules/` alone, so that copy would go on testing the old versions. `npm run verify` starts with `verify:installed`, which fails and names any package that is not at the version its lock file says.
+5. Run `npm run verify` in both folders. Its last step is `parity.check`, which compares the two and fails on any difference that is not on the list.
+6. Commit in each folder, in its own repository. Since 11 November 2026 the second copy has a history of its own, so one commit does not cover both. Use `git add -A`, not `git commit -a`: new source and test files are imported by tracked ones, and a commit that leaves them out does not build.
+7. Rebuild both ([the rebuild script](tools-deploy-docs.md#deploy) does it in order, the hosted copy first).
 
 Merging the two into one repository with two profiles was considered and not done: it would change how both live portals are built and started. The price is that a fix is two edits, two builds and two deployments, and the parity check is what makes that safe.
 

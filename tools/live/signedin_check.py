@@ -1,10 +1,13 @@
 """Signed-in checks of a running portal through nginx (tracker.md SC-21, IN-01).
 
-    PORTAL_USER=... PORTAL_PASSWORD=... python3 -I signedin_check.py http://localhost:8081 [--stream-seconds 80]
-        [--expect-mail on|off|any] [--only-mail] [--month YYYY-MM]
+    read -r PORTAL_USER; read -rs PORTAL_PASSWORD; export PORTAL_USER PORTAL_PASSWORD
+    python3 -I signedin_check.py http://localhost:8081 [--stream-seconds 80]
+        [--expect-mail on|off|any] [--expect-ai local|hosted|any] [--expect-zabbix on|any] [--only-mail] [--only-health] [--month YYYY-MM]
 
 The account must be an administrator: email and the monthly schedule are for administrators. `--expect-mail on` is for a copy that
 has its MAIL_ settings (the hosted one), `off` for one that holds them back (the local-model copy), `any` takes either.
+`--expect-zabbix on` (the default) fails a portal that cannot read Zabbix, which answers /api/ready with a 503; `any` is for an image tried
+where Zabbix cannot be reached, such as a laptop off HCML's network, and then says what Zabbix answered and passes.
 `--only-mail` runs the sign-in and the email, schedule and CSV checks alone, which is quick when they are the question.
 The report downloads use the month that has just closed in Asia/Jakarta, since Zabbix keeps about a year of events and a fixed month would stop working; `--month` names another.
 
@@ -56,7 +59,14 @@ except ValueError:
 expect_mail = option('--expect-mail', 'any')
 if expect_mail not in ('on', 'off', 'any'):
     sys.exit('--expect-mail is on, off or any')
+expect_ai = option('--expect-ai', 'any')
+if expect_ai not in ('local', 'hosted', 'any'):
+    sys.exit('--expect-ai is local, hosted or any')
+expect_zabbix = option('--expect-zabbix', 'on')
+if expect_zabbix not in ('on', 'any'):
+    sys.exit('--expect-zabbix is on or any')
 only_mail = '--only-mail' in sys.argv
+only_health = '--only-health' in sys.argv
 month = option('--month', month_just_closed())  # a closed month, for the report downloads
 if not re.fullmatch(r'\d{4}-(0[1-9]|1[0-2])', month):
     sys.exit('--month is YYYY-MM, such as 2026-10')
@@ -71,8 +81,10 @@ missing = [name for name in ('PORTAL_USER', 'PORTAL_PASSWORD') if not os.environ
 if missing:
     one = len(missing) == 1
     sys.exit(
-        f"{' and '.join(missing)} {'is' if one else 'are'} not set. Set {'it' if one else 'them'} for this one command, with an administrator's account, as in:\n"
-        f'    PORTAL_USER=... PORTAL_PASSWORD=... python3 -I tools/live/signedin_check.py {without_login(base)}'
+        f"{' and '.join(missing)} {'is' if one else 'are'} not set. Read {'it' if one else 'them'} into the shell with an administrator's account, "
+        "so that the password stays out of the shell's history, as in:\n"
+        '    read -r PORTAL_USER; read -rs PORTAL_PASSWORD; export PORTAL_USER PORTAL_PASSWORD\n'
+        f'    python3 -I tools/live/signedin_check.py {without_login(base)}'
     )
 user, pw = os.environ['PORTAL_USER'], os.environ['PORTAL_PASSWORD']
 
@@ -96,6 +108,12 @@ def line(label, ok, detail=''):
 
 
 results = []
+
+
+def finish():
+    print(f"\n{sum(results)} of {len(results)} checks passed")
+    sys.exit(0 if all(results) else 1)
+
 
 # 1. Sign in. The cookie jar keeps the session; a Secure cookie would not be sent over plain http.
 resp, dt = call('POST', '/bff/api/auth/login', json.dumps({'username': user, 'password': pw}).encode(),
@@ -122,8 +140,39 @@ if not only_mail:
 
     resp, dt = call('GET', '/bff/api/ready')
     ready_body = resp.read()
-    results.append(line('signed-in /api/ready', resp.status in (200, 503), f'HTTP {resp.status}, {dt:.2f}s'))
+    try:
+        ready_answer = json.loads(ready_body or b'{}')
+    except ValueError:
+        ready_answer = {}
+    zabbix_says = ready_answer.get('zabbix') if isinstance(ready_answer, dict) else None
+    # A 503 is the server saying it cannot read Zabbix (IN-91): a pass only where that is expected.
+    read_ok = resp.status == 200 and isinstance(ready_answer, dict) and ready_answer.get('ok') is True
+    results.append(line('signed-in /api/ready', read_ok if expect_zabbix == 'on' else resp.status in (200, 503),
+                        f'HTTP {resp.status}, {dt:.2f}s' + (f', zabbix={json.dumps(zabbix_says)}' if zabbix_says is not None else '')))
     print('      body:', ready_body[:300].decode('utf8', 'replace'))
+
+    # 2b. What the copy is for: the model it promises (IN-79), and the server's own log file, which must be written and growing (IN-83).
+    ready_check = health.get('ready') if isinstance(health.get('ready'), dict) else {}
+    if expect_ai == 'local':
+        detail = f"aiProvider={json.dumps(health.get('aiProvider'))}, aiExternal={json.dumps(health.get('aiExternal'))}, model={json.dumps(ready_check.get('model'))}"
+        ok = health.get('aiProvider') == 'openai-compatible' and health.get('aiExternal') is False and ready_check.get('model') == 'ok'
+        results.append(line('the model is local and answers: no question leaves this machine', ok, detail))
+    elif expect_ai == 'hosted':
+        detail = f"aiProvider={json.dumps(health.get('aiProvider'))}, aiExternal={json.dumps(health.get('aiExternal'))}"
+        results.append(line('the hosted model is set up: questions leave this machine, and the page says so', health.get('aiExternal') is True, detail))
+
+    first = health.get('logFile') if isinstance(health.get('logFile'), dict) else None
+    resp, dt = call('GET', '/bff/api/health')  # the sign-in and the ready call above were logged, so the file has grown since the first read
+    again = json.loads(resp.read() or b'{}')
+    second = again.get('logFile') if isinstance(again.get('logFile'), dict) else None
+    if first is None or second is None:
+        results.append(line("the server's own log file is written and growing", False, 'no logFile in the health answer: the server predates it, or it is not signed in as expected'))
+    else:
+        grew = isinstance(first.get('written'), int) and isinstance(second.get('written'), int) and second['written'] > first['written']
+        results.append(line("the server's own log file is written and growing", second.get('state') == 'ok' and grew,
+                            f"state={second.get('state')}, bytes written {first.get('written')} -> {second.get('written')}"))
+    if only_health:
+        finish()
 
     # 3. Report downloads through nginx's buffer (closed month, both formats).
     for fmt in ('pdf', 'xlsx'):
@@ -220,5 +269,4 @@ results.append(line('csv report through nginx', ok, f'HTTP {resp.status}, {len(d
 print('      content-type:', resp.headers.get('Content-Type'), '| disposition ok:', 'attachment' in (resp.headers.get('Content-Disposition') or ''))
 del data
 
-print(f"\n{sum(results)} of {len(results)} checks passed")
-sys.exit(0 if all(results) else 1)
+finish()

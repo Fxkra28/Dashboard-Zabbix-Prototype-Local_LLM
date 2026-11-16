@@ -80,6 +80,14 @@ describe('the sidebar and the server agree on the pages', () => {
     expect([...menuPages].sort()).toEqual(Object.keys(PAGE_API).sort());
   });
 
+  it('has no page for the Availability & response report, which the SLA page took over', () => {
+    expect(Object.keys(PAGE_API)).not.toContain('/reports/availability');
+    expect(menuPages).not.toContain('/reports/availability');
+    // The SLA page now reads the availability and aging reports too, and a viewer may read both, as the old page's viewers did.
+    expect(PAGE_API['/sla']).toBe('/api/sli');
+    for (const url of ['/api/sli', '/api/reports/availability', '/api/reports/aging']) expect(requiredRole(url), url).toBe('viewer');
+  });
+
   it('keeps no role rules of its own', () => {
     // A role written next to a menu item is a second copy of auth.ts ROUTE_RULES.
     expect(sidebar).not.toMatch(/\brole:\s*'(viewer|operator|admin)'/);

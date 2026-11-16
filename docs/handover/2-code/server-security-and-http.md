@@ -74,12 +74,12 @@ It returns the reason, or `null` to go on, which `setupAuth` turns into a 403 `c
 
 ### setupAuth
 
-`server/src/security/auth.ts`. The whole of sign-in, in one function with a few dozen small ones inside it. It registers the four auth routes and the guard, and holds the state that must not outlive the process: the users, the sign-out list and the failure counts. The function is 254 lines, so four parts are quoted.
+`server/src/security/auth.ts`. The whole of sign-in, in one function with a few dozen small ones inside it. It registers the four auth routes and the guard, and holds the state that must not outlive the process: the users, the sign-out list and the failure counts. The function is 260 lines, so four parts are quoted.
 
 **The check of a token.** Every protected request goes through `authenticate`.
 
-<!-- gen:snippet server/src/security/auth.ts#setupAuth lines=25-54 sha=e8aa26749515 -->
-`server/src/security/auth.ts:334-363` (lines 25 to 54 of setupAuth)
+<!-- gen:snippet server/src/security/auth.ts#setupAuth lines=25-54 sha=5588b56e7456 -->
+`server/src/security/auth.ts:343-372` (lines 25 to 54 of setupAuth)
 
 ```ts
   const named = users.filter((u) => u.name === sub);
@@ -123,8 +123,8 @@ const cookieOptions = (req: FastifyRequest) => ({
 
 **The signing of a token.**
 
-<!-- gen:snippet server/src/security/auth.ts#setupAuth lines=79-86 sha=e8aa26749515 -->
-`server/src/security/auth.ts:388-395` (lines 79 to 86 of setupAuth)
+<!-- gen:snippet server/src/security/auth.ts#setupAuth lines=79-86 sha=5588b56e7456 -->
+`server/src/security/auth.ts:397-404` (lines 79 to 86 of setupAuth)
 
 ```ts
   const token = app.jwt.sign({ sub: u.name, role: u.role, ep: config.auth.sessionEpoch, jti: randomUUID(), sid }, { expiresIn: tokenLifetime(), ...claimsOfThisPortal });
@@ -142,10 +142,17 @@ The token carries the name, the role, the epoch, a unique id `jti` and a session
 
 **Sign-in, and the lock.**
 
-<!-- gen:snippet server/src/security/auth.ts#setupAuth lines=151-176 sha=e8aa26749515 -->
-`server/src/security/auth.ts:460-485` (lines 151 to 176 of setupAuth)
+<!-- gen:snippet server/src/security/auth.ts#setupAuth lines=151-176 sha=5588b56e7456 -->
+`server/src/security/auth.ts:469-494` (lines 151 to 176 of setupAuth)
 
 ```ts
+  if (count % LOGIN_WARN_AFTER === 0) {
+    req.log.warn({ event: 'sign_in_repeated_failures', ...loggedName(req), failures: count, ip: req.ip }, 'repeated failed sign-ins for one name');
+  }
+};
+const recordFailure = (key: string) => {
+  const now = Date.now();
+  const prev = failures.get(key);
   const count = (prev && now - prev.last < LOGIN_FAIL_TTL_MS ? prev.count : 0) + 1;
   const until =
     count >= LOGIN_LOCK_AFTER ? now + Math.min(LOGIN_LOCK_BASE_MS * 2 ** (count - LOGIN_LOCK_AFTER), LOGIN_LOCK_MAX_MS) : 0;
@@ -165,27 +172,27 @@ app.post('/api/auth/login', { schema: { body: loginBody }, preHandler: loginLimi
   }
 
   failures.delete(loginKey(req));
-  nameFailures.delete(typedName(req).toLowerCase());
-  logAttempt(req, 'success');
-  return issue(found, req, reply);
-});
-
-app.get('/api/auth/me', async (req, reply) => {
-  // With auth off the UI still needs a role so it knows what to render.
 ```
 <!-- /gen -->
 
 1. The route runs `loginLimit` first, as a `preHandler`, since the body is not parsed earlier. That is where the per-account limit and the lock are enforced. The body schema and a 4 KB limit are set on the route.
 2. `findUser` checks the password against every entry of that name, and a name nobody holds still costs one hash check (`decoyVerify`), so an unknown name is not quicker to refuse than a known one.
-3. A failure is counted (`recordFailure`) and logged with the name as typed and the address, never the password. From ten failures in a row for one account and address, sign-in is locked for a minute, doubling with each further failure up to five minutes. Every fifth failure for one name logs a warning.
+3. A failure is counted (`recordFailure`) and logged with the account's name when an account holds it, or as `unknown` with the length of what was typed when none does (a password typed into the name box must not stay in a log that lasts), and the address, never the password. From ten failures in a row for one account and address, sign-in is locked for a minute, doubling with each further failure up to five minutes. Every fifth failure for one name logs a warning.
 4. The answer to a failure is the same for a wrong name and a wrong password: 401 `invalid_credentials`. A success clears the counts.
 
 **The guard.**
 
-<!-- gen:snippet server/src/security/auth.ts#setupAuth lines=213-238 sha=e8aa26749515 -->
-`server/src/security/auth.ts:522-547` (lines 213 to 238 of setupAuth)
+<!-- gen:snippet server/src/security/auth.ts#setupAuth lines=213-238 sha=5588b56e7456 -->
+`server/src/security/auth.ts:531-556` (lines 213 to 238 of setupAuth)
 
 ```ts
+  reply.clearCookie(cookieName, cookieOptions(req));
+  return { ok: true };
+});
+
+if (!config.auth.enabled) return;
+
+// Guard every /api/* route except the public four. The token comes from the Bearer header or the
 // session cookie, never the query string: the live stream sends the cookie like any request, so
 // no token lands in a URL, a log or browser history.
 app.addHook('onRequest', async (req, reply) => {
@@ -205,13 +212,6 @@ app.addHook('onRequest', async (req, reply) => {
   const has = session.user.role;
   const needs = requiredRole(route);
   if (!roleAllows(has, needs)) {
-    return reply.code(403).send({
-      error: 'forbidden',
-      message: `This view needs the "${needs}" role; you are signed in as "${has}".`,
-    });
-  }
-});
-
 ```
 <!-- /gen -->
 
@@ -221,8 +221,8 @@ One `onRequest` hook for every route under `/api` except the four public ones. F
 
 `server/src/security/auth.ts`. Refuses to start with a password anyone can guess.
 
-<!-- gen:snippet server/src/security/auth.ts#assertUsers sha=cc5d7ead9945 -->
-`server/src/security/auth.ts:243-272`
+<!-- gen:snippet server/src/security/auth.ts#assertUsers sha=51030a015a2b -->
+`server/src/security/auth.ts:243-281`
 
 ```ts
 export function assertUsers(warn: (message: string) => void = () => undefined): void {
@@ -246,6 +246,15 @@ export function assertUsers(warn: (message: string) => void = () => undefined): 
         'Set PORTAL_PASS, or PORTAL_USERS as name:password:role triples, in .env.',
     );
   }
+  // Docker compose reads a "$" in .env as the start of a variable and drops the rest, so a long password can reach the server short (SC-55).
+  const short = loaded.filter((u) => isTooShort(u.pass));
+  if (short.length) {
+    throw new Error(
+      `AUTH_ENABLED=true but ${short.map((u) => `"${u.name}"`).join(', ')} ${short.length === 1 ? 'has' : 'have'} a password shorter than ${MIN_PASSWORD_LENGTH} characters. ` +
+        'Docker compose cuts a password in .env at its first "$" unless it is in single quotes, so a long one can arrive short. ' +
+        'Put the password in single quotes, use a longer one, or store a hash made by scripts/hash-password.ts.',
+    );
+  }
   // Not a refusal: a password on a short list is a weak choice and not an unset one, and the owner may have reasons.
   const common = loaded.filter((u) => isCommon(u.pass));
   if (common.length) {
@@ -262,7 +271,8 @@ export function assertUsers(warn: (message: string) => void = () => undefined): 
 2. If `PORTAL_USERS` is set but holds no valid `name:password:role` entry, the start fails and says why. The reasons are collected without their text, so a malformed entry cannot put a password in the message.
 3. The users are loaded as the guard will load them. A hash that is not a usable `scrypt.N.r.p.salt.hash` stops the start too. Only the single-admin shorthand can reach this point with a broken hash, since a broken `PORTAL_USERS` entry is skipped above.
 4. A password that is empty or the built-in `admin` stops the start, naming the users and never the passwords. A hash is tested against both guesses once, at start, so hashing `admin` does not get round the refusal.
-5. A password on a short list (`secret`, `zabbix`, `password`, `changeme` and `123456`, in any case), or one that is still a placeholder such as `<a long password>` pasted from the documents, does not stop the start. One warning names the users and never the passwords (SC-46), because a weak choice is not an unset one. A hash is tried against each word of the list in lower case, once, at start.
+5. A plain password shorter than 8 characters (`MIN_PASSWORD_LENGTH`) stops the start too, naming the users and never the passwords. A hash is not measured, since it is long whatever the password. The cause it guards against is Docker compose: it reads a `$` in `.env` as the start of a variable and drops the rest, so a long password can reach the server short, and the message says to put the password in single quotes, use a longer one, or store a hash made by `scripts/hash-password.ts` (SC-55).
+6. A password on a short list (`secret`, `zabbix`, `password`, `changeme` and `123456`, in any case), or one that is still a placeholder such as `<a long password>` pasted from the documents, does not stop the start. One warning names the users and never the passwords (SC-46), because a weak choice is not an unset one. A hash is tried against each word of the list in lower case, once, at start.
 
 It is the reason copying `.env.example` over `.env` does not give a portal with `admin` as its password. `index.ts` runs it right after `assertConfig`. Tests: `startup-guards.test.ts`, `auth-users.test.ts` and `passwords.test.ts`.
 
@@ -380,7 +390,7 @@ Tests: `viewer-network.test.ts` and `viewer-network-ids.test.ts`.
 `server/src/security/pageAccess.ts`. The sidebar's source of truth: for each page, the role it needs.
 
 <!-- gen:snippet server/src/security/pageAccess.ts#pageRoles sha=c8df6e798c4a -->
-`server/src/security/pageAccess.ts:33-35`
+`server/src/security/pageAccess.ts:32-34`
 
 ```ts
 export function pageRoles(roleFor: (url: string) => Role): Record<string, Role> {
@@ -400,11 +410,15 @@ export function pageRoles(roleFor: (url: string) => Role): Record<string, Role> 
 3. `auditDownload` writes a `report_download` line for each SLA report taken: the user, the address, the report, the month, the format and the size in bytes.
 4. `actor` is the name of whoever is acting, with brackets and control characters taken out, or `anonymous`. The write-back tag and these lines use the same one.
 
-A line is written by the process that served the request, to the container's log. Docker keeps five files of 50 MB for each container and deletes them when the container is made again, so `deploy/rebuild.sh` saves a compressed copy of the logs first. Where logs go beyond that, and for how long, is for whoever runs the portal to decide. The request line itself still carries no user name. Tests: `usage-log.test.ts`, `usage-log-sla.test.ts` and `download-log.test.ts`.
+A line is written by the process that served the request, to the container's log and to the server's own file in the `portal-logs` volume (`core/logFile.ts`), which a rebuild keeps. Docker keeps five files of 50 MB for each container and deletes them when the container is made again, so `deploy/rebuild.sh` saves a compressed copy of the logs first. Where logs go beyond that, and for how long, is for whoever runs the portal to decide. The request line itself still carries no user name. Tests: `usage-log.test.ts`, `usage-log-sla.test.ts` and `download-log.test.ts`.
 
 ### searchGuard
 
 `server/src/security/searchLimit.ts`. A text search in the item picker or in Latest data is a cold read of Zabbix whenever the text is new, and the global limit is one bucket for a whole address. So each person has an allowance of 120 searches a minute. `searchGuard` is a `preHandler` of `/api/items` and `/api/latest`: a request with no search text, or only spaces, is not counted; past the allowance the answer is a 429 `rate_limited` with a `retry-after`, before any read of Zabbix. Tests: `search-limit.test.ts`.
+
+### heavyReportGuard
+
+`server/src/security/heavyLimit.ts`. The heavy reports (availability, noise, capacity and top triggers) read thousands of SQL statements for a new `days`, behind a gate of two places, and the cache cannot stop a script from asking for a new `days` each time. `heavyReportGuard` is a `preHandler` of those four routes and counts the requests each person has waiting or running: four at most, which is two pages open, and then a 429 `rate_limited` with a `retry-after`, so that a script that keeps its connections open cannot fill the line while everyone else waits. A request that fails its schema is not counted, a place is given back when the answer is sent or the reader leaves, and another person is never refused because of the first (BK-75). The same file counts a second line the same way, for the monthly SLA reads: `sliReadGuard` is a `preHandler` of `/api/sli` and of the derived service tree and takes one place, and `sliExportGuard` is one of the report file and takes two, because the file reads both methods. Four places at most, which is two pages of both methods, or a page and a file, behind the gate of two places that `getMonthlySli` waits in. The two lines are counted apart, so four heavy reports do not use up the places for a month (BK-76). Both come from one small function that counts the places of each person in a map and gives them back once, when the connection closes. Tests: `heavy-limit.test.ts`, `sli-limit.test.ts`.
 
 ## What every request passes
 
@@ -564,8 +578,8 @@ Tests: `compress.test.ts`.
 
 `server/src/http/errors.ts`. Maps every failure to one reply shape: `{ error, message }`, plus `requestId`.
 
-<!-- gen:snippet server/src/http/errors.ts#registerErrorHandler sha=906ca6eaf33e -->
-`server/src/http/errors.ts:35-124`
+<!-- gen:snippet server/src/http/errors.ts#registerErrorHandler sha=2df01bbc4180 -->
+`server/src/http/errors.ts:36-129`
 
 ```ts
 export function registerErrorHandler(app: FastifyInstance): void {
@@ -626,6 +640,10 @@ export function registerErrorHandler(app: FastifyInstance): void {
     if (err instanceof ScheduleUnavailableError) {
       return reply.code(503).send({ error: 'schedule_unavailable', message: err.message });
     }
+    // The reader left before their read began (gate.ts, cache.ts): nobody is there to be told, so this writes no line of its own.
+    if (err instanceof Cancelled) {
+      return reply.code(499).send({ error: 'cancelled', message: 'The read was dropped because its reader left.' });
+    }
     if (err instanceof StateWriteError) {
       // `detail` is the system's code for the failure: the log gets it, the response never does.
       req.log.error({ detail: err.detail }, 'the portal could not save its state');
@@ -665,17 +683,18 @@ export function registerErrorHandler(app: FastifyInstance): void {
 2. The four Zabbix errors are 503 or 502 with a fixed sentence for the person at the screen, "The data source is not answering. Tell an administrator and quote reference ...", and the details, the method and the setting to check and Zabbix's own words, go to the log. A rejected token and a Zabbix that does not answer in time are 503, because both mean the data source is not usable right now and not that the portal is at fault; every other failure of the call, a refused connection included, is 502 `zabbix_error`.
 3. The AI errors come next: not switched on, 503; busy, 503 with `Retry-After`, because a local model answering someone else is expected under load; and a failure upstream, 502. Their details also go to the log and never to the browser.
 4. Email follows the same rule. Email not set up is 503 `mail_disabled`, a month in which neither method finds a device is 502 `empty_report` with a sentence that says where to look (BK-51), and a refusal by the mail server is 502 `mail_error` with one fixed sentence for its kind (login, connection, time, TLS, recipients, message, other). What the server said goes to the log, with the login name and the password taken out. The monthly schedule adds two: 503 `schedule_unavailable` where it cannot run on this portal (the message says what to change), and 500 `state_error` when the portal could not save its small state file, with a fixed sentence and the system's own code in the log only.
-5. Anything else with a 4xx status, such as malformed JSON, a wrong content type or a body too large, is passed on with its message. Anything else is a bug: it is logged in full, and the browser gets "The portal hit an unexpected error. Tell an administrator and quote reference ..." and never the internal wording.
-6. An unknown route is a 404 that names the method and path, without the query string.
+5. A read dropped because its reader left (`Cancelled`, from the gate, or from the cache when a reader's own signal fires) is a 499 `cancelled`, and the handler writes no line of its own; Fastify's request line is still there. The connection is closed, so nobody reads the answer, and an expected thing is not an error.
+6. Anything else with a 4xx status, such as malformed JSON, a wrong content type or a body too large, is passed on with its message. Anything else is a bug: it is logged in full, and the browser gets "The portal hit an unexpected error. Tell an administrator and quote reference ..." and never the internal wording.
+7. An unknown route is a 404 that names the method and path, without the query string.
 
-It lives in its own module so the tests can exercise it against a bare Fastify instance, since `index.ts` starts a listening server on import. Tests: `ai-errors.test.ts`, `routes.test.ts`, `zabbix.test.ts`, `mail-route.test.ts` and `schedule-route.test.ts`.
+It lives in its own module so the tests can exercise it against a bare Fastify instance, since `index.ts` starts a listening server on import. Tests: `ai-errors.test.ts`, `routes.test.ts`, `zabbix.test.ts`, `mail-route.test.ts`, `schedule-route.test.ts` and `reader-gone.test.ts`.
 
 ### createReadiness
 
 `server/src/http/health.ts`. The cached check of whether Zabbix and the model answer, so that polling health cannot pile calls onto Zabbix.
 
 <!-- gen:snippet server/src/http/health.ts#createReadiness sha=2e3d45b786b0 -->
-`server/src/http/health.ts:78-134`
+`server/src/http/health.ts:98-154`
 
 ```ts
 export function createReadiness(opts: ReadinessOptions = {}) {
@@ -740,9 +759,10 @@ export function createReadiness(opts: ReadinessOptions = {}) {
 
 1. `get()` answers from the last check while it is younger than `ttlMs`. Between that and `staleMs` it answers with the last check and starts a new one behind it. Only older than that does it wait for a new check.
 2. `refresh()` has one check in flight at a time: `flight ??=` reuses the running one.
-3. `check()` runs Zabbix's probe under a limit of two seconds, racing it against a timer. The probe is `host.get` with a limit of one host: the cheapest authenticated read there is (`apiinfo.version` is refused with a token). A probe abandoned on the timeout has its late failure swallowed, since that is not news.
-4. The model probe runs beside it. With no model it is `off`. For the hosted provider it is `not_checked`, because a probe would be billed. For a local model it asks `/models` and says `ok` or `down`.
+3. `check()` runs Zabbix's probe under a limit of two seconds, racing it against a timer. The probe is `host.get` with a limit of one host: the cheapest authenticated read there is (`apiinfo.version` is refused with a token). The call itself is given the same limit, so a slow Zabbix is not left running behind the answer, and a probe abandoned on the timeout has its late failure swallowed, since that is not news.
+4. The model probe runs beside it. With no model it is `off`. For the hosted provider it is `not_checked`, because a probe would be billed. For a local model it asks `/models`: `down` when the server does not answer, `missing` when it answers and its list lacks `AI_MODEL` (`isListed` reads a name without a tag as `:latest`, as Ollama does), and `ok` otherwise (BK-66).
 5. The result says `ok` only when Zabbix answered. `warm()` starts the first check at boot so that the first health call finds an answer.
+6. A signed-in caller also gets `logFile`, from `logFileStatus()` in `core/logFile.ts`: `off` when `LOG_DIR` is empty, `ok`, or `failing` while the file cannot be written, with the bytes that have reached it since the process started. A log that stopped being written leaves the person reading `docker logs` with no word of it (IN-83).
 
 `GET /api/health` always answers 200. A signed-in caller gets this result as `ready`, and anyone else gets only whether it is `ok`, as a plain `true` or `false` (IN-47). `GET /api/ready` answers 503 while it is not `ok`. Tests: `health.test.ts`.
 
@@ -751,7 +771,7 @@ export function createReadiness(opts: ReadinessOptions = {}) {
 `server/src/http/shutdown.ts`. Closes the server cleanly on a stop signal, inside the ten seconds Docker allows.
 
 <!-- gen:snippet server/src/http/shutdown.ts#installShutdown sha=6e51a1715a82 -->
-`server/src/http/shutdown.ts:38-75`
+`server/src/http/shutdown.ts:39-76`
 
 ```ts
 export function installShutdown(app: FastifyInstance, opts: ShutdownOptions = {}): () => void {
@@ -801,3 +821,7 @@ export function installShutdown(app: FastifyInstance, opts: ShutdownOptions = {}
 4. It returns a function that takes the handlers off again.
 
 `init: true` in the compose file makes sure the signal reaches Node. Tests: `shutdown.test.ts`.
+
+### installCrashLog
+
+In the same module, installed first in `index.ts`. An uncaught exception or an unhandled rejection is written with `app.log.fatal`, with the error and its stack, once, and the process exits with 1. Node's own report goes to stderr, which a rebuild deletes with the container, so without this the reason for a crash would not be in `bff.log` (BK-68). The source and the exit function can be passed in, as for `installShutdown`. Tests: `shutdown.test.ts`.

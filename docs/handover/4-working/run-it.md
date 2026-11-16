@@ -27,7 +27,7 @@ You need Node 24 and npm, a reachable Zabbix 7.0, and a read-only API token for 
 
 ### Signing in
 
-Sign-in is on by default. With it on you need `PORTAL_USER` and `PORTAL_PASS`, or `PORTAL_USERS` as comma-separated `name:password:role` triples, and the server refuses to start while a password is empty or `admin`. It also needs a real `JWT_SECRET`, at least 32 bytes and not a value published in the repository: `openssl rand -hex 32` makes one, and a different one for each portal is better. A session lasts 12 hours unless `SESSION_HOURS` says otherwise, from 2 to 24, and an open portal renews it before then. Raise `SESSION_EPOCH` and recreate the server container to sign everyone out at once. Two portals on one machine need different `SESSION_COOKIE` names, because cookies ignore ports and signing in to one would sign you out of the other.
+Sign-in is on by default. With it on you need `PORTAL_USER` and `PORTAL_PASS`, or `PORTAL_USERS` as comma-separated `name:password:role` triples, and the server refuses to start while a password is empty, `admin` or a plain password shorter than 8 characters (a password with a `$` goes in single quotes in `.env`). It also needs a real `JWT_SECRET`, at least 32 bytes and not a value published in the repository: `openssl rand -hex 32` makes one, and a different one for each portal is better. A session lasts 12 hours unless `SESSION_HOURS` says otherwise, from 2 to 24, and an open portal renews it before then. Raise `SESSION_EPOCH` and recreate the server container to sign everyone out at once. Two portals on one machine need different `SESSION_COOKIE` names, because cookies ignore ports and signing in to one would sign you out of the other.
 
 ## A suggested round for whoever runs it
 

@@ -21,7 +21,6 @@ export const PAGE_API: Readonly<Record<string, string>> = {
   '/links': '/api/links',
   '/services': '/api/services',
   '/sla': '/api/sli',
-  '/reports/availability': '/api/reports/availability',
   '/reports/capacity': '/api/reports/capacity',
   '/reports/noise': '/api/reports/noise',
   '/reports/top-triggers': '/api/reports/top-triggers',

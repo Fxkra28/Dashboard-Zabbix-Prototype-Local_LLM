@@ -51,7 +51,7 @@ function workbook(): Buffer {
 const report = { overall: { hosts: 1, sli: 99.5 }, categories: [], hosts: [{ name: 'sw-lt3', sli: 99.5, downtime: 100, incidents: 1, category: 'Other' }], stats: { ms: 5 } };
 
 /** A portal that wants a sign-in: ana's password gets a cookie, and the report needs that cookie. */
-async function fakePortal(signIn: boolean) {
+async function fakePortal(signIn: boolean, tooOld = false) {
   const seen: { login?: { body: string; csrf?: string | string[] }; logins: number; reports: number } = { logins: 0, reports: 0 };
   server = http.createServer((req, res) => {
     let body = '';
@@ -66,6 +66,11 @@ async function fakePortal(signIn: boolean) {
       }
       if (req.url?.startsWith('/api/sli')) {
         seen.reports++;
+        // What the portal says of a month it will not read: Zabbix keeps events for about a year.
+        if (tooOld) {
+          res.writeHead(400, { 'content-type': 'application/json' });
+          return res.end('{"error":"bad_request","message":"Zabbix keeps events for about a year; pick a later period."}');
+        }
         if (signIn && !String(req.headers.cookie).includes('hcml_session=tok123')) {
           res.writeHead(401, { 'content-type': 'application/json' });
           return res.end('{"error":"unauthorized"}');
@@ -159,3 +164,32 @@ describe('scripts/validate-sli.ts, a portal with sign-in on (IN-49)', () => {
     expect(portal.seen.login).toBeUndefined();
   });
 });
+
+// IN-88: the months it names are those of HCML's published reports, and the portal reads only the last 400 days, so from July 2027 the first of them is refused.
+describe('scripts/validate-sli.ts, a month the portal will not read (IN-88)', () => {
+  it('says in words that the month is out of reach, how far the portal reads, and what to do, and stops with 2', async () => {
+    addSheet('2026-06');
+    const portal = await fakePortal(false, true);
+    const res = await run(['2026-06'], { REPORT_DIR: dir, BFF_URL: portal.url });
+    expect(res.status).toBe(2);
+    expect(res.stderr).toMatch(/2026-06: the portal does not read a month that old/);
+    expect(res.stderr).toMatch(/400 days/);
+    expect(res.stderr).toMatch(/Name a recent month that has a spreadsheet/);
+    expect(res.stderr).not.toContain('"error"');
+    expect(res.stderr).not.toMatch(/\n\s+at /);
+  });
+
+  it('still tells any other 400 as the portal said it', async () => {
+    addSheet('2026-06');
+    server = http.createServer((_req, res) => {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end('{"error":"bad_request","message":"month must be YYYY-MM, e.g. 2026-08."}');
+    });
+    await new Promise<void>((resolve) => server!.listen(0, '127.0.0.1', resolve));
+    const url = `http://127.0.0.1:${(server!.address() as AddressInfo).port}`;
+    const res = await run(['2026-06'], { REPORT_DIR: dir, BFF_URL: url });
+    expect(res.status).toBe(2);
+    expect(res.stderr).toContain('2026-06: the portal refused the request: month must be YYYY-MM');
+  });
+});
+

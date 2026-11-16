@@ -5,7 +5,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../core/config.js';
-import { acquireHostedSlot, acquireModelSlot, AI_MESSAGE, AiDisabledError, AiUpstreamError, anthropicFailure, billedTokens, getAnthropic, ollamaChatBody, ollamaRoot, postModel, readOllamaStream, thinkingControl, usesOllamaNative, type OllamaStats, type OnUsage } from '../clients/ai.js';
+import { acquireHostedSlot, acquireModelSlot, AI_MESSAGE, AiDisabledError, AiUpstreamError, anthropicFailure, billedTokens, chargeOutside, countedTokens, getAnthropic, ollamaChatBody, ollamaRoot, postModel, readOllamaStream, thinkingControl, usesOllamaNative, type ModelCounts, type OllamaStats, type OnUsage } from '../clients/ai.js';
 import { estimatedTokens } from '../clients/limits.js';
 import { languageReminder, systemText } from './assistantPrompt.js';
 
@@ -47,9 +47,9 @@ export function cleanAnswer(raw: string): string {
  * Turn an OpenAI-style `text/event-stream` body into text pieces. Each frame is
  * `data: {json}`; the stream ends with `data: [DONE]`. Reasoning models may
  * send `delta.reasoning` frames with empty `content`: those are dropped, so
- * only what the reader should see is yielded.
+ * only what the reader should see is yielded. A frame that carries `usage` (a gateway asked for it with `stream_options`) goes to `onCounts`.
  */
-export async function* readOpenAiStream(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
+export async function* readOpenAiStream(body: ReadableStream<Uint8Array>, onCounts?: (counts: ModelCounts) => void): AsyncGenerator<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
@@ -65,12 +65,13 @@ export async function* readOpenAiStream(body: ReadableStream<Uint8Array>): Async
         if (!line.startsWith('data:')) continue;
         const data = line.slice(5).trim();
         if (data === '[DONE]') return;
-        let frame: { choices?: { delta?: { content?: string | null } }[] };
+        let frame: { choices?: { delta?: { content?: string | null } }[]; usage?: { total_tokens?: number; prompt_tokens?: number; completion_tokens?: number } | null };
         try {
           frame = JSON.parse(data);
         } catch {
           continue; // a partial or malformed frame; the next one carries on
         }
+        if (frame.usage) onCounts?.({ total: frame.usage.total_tokens, prompt: frame.usage.prompt_tokens, completion: frame.usage.completion_tokens });
         const piece = frame.choices?.[0]?.delta?.content;
         if (piece) yield piece;
       }
@@ -82,20 +83,36 @@ export async function* readOpenAiStream(body: ReadableStream<Uint8Array>): Async
 
 type Message = { role: string; content: string };
 
-async function* streamOpenAiCompatible(messages: Message[], signal: AbortSignal): AsyncGenerator<string> {
-  const res = await postModel(
-    `${config.ai.baseUrl.replace(/\/$/, '')}/chat/completions`,
-    {
-      model: config.ai.model,
-      max_tokens: ANSWER_MAX_TOKENS,
-      stream: true,
-      ...thinkingControl(config.ai.model),
-      messages,
-    },
-    signal,
-  );
-  if (!res.body) throw new AiUpstreamError(AI_MESSAGE.unusable, `${config.ai.model}: HTTP ${res.status} empty response`);
-  yield* readOpenAiStream(res.body);
+const sizeOf = (messages: Message[]) => messages.reduce((n, m) => n + m.content.length, 0);
+
+async function* streamOpenAiCompatible(messages: Message[], signal: AbortSignal, onUsage?: OnUsage): AsyncGenerator<string> {
+  let counts: ModelCounts | null = null;
+  let answered = 0;
+  let started = false;
+  try {
+    const res = await postModel(
+      `${config.ai.baseUrl.replace(/\/$/, '')}/chat/completions`,
+      {
+        model: config.ai.model,
+        max_tokens: ANSWER_MAX_TOKENS,
+        stream: true,
+        // A gateway outside the network is billed by the call, so it is asked for its counts; a model on this machine is asked for nothing new.
+        ...(config.ai.external ? { stream_options: { include_usage: true } } : {}),
+        ...thinkingControl(config.ai.model),
+        messages,
+      },
+      signal,
+    );
+    if (!res.body) throw new AiUpstreamError(AI_MESSAGE.unusable, `${config.ai.model}: HTTP ${res.status} empty response`);
+    started = true;
+    for await (const piece of readOpenAiStream(res.body, (c) => (counts = c))) {
+      answered += piece.length;
+      yield piece;
+    }
+  } finally {
+    // A call the gateway refused was not billed; one that answered, or was stopped part way, was (BK-69).
+    if (started) chargeOutside(onUsage, countedTokens(counts), sizeOf(messages), answered);
+  }
 }
 
 /** Ollama's own /api/chat, with the options every native request shares (ai.ts `ollamaChatBody`). */
@@ -103,14 +120,30 @@ async function* streamOllama(
   messages: Message[],
   signal: AbortSignal,
   onStats?: (stats: OllamaStats) => void,
+  onUsage?: OnUsage,
 ): AsyncGenerator<string> {
-  const res = await postModel(
-    `${ollamaRoot()}/api/chat`,
-    ollamaChatBody(messages, { numPredict: ANSWER_MAX_TOKENS, stream: true }),
-    signal,
-  );
-  if (!res.body) throw new AiUpstreamError(AI_MESSAGE.unusable, `${config.ai.model}: HTTP ${res.status} empty response`);
-  yield* readOllamaStream(res.body, onStats);
+  let counts: ModelCounts | null = null;
+  let answered = 0;
+  let started = false;
+  try {
+    const res = await postModel(
+      `${ollamaRoot()}/api/chat`,
+      ollamaChatBody(messages, { numPredict: ANSWER_MAX_TOKENS, stream: true }),
+      signal,
+    );
+    if (!res.body) throw new AiUpstreamError(AI_MESSAGE.unusable, `${config.ai.model}: HTTP ${res.status} empty response`);
+    started = true;
+    const onDone = (stats: OllamaStats) => {
+      counts = { prompt: stats.promptEvalCount, completion: stats.evalCount };
+      onStats?.(stats);
+    };
+    for await (const piece of readOllamaStream(res.body, onDone)) {
+      answered += piece.length;
+      yield piece;
+    }
+  } finally {
+    if (started) chargeOutside(onUsage, countedTokens(counts), sizeOf(messages), answered);
+  }
 }
 
 async function* streamAnthropic(
@@ -154,7 +187,7 @@ export interface AnswerOptions {
   focus?: string | null;
   /** Ollama's token counts once the answer is done, native API only. */
   onStats?: (stats: OllamaStats) => void;
-  /** Tokens a hosted answer was billed, once, when it ends however it ends (limits.ts `chargeTo`). */
+  /** Tokens the answer was billed, once, when it ends however it ends, for the hosted API and for a model outside the network (limits.ts `chargeTo`). */
   onUsage?: OnUsage;
 }
 
@@ -192,8 +225,8 @@ export async function* streamAnswer(
       return;
     }
     const messages = [{ role: 'system', content: system }, ...turns];
-    if (await usesOllamaNative()) yield* streamOllama(messages, combined, onStats);
-    else yield* streamOpenAiCompatible(messages, combined);
+    if (await usesOllamaNative()) yield* streamOllama(messages, combined, onStats, onUsage);
+    else yield* streamOpenAiCompatible(messages, combined, onUsage);
   } catch (err) {
     // The timeout covers the whole answer, not just the first byte, so one that fires mid-stream
     // becomes a readable error instead of the bare DOMException ("The operation was aborted due to

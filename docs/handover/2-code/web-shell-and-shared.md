@@ -2,7 +2,7 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Developers | about 40 min | [The folders of the web app](../1-folders/web.md) | [Web app: the API client, the types and the guards](web-api-types-guards.md) |
+| Developers | about 45 min | [The folders of the web app](../1-folders/web.md) | [Web app: the API client, the types and the guards](web-api-types-guards.md) |
 
 The web app is React with TypeScript, built by Vite into static files, and served by nginx. It talks to one address only, `/bff`, which nginx passes to the server, so the browser never sees Zabbix. There is no state library and no data library. The parts every page leans on are a few small hooks and components, and this chapter walks through them: how the page starts, how a page loads data and keeps it fresh, how it follows a live stream, how it knows who is signed in, how it keeps its state in the address, and what it says when the data is old or failed.
 
@@ -14,8 +14,8 @@ The web app is React with TypeScript, built by Vite into static files, and serve
 
 `web/src/App.tsx`. Every page is its own chunk.
 
-<!-- gen:snippet web/src/App.tsx#AppRoutes sha=554709af9f2a -->
-`web/src/App.tsx:38-74`
+<!-- gen:snippet web/src/App.tsx#AppRoutes sha=b954c013bdc4 -->
+`web/src/App.tsx:39-75`
 
 ```tsx
 export function AppRoutes() {
@@ -44,7 +44,7 @@ export function AppRoutes() {
         <Route path="/links" element={<Links />} />
         <Route path="/services" element={<Services />} />
         <Route path="/sla" element={<Sla />} />
-        <Route path="/reports/availability" element={<Availability />} />
+        <Route path="/reports/availability" element={<AvailabilityRedirect />} />
         <Route path="/reports/capacity" element={<Capacity />} />
         <Route path="/reports/noise" element={<AlertNoise />} />
         <Route path="/reports/top-triggers" element={<TopTriggers />} />
@@ -67,8 +67,8 @@ export function AppRoutes() {
 
 `web/src/features/shell/Layout.tsx`. The frame around every page: the skip link, the sidebar, the top bar and the main area.
 
-<!-- gen:snippet web/src/features/shell/Layout.tsx#Layout lines=2-33 sha=fa746d208468 -->
-`web/src/features/shell/Layout.tsx:25-56` (lines 2 to 33 of Layout)
+<!-- gen:snippet web/src/features/shell/Layout.tsx#Layout lines=2-33 sha=38e1bae256bf -->
+`web/src/features/shell/Layout.tsx:26-57` (lines 2 to 33 of Layout)
 
 ```tsx
 const { pathname } = useLocation();
@@ -85,6 +85,8 @@ useSessionRenewal(Boolean(me?.authEnabled));
 
 const { wall, enter: enterWall, exit: exitWall } = useWallMode();
 const wallToggle = useRef<HTMLButtonElement>(null);
+const topbar = useRef<HTMLElement>(null);
+useTopBarHeight(topbar, !wall);
 const wasWall = useRef(wall);
 useEffect(() => {
   if (wasWall.current === wall) return;
@@ -101,23 +103,22 @@ useEffect(() => {
 const [signOutFailed, setSignOutFailed] = useState(false);
 const [signingOut, setSigningOut] = useState(false);
 const signOut = async () => {
-  setSignOutFailed(false);
-  setSigningOut(true);
 ```
 <!-- /gen -->
 
 1. `titleFor`, a small function above `Layout`, finds the page's menu name from the address, ignoring case and a trailing slash as the router does, and the title is shown in the top bar and set as the browser tab's name (`usePageTitle`). An address that is not a page is "Page not found".
 2. The sidebar's first width is decided once, from the route the session landed on, and not again on later navigation: the Dashboard starts as a rail because it is the route meant for a wall, and moving the sidebar under someone who never touched it would be rude. A stored choice always wins, and a narrow screen forces the rail.
 3. `useSessionRenewal` keeps an open page signed in, when sign-in is on. `useWallMode` reads `?wall=1` from the address. When wall mode starts or ends, the button that was pressed has left the page with the chrome around it, so focus is sent to the main area, or back to the button, unless it has already gone somewhere on its own.
-4. `signOut` calls `logout`, which also tells the other tabs, and moves on to the sign-in page only once the server has answered. While the request is out the button reads "Signing out..." and cannot be pressed again. When the sign-out did not get through, the page stays, says "Sign-out did not reach the portal. You are still signed in. Try again." beside the button, and the person can press it again.
-5. In the markup that follows the quoted lines, the first Tab stop is a "Skip to content" link, so a keyboard user passes up to 21 sidebar stops to reach the page (WCAG 2.4.1). In wall mode the sidebar, the top bar and the link are not drawn. The main area holds `ErrorBoundary` keyed by the path, and `Suspense`, around the outlet.
+4. `signOut` calls `logout`, which also tells the other tabs, and moves on to the sign-in page only once the server has answered. While the request is out the button reads "Signing out..." and ignores a second press. It is marked `aria-disabled` and not `disabled`, because a disabled button drops the focus it holds, and after a failed sign-out a keyboard user would have had to find it again (UX-61). When the sign-out did not get through, the page stays, says "Sign-out did not reach the portal. You are still signed in. Try again." beside the button, and the person can press it again.
+5. `useTopBarHeight` keeps the custom property `--topbar-h` at the measured height of the top bar, which the stylesheet's `scroll-padding-top` reads, so a bar that wraps onto a second row on a narrow window or at high zoom never covers a control reached with the keyboard (UX-51). It takes the property away in wall mode, where there is no bar.
+6. In the markup that follows the quoted lines, the first Tab stop is a "Skip to content" link, so a keyboard user passes up to 21 sidebar stops to reach the page (WCAG 2.4.1). In wall mode the sidebar, the top bar and the link are not drawn. The main area holds `ErrorBoundary` keyed by the path, and `Suspense`, around the outlet.
 
 ### ErrorBoundary and reloadOnStaleChunks
 
 `web/src/features/shell/ErrorBoundary.tsx`. Two protections against a page that cannot be shown.
 
-<!-- gen:snippet web/src/features/shell/ErrorBoundary.tsx#ErrorBoundary sha=62380f3e2de4 -->
-`web/src/features/shell/ErrorBoundary.tsx:8-35`
+<!-- gen:snippet web/src/features/shell/ErrorBoundary.tsx#ErrorBoundary sha=39c29ecbc06b -->
+`web/src/features/shell/ErrorBoundary.tsx:8-40`
 
 ```tsx
 export default class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
@@ -136,9 +137,14 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, { 
     if (!error) return this.props.children;
     return (
       <div className="panel">
-        <div className="state error">
+        {/* An alert, so a screen reader says the page broke (UX-55). The engine's own words are for an administrator, and kept closed. */}
+        <div className="state error" role="alert">
           <div className="state-title">This page hit an error</div>
-          <div className="mono state-detail">{error.message || String(error)}</div>
+          <div className="state-hint">The page could not be drawn.</div>
+          <details className="state-hint">
+            <summary>Technical detail</summary>
+            <div className="mono state-detail">{error.message || String(error)}</div>
+          </details>
           <div className="muted state-hint">Other pages still work. Reloading fetches the latest version of the portal.</div>
           <button className="btn state-action" onClick={() => window.location.reload()}>
             Reload
@@ -152,7 +158,7 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, { 
 <!-- /gen -->
 
 <!-- gen:snippet web/src/features/shell/ErrorBoundary.tsx#reloadOnStaleChunks sha=59a2605a1fb3 -->
-`web/src/features/shell/ErrorBoundary.tsx:45-75`
+`web/src/features/shell/ErrorBoundary.tsx:50-80`
 
 ```tsx
 export function reloadOnStaleChunks(): void {
@@ -189,7 +195,7 @@ export function reloadOnStaleChunks(): void {
 ```
 <!-- /gen -->
 
-1. `ErrorBoundary` catches a page that throws while rendering, so one broken view shows an error card inside the layout and does not blank the portal with its sidebar. `Layout` keys it by the path, so leaving the crashed page starts clean.
+1. `ErrorBoundary` catches a page that throws while rendering, so one broken view shows an error card inside the layout and does not blank the portal with its sidebar. `Layout` keys it by the path, so leaving the crashed page starts clean. The card is an alert, so a screen reader says that the page broke, and it says it in plain words: the engine's own message is for an administrator and sits in a closed "Technical detail" (UX-55).
 2. After a deploy, a tab opened earlier asks for page chunks that no longer exist, and Vite reports `vite:preloadError`. `reloadOnStaleChunks` reloads the page once to pick up the new build. A flag in the session storage stops a loop when the chunk is missing for another reason, and it clears after 30 seconds, so a later deploy can reload again.
 
 Tests: `mainZone.test.tsx`.
@@ -198,7 +204,7 @@ Tests: `mainZone.test.tsx`.
 
 `web/src/shared/hooks/useAsync.ts`. Every page that reads the server uses it. It fetches, polls, and keeps what is already on screen while a new selection loads.
 
-<!-- gen:snippet web/src/shared/hooks/useAsync.ts#useAsync lines=35-75 sha=5ad954e7ef56 -->
+<!-- gen:snippet web/src/shared/hooks/useAsync.ts#useAsync lines=35-75 sha=7a3be4266271 -->
 `web/src/shared/hooks/useAsync.ts:76-116` (lines 35 to 75 of useAsync)
 
 ```ts
@@ -246,7 +252,7 @@ const start = (depsChanged: boolean, deps = latest.current.deps) => {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet web/src/shared/hooks/useAsync.ts#useAsync lines=77-100 sha=5ad954e7ef56 -->
+<!-- gen:snippet web/src/shared/hooks/useAsync.ts#useAsync lines=77-100 sha=7a3be4266271 -->
 `web/src/shared/hooks/useAsync.ts:118-141` (lines 77 to 100 of useAsync)
 
 ```ts
@@ -282,7 +288,8 @@ const attach = (deps: unknown[]) => {
 3. A run that is replaced, or whose component unmounts, is aborted. `fn` may take the signal, and every `api` call it makes in its first synchronous stretch gets it anyway, through `withSignal` in the API client.
 4. Polls are one after another: `schedule` arms the next only once the last has settled, counted from when it settled, so a slow server is never asked twice at once. They pause while the tab is hidden and catch up on return if one came due.
 5. While new `deps` load, the previous data stays with `stale: true`, so a page can dim it and not blank it. A failed poll keeps the last good data and sets `error`, which the page shows as a note.
-6. `attach` is the effect for `deps`. React's `StrictMode` unmounts and remounts every component once in development, so on a remount with the same `deps` it keeps the request already running and does not abort and ask again.
+6. `reload` reads again with the same `deps`. When what is on screen is a failure with nothing of its own beside it (a first load that failed, or a new selection that failed over the old data), it clears that failure and shows the loading state at once, so that a Try again button visibly does something and not nothing until the answer lands. A failed refresh that still has its own data keeps its note until the next answer (UX-49).
+7. `attach` is the effect for `deps`. React's `StrictMode` unmounts and remounts every component once in development, so on a remount with the same `deps` it keeps the request already running and does not abort and ask again.
 
 Tests: `useAsync.test.ts`.
 
@@ -546,14 +553,14 @@ export function useSearchPatch(): (patch: Record<string, string | null>) => void
 ```
 <!-- /gen -->
 
-<!-- gen:snippet web/src/shared/hooks/useUrlState.ts#useUrlState sha=c5430344ffdf -->
-`web/src/shared/hooks/useUrlState.ts:62-98`
+<!-- gen:snippet web/src/shared/hooks/useUrlState.ts#useUrlState sha=8008cd58d114 -->
+`web/src/shared/hooks/useUrlState.ts:64-104`
 
 ```ts
 export function useUrlState<T extends UrlValue>(
   key: string,
   fallback: T,
-  { options, debounceMs }: { options?: readonly T[]; debounceMs?: number } = {},
+  { options, debounceMs, keepDefault }: { options?: readonly T[]; debounceMs?: number; keepDefault?: boolean } = {},
 ): [T, (value: T) => void] {
   const { search } = useLocation();
   const patch = useSearchPatch();
@@ -573,7 +580,7 @@ export function useUrlState<T extends UrlValue>(
     (value: T) => {
       const write = () => {
         timer.current = undefined;
-        patch({ [key]: Object.is(value, fallback) ? null : serialize(value) });
+        patch({ [key]: !keepDefault && Object.is(value, fallback) ? null : serialize(value) });
         // Unchanged URL (or a value the URL can't hold): nothing to wait for.
         setDraft((d) => (d && Object.is(d.value, value) ? { value } : d));
       };
@@ -582,8 +589,12 @@ export function useUrlState<T extends UrlValue>(
       if (debounceMs) timer.current = window.setTimeout(write, debounceMs);
       else write();
     },
-    [patch, key, fallback, debounceMs],
+    [patch, key, fallback, debounceMs, keepDefault],
   );
+
+  useEffect(() => {
+    if (keepDefault && new URLSearchParams(window.location.search).get(key) === null) patch({ [key]: serialize(fallback) });
+  }, [keepDefault, key, fallback, patch]);
 
   return [draft ? draft.value : fromUrl, setValue];
 }
@@ -592,7 +603,7 @@ export function useUrlState<T extends UrlValue>(
 
 1. `useSearchPatch` changes query parameters in place, and a `null` or an empty value removes one. It replaces the history entry and does not push one, so a filter changed ten times leaves one Back step. It reads the live address and not the render's copy, so several patches in one event all land: React Router's own `setSearchParams(prev => ...)` hands every call the same `prev`, and the second undoes the first.
 2. A late write, such as a debounce that fires after the person has moved on, must not land on the page navigated to, so the patch is dropped when the path is no longer the one that made it.
-3. `useUrlState(key, fallback, options)` is one piece of state of a given type. The default value is left out of the address. `options` lists the values accepted from the address, and anything else reads as the default. With `debounceMs`, the value updates at once and the address once typing pauses, since browsers throttle a history write for each keystroke.
+3. `useUrlState(key, fallback, options)` is one piece of state of a given type. The default value is left out of the address, unless `keepDefault` is set. It is for a default that is worked out again on every render, the last closed month on the SLA and Services pages, which would open another month in a link copied last month: the value is then always written, and the default is written once when the page opens without it, replacing the entry and not adding one (FR-53). `options` lists the values accepted from the address, and anything else reads as the default. With `debounceMs`, the value updates at once and the address once typing pauses, since browsers throttle a history write for each keystroke.
 4. `draft` shows what was just set until the address says the same. Without it a controlled input could render the old value in the middle of typing and lose the caret.
 
 Tests: `useUrlState.test.tsx`.
@@ -673,8 +684,8 @@ function hintFor(message: string, admin: boolean): string | null {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet web/src/shared/components/states.tsx#Async sha=8dcde306a59f -->
-`web/src/shared/components/states.tsx:140-169`
+<!-- gen:snippet web/src/shared/components/states.tsx#Async sha=2b3c6b373d6d -->
+`web/src/shared/components/states.tsx:150-188`
 
 ```tsx
 export function Async<T>({
@@ -685,6 +696,8 @@ export function Async<T>({
   updatedAt,
   children,
   loadingLabel,
+  onRetry,
+  footer,
 }: {
   loading: boolean;
   error: string | null;
@@ -695,24 +708,33 @@ export function Async<T>({
   updatedAt?: number | null;
   loadingLabel?: string;
   children: (data: T) => ReactNode;
+  /** For a page that does not poll: the error then has a Try again button (useAsync's `reload`). */
+  onRetry?: () => void;
+  /** Drawn after the content, outside what dims and goes inert while it is stale: for a control that changes the selection, a pager, so that it keeps its focus (UX-57). */
+  footer?: (data: T) => ReactNode;
 }) {
-  if (error && (data == null || stale)) return <ErrorState message={error} />;
+  if (error && (data == null || stale)) return <ErrorState message={error} onRetry={onRetry} />;
   if (loading && data == null) return <Loading label={loadingLabel} />;
   if (data == null) return <Empty>No data.</Empty>;
   const copy = staleCopyOf(data);
   return (
-    <Loaded stale={stale} error={error} updatedAt={updatedAt}>
-      {copy && <StaleCopy asOf={copy.asOf} refreshing={copy.refreshing} />}
-      {children(data)}
-    </Loaded>
+    <>
+      <Loaded stale={stale} error={error} updatedAt={updatedAt}>
+        {copy && <StaleCopy asOf={copy.asOf} refreshing={copy.refreshing} />}
+        {children(data)}
+      </Loaded>
+      {footer?.(data)}
+    </>
   );
 }
 ```
 <!-- /gen -->
 
 1. `Async` takes `useAsync`'s fields and draws loading, error, empty or the content. An error replaces the content only when there is nothing of this selection's to show: a failed poll keeps the last good data and adds a note, while a failed load for a new selection does not leave the old one standing in for it.
-2. When the data is an old copy (`staleCopyOf`), `StaleCopy` says so above it, and `Loaded` dims the content while it still belongs to the previous selection and tops it with the "Refresh failed" note after a failed refresh.
-3. `hintFor` chooses what to tell the reader to check. The server's one sentence, "The data source is not answering", already says to ask an administrator, so only an admin gets a further line, naming `ZBX_URL` and `ZABBIX_API_TOKEN`. A fetch that never reached the server means the server itself, and a role refusal, "needs the wall role", is said calmly as a status and not as a failure.
+2. When the data is an old copy (`staleCopyOf`), `StaleCopy` says so above it, and `Loaded` dims the content while it still belongs to the previous selection and tops it with the "Refresh failed" note after a failed refresh. Dimmed content is also `inert`, so that Tab and Enter do not reach a button inside it, such as Download CSV, which would act on the old selection's rows (FR-54).
+3. A control that changes the selection itself, a pager, must not sit inside the dimmed, inert content: it would lose the focus the moment it was pressed. `footer` draws it after the `Loaded` wrapper, outside what dims and goes inert, and only when `Async` is showing content, so no pager stands under an error or a first load (UX-57). `inertWhen`, the helper that writes the `inert` attribute, is also what keeps the Graphs item list out of reach while the next host's list loads (UX-58).
+4. A page that does not poll passes `onRetry` (`useAsync`'s `reload`), and the error then has a "Try again" button. It is shown only when nothing of the current selection is on screen. The pages without an interval are the SLA month and window, Capacity, Alert noise, Top triggers and both Explain panels (UX-49), and the Graphs host list, a host's items in the picker, the chart of a past month or a fixed range (a range that ends now polls and has no button), the Maps list and the Latest data menus, whose notice has a button of its own (UX-60).
+5. `hintFor` chooses what to tell the reader to check. The server's one sentence, "The data source is not answering", already says to ask an administrator, so only an admin gets a further line, naming `ZBX_URL` and `ZABBIX_API_TOKEN`. A fetch that never reached the server means the server itself, and a role refusal, "needs the wall role", is said calmly as a status and not as a failure.
 
 ### TableWrap
 

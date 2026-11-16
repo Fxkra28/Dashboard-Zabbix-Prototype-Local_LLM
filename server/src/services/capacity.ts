@@ -330,12 +330,20 @@ async function interfaceUtilisation(
 /** What the report covers when the page does not say: the days, and the hosts listed for each metric. */
 export const CAPACITY_DAYS = 7;
 export const CAPACITY_TOP = 10;
+/** The periods the Capacity page offers (web/src/features/reports/Capacity.tsx); a test holds the two lists equal. */
+export const CAPACITY_PERIODS: readonly number[] = [1, 7, 30, 90];
 
-/** The busiest hosts by CPU, memory and so on over `days`. */
-export function getCapacityReport(days: number, top: number) {
-  return cached(`capacity:${days}:${top}`, CAPACITY_TTL, () => heavy.run(() => getCapacity(days, top)), {
+/**
+ * The busiest hosts by CPU, memory and so on over `days`. A run takes minutes on HCML's Zabbix, so what the page offers is pinned; any other
+ * days or top is typed, so a viewer who tries them all pushes out only other typed entries (BK-70).
+ */
+export function getCapacityReport(days: number, top: number, signal?: AbortSignal) {
+  const offered = top === CAPACITY_TOP && CAPACITY_PERIODS.includes(days);
+  return cached(`capacity:${days}:${top}`, CAPACITY_TTL, (f) => heavy.run(() => getCapacity(days, top), f), {
     ...staleReport(CAPACITY_TTL),
     staleMs: CAPACITY_STALE_MS,
-    pin: true,
+    pin: offered,
+    typed: !offered,
+    signal,
   });
 }

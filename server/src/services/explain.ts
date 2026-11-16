@@ -94,14 +94,15 @@ export interface NotFound {
  * which, and keyed by event alone it would go on saying "not acknowledged" for an hour after
  * someone had.
  */
-export async function explainProblem(eventid: string, onUsage: OnUsage): Promise<ProblemExplanation | NotFound> {
+export async function explainProblem(eventid: string, onUsage: OnUsage, signal?: AbortSignal): Promise<ProblemExplanation | NotFound> {
   const listed = (await cachedProblems()).find((p) => p.eventid === eventid);
   if (!listed) return { notFound: 'No open problem with that eventid: it may have been resolved.' };
 
   const acknowledged = listed.acknowledged === '1';
   const resolved = Boolean(listed.r_eventid && listed.r_eventid !== '0');
   const state = `${acknowledged ? 'ack' : 'unack'}:${resolved ? 'resolved' : 'open'}`;
-  return cached(`explain:problem:${eventid}:${state}`, 3_600_000, async () => {
+  // The model call stops when every reader of this explanation has left, so a closed tab does not keep the one slot (BK-67).
+  return cached(`explain:problem:${eventid}:${state}`, 3_600_000, async (f) => {
     // The list leaves operational data out (queries.ts), so it is read here for this one problem.
     const [problem] = await withOpdata([listed]);
     return humanize(
@@ -117,16 +118,18 @@ export async function explainProblem(eventid: string, onUsage: OnUsage): Promise
         tags: problem.tags ?? [],
       },
       onUsage,
+      f.signal,
     );
-  });
+  }, { signal });
 }
 
 /** The derived monthly SLA of one scope (overall | site:N | category:NAME), in plain language. */
 export async function explainDerivedSla(
   { month, profile, scope }: { month: string; profile: SliProfile; scope: string },
   onUsage: OnUsage,
+  signal?: AbortSignal,
 ): Promise<SlaAnswer | NotFound> {
-  const report = await getMonthlySli(month, profile);
+  const report = await getMonthlySli(month, profile, signal);
   const picked = pickScope(report, scope);
   if (!picked) return { notFound: `No scope "${scope}" in that report.` };
   const { group, hosts } = picked;
@@ -146,7 +149,7 @@ export async function explainDerivedSla(
   // The engine already compared the figure with the target; the model only words it, so a slip near the target cannot show green.
   const meetingTarget = group.meeting === true;
   const figure = `${group.name} was at ${pct(group.sli, report.target)} % in ${month}, against a target of ${pct(report.target)} %.`;
-  return cached(`explain:sla:derived:${month}:${profile}:${scope}`, 300_000, async () => ({
+  return cached(`explain:sla:derived:${month}:${profile}:${scope}`, 300_000, async (f) => ({
     ...agreeWithFigure(await humanize('sla', {
       sla: `${group.name}: monthly availability derived from ICMP ping triggers`,
       slo_target_percent: report.target,
@@ -178,12 +181,12 @@ export async function explainDerivedSla(
           downtime_minutes: minutes(h.downtime),
           error_budget_minutes_left: minutes(h.errorBudget),
         })),
-    }, onUsage), meetingTarget, figure),
-  }));
+    }, onUsage, f.signal), meetingTarget, figure),
+  }), { signal });
 }
 
 /** One Zabbix SLA's standing in the current period, in plain language. */
-export async function explainZabbixSla(slaid: string, serviceid: string | undefined, onUsage: OnUsage): Promise<SlaAnswer | NotFound> {
+export async function explainZabbixSla(slaid: string, serviceid: string | undefined, onUsage: OnUsage, signal?: AbortSignal): Promise<SlaAnswer | NotFound> {
   const sla = (await slasView()).find((s) => s.slaid === slaid);
   if (!sla) return { notFound: 'No SLA with that slaid.' };
 
@@ -193,7 +196,7 @@ export async function explainZabbixSla(slaid: string, serviceid: string | undefi
     return noDataExplanation(
       `"${sla.name}"`,
       'no services are attached to it in Zabbix, so it has nothing to measure.',
-      'Use the derived monthly SLA on the SLA page, or attach services to this SLA in Zabbix.',
+      'Use the Derived SLA tab on the SLA page, or attach services to this SLA in Zabbix.',
     );
   }
 
@@ -201,7 +204,7 @@ export async function explainZabbixSla(slaid: string, serviceid: string | undefi
   const meetingTarget = sli.every((s) => s.sli >= Number(sla.slo));
   const figure = `The lowest service is at ${pct(Math.min(...sli.map((s) => s.sli)), Number(sla.slo))} % against a target of ${pct(Number(sla.slo))} %.`;
   // Shorter TTL than problems: the SLI moves as the period progresses.
-  return cached(`explain:sla:${slaid}:${serviceid ?? 'all'}`, 300_000, async () => ({
+  return cached(`explain:sla:${slaid}:${serviceid ?? 'all'}`, 300_000, async (f) => ({
     ...agreeWithFigure(await humanize('sla', {
       sla: sla.name,
       slo_target_percent: Number(sla.slo),
@@ -213,6 +216,6 @@ export async function explainZabbixSla(slaid: string, serviceid: string | undefi
         downtime_minutes: Math.round(s.downtime / 60),
         error_budget_minutes_left: Math.round(s.error_budget / 60),
       })),
-    }, onUsage), meetingTarget, figure),
-  }));
+    }, onUsage, f.signal), meetingTarget, figure),
+  }), { signal });
 }

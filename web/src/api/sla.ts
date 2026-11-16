@@ -59,26 +59,21 @@ export interface AvailabilityQuery {
   /** YYYY-MM calendar month (Asia/Jakarta); takes precedence over `days`. */
   month?: string;
   days?: number;
-  /** Legacy all-problems basis only. */
+  /** For the legacy all-problems basis only, which no page of the portal asks for. */
   severity?: number;
 }
 
 export const slaApi = {
   // Automated reporting
-  /** `(days, severity)` is the legacy all-problems form; pass an object for the engine-backed basis. */
-  availability: (arg: number | AvailabilityQuery, severity?: number) =>
+  availability: (query: AvailabilityQuery) =>
     request<AvailabilityReport>(
-      `/api/reports/availability${qs(
-        typeof arg === 'number'
-          ? { days: arg, severity }
-          : {
-              basis: arg.basis,
-              profile: arg.basis === 'all-problems' ? undefined : arg.profile,
-              month: arg.month,
-              days: arg.month ? undefined : arg.days,
-              severity: arg.basis === 'all-problems' ? arg.severity : undefined,
-            },
-      )}`,
+      `/api/reports/availability${qs({
+        basis: query.basis,
+        profile: query.basis === 'all-problems' ? undefined : query.profile,
+        month: query.month,
+        days: query.month ? undefined : query.days,
+        severity: query.basis === 'all-problems' ? query.severity : undefined,
+      })}`,
       { guard: availabilityGuard },
     ),
   // Services tree with roll-up status: the service-centric view.

@@ -22,7 +22,8 @@
  *     and `ROUTE_RULES` in the source, so there is no third list to drift;
  *   - the body: an unsafe method takes a body schema (schemas.ts), so it must document 400;
  *   - the query: a route that declares its query names (`singleValues` in schemas.ts) must document 400, and
- *     the spec must declare exactly those names `in: query`.
+ *     the spec must declare exactly those names `in: query`;
+ *   - the reader who leaves: a route whose handler passes `readerGone(...)` to its service can answer 499 (BK-59), so it must document it.
  *   - the text: no one-line flow mapping has an entry without a key, which is what a description with a comma in it
  *     turns into when it is not quoted (YAML cuts it there, silently).
  * Not compared here: response bodies. server/src/__tests__/openapi-contract.test.ts holds every answer to the spec,
@@ -48,6 +49,8 @@ export interface Route {
   where: string;
   /** The query names the route declares with `singleValues`, sorted; absent when it declares none. */
   query?: string[];
+  /** Its handler passes `readerGone(...)` to a service, so a reader who leaves can end the read with a 499. */
+  cancellable?: boolean;
 }
 
 
@@ -65,6 +68,7 @@ export function routesIn(source: string, where = '<memory>'): Route[] {
   const constants = new Map([...source.matchAll(/\bconst\s+([A-Z][A-Z0-9_]*_QUERY)\s*=\s*singleValues\(([^)]*)\)/g)].map((m) => [m[1], names(m[2])]));
   const re = /\b[A-Za-z_$][\w$]*\.(get|post|put|patch|delete)\s*\(\s*(['"`])([^'"`]*)\2/g;
   const lines = source.split('\n');
+  const starts: number[] = [];
 
   for (let i = 0; i < lines.length; i++) {
     // Skip comment-only lines so a commented-out route is not counted.
@@ -81,8 +85,14 @@ export function routesIn(source: string, where = '<memory>'): Route[] {
       const named = /\b([A-Z][A-Z0-9_]*_QUERY)\b/.exec(rest);
       const query = inline ? names(inline[1]) : named ? constants.get(named[1]) : undefined;
       out.push({ method: m[1] as Route['method'], path, where: `${where}:${i + 1}`, ...(query ? { query } : {}) });
+      starts.push(i);
     }
   }
+  // A route's handler runs from its registration to the next one; a comment that names readerGone does not count.
+  out.forEach((route, k) => {
+    const region = lines.slice(starts[k], starts[k + 1] ?? lines.length).filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l));
+    if (region.some((l) => /\breaderGone\s*\(/.test(l))) route.cancellable = true;
+  });
   return out;
 }
 
@@ -394,6 +404,7 @@ export function compare(routes: Route[], ops: SpecOp[], guard: Guard) {
   let forbidding = 0;
   let refusing = 0;
   let querying = 0;
+  let cancelling = 0;
 
   for (const r of routes) {
     const o = opFor.get(key(r.method, r.path));
@@ -447,6 +458,11 @@ export function compare(routes: Route[], ops: SpecOp[], guard: Guard) {
     } else if (o.queryParams.length) {
       problems.push(`${label} declares query parameters, but ${r.where} declares no query schema (singleValues)`);
     }
+    // A read dropped because its reader left is a 499 (core/readerGone.ts), and the spec must say so.
+    if (r.cancellable) {
+      cancelling++;
+      if (!o.responses.includes('499')) problems.push(`${label} reads for a reader who can leave (readerGone), so it can answer 499, but documents none`);
+    }
   }
 
   for (const o of ops) {
@@ -468,7 +484,7 @@ export function compare(routes: Route[], ops: SpecOp[], guard: Guard) {
     }
   }
 
-  return { problems, guarded, forbidding, refusing, querying };
+  return { problems, guarded, forbidding, refusing, querying, cancelling };
 }
 
 function tsFilesUnder(dir: string, acc: string[] = []): string[] {
@@ -705,6 +721,19 @@ function selfTest(): string[] {
   eq('a POST with no 400', has(found([route('post', '/api/a')], [op('post', '/api/a', { responses: ['200', '401', '403'] })]), 'POST /api/a takes a body, so it can answer 400'), 1);
   eq('a GET needs no 400', has(found([route('get', '/api/a')], [op('get', '/api/a')]), 'can answer 400'), 0);
 
+  // A read dropped because its reader left is a 499, and a route that hands readerGone to its service must say so (BK-62)
+  eq(
+    'marks a route whose handler passes readerGone, and only that one',
+    routesIn("app.get('/api/a', (req, reply) => {\n  return run(readerGone(reply));\n});\napp.get('/api/b', () => run());\n// app.get('/api/c', () => readerGone(x));").map((r) => r.cancellable ?? false),
+    [true, false],
+  );
+  eq('a comment that names readerGone does not mark a route', routesIn("app.get('/api/a', () => {\n  // readerGone(reply) is not passed here\n  return run();\n});").map((r) => r.cancellable ?? false), [false]);
+  const cancelling: Route = { ...route('get', '/api/a'), cancellable: true };
+  eq('a route that drops a read with no 499', has(found([cancelling], [op('get', '/api/a')]), 'GET /api/a reads for a reader who can leave (readerGone), so it can answer 499, but documents none'), 1);
+  eq('a route that drops a read with its 499', found([cancelling], [op('get', '/api/a', { responses: ['200', '401', '499'] })]), []);
+  eq('a route that never drops a read needs no 499', has(found([route('get', '/api/a')], [op('get', '/api/a')]), '499'), 0);
+  eq('counts the routes it applied the 499 rule to', compare([cancelling], [op('get', '/api/a', { responses: ['200', '401', '499'] })], guard).cancelling, 1);
+
   // Query names: read off the registration line, inline or through a *_QUERY constant
   const queried = (q: string[]): Route => ({ ...route('get', '/api/q'), query: q });
   eq(
@@ -798,5 +827,5 @@ console.log(
   `openapi.check: ${registered.length} endpoints (${shape}), all documented, none extra. ` +
     `Methods and path parameters agree; 401 documented on ${compared.guarded} guarded operations, ` +
     `403 on ${compared.forbidding} that can answer it, 400 on ${compared.refusing} that take a body and on ${compared.querying} ` +
-    `that declare their query, whose names agree. No description is cut at a comma.`,
+    `that declare their query, whose names agree; 499 on ${compared.cancelling} that drop a read when its reader leaves. No description is cut at a comma.`,
 );

@@ -1,11 +1,10 @@
 # Screenshots
 
-The main pages of the portal, as images. Six were taken on 11 November 2026 and the four Dashboard images on 12 November, each from a
-throwaway portal made from the live image of `hcml-portal`, which reads HCML's own Zabbix (the set of 20 October came from the restored
-copy of September). The throwaway had a made-up sign-in, no write token and no mail. The footer of the six says
-`Build bfa4d45-dirty, 11/11/2026, 12.29.05 WIB` and the footer of the Dashboard images says `Build bd09bd1-dirty, 12/11/2026, 10.41.28 WIB`:
-the builds that went live on those two days, each made from a working tree on top of the commit it names. The set of 20 October is
-replaced: it showed the look before 26 October (soft depth, the white logo) and none of what came after. The Dashboard's Internet traffic view has no image here: see "Adding or
+The main pages of the portal, as images. All ten were taken on 16 November 2026, at about 08:57, each from a
+throwaway portal made from the live image of `hcml-portal`, which reads HCML's own Zabbix. The throwaway had a made-up sign-in, no write token and no mail.
+The footer says `Build dbb386f-dirty, 16/11/2026, 08.46.06 WIB`: the build that went live that morning, made from a working tree on top of the commit
+it names. They were taken again because the set of 12 November was made before the work of 14, 15 and 16 November, and each is now from the build that runs. The set of 12 November is in
+`myown/backups/docs-screenshots-before-retake-16nov` (outside the repository). The set of 20 October was replaced earlier: it showed the look before 26 October (soft depth, the white logo). The Dashboard's Internet traffic view has no image here: see "Adding or
 replacing one". Each is one screen, 1440 px wide, in the light theme unless it says otherwise.
 
 ## What is real and what is replaced

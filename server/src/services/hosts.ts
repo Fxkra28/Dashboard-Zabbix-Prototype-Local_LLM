@@ -149,7 +149,7 @@ export interface LatestPageQuery {
   needle: string;
   page: number;
   pageSize: number;
-  /** A viewer's pages are counted without the interface items, so they cache apart from an operator's. */
+  /** A viewer's pages are counted without the interface items, so they cache apart from the pages of wall and up. */
   hide: boolean;
 }
 

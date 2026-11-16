@@ -29,6 +29,7 @@ TRUST_PROXY=true
 RATE_LIMIT_PER_MINUTE=300
 STREAM_MAX_CLIENTS=100
 STREAM_MAX_PER_USER=5
+ACTION_EVENTS_PER_MINUTE=200
 
 # Sign-in. true unless this is a local development run.
 AUTH_ENABLED=true
@@ -36,6 +37,11 @@ AUTH_ENABLED=true
 # The server refuses to start on a length it cannot use.
 SESSION_HOURS=12
 SESSION_EPOCH=1
+
+# The portal's own copy of its log, kept in a volume so that it outlives a rebuild: this many files (1 to 100) of this many megabytes
+# each, the oldest dropped first (docs/operations/backup-and-restore.md). How long logs are to be kept is HCML's to set.
+LOG_FILE_MAX_MB=20
+LOG_FILE_KEEP=10
 
 # Sites, inventory and naming
 NET_GROUP_IDS=
@@ -70,6 +76,8 @@ SLA_NO_DATA_WINDOWS=
 # The assistant. Empty AI_MODEL and AI_TIMEOUT_MS mean the backend's own default.
 # AI_PROVIDER=anthropic (hcml-portal) or openai-compatible (hcml-portal-ollama, fixed in its compose file)
 # AI_BASE_URL= empty (hcml-portal) or http://host.docker.internal:11434/v1 (hcml-portal-ollama)
+# AI_LOCAL_ONLY=true (hcml-portal-ollama, fixed in its compose file: the server refuses a model outside this machine's own network) and not passed by hcml-portal
+# AI_ALLOW_REMOTE= empty (hcml-portal-ollama only); true is the owner's word that a model outside the network is meant, and every answer then says so
 AI_MODEL=
 AI_TIMEOUT_MS=
 AI_MAX_RETRIES=1
@@ -80,7 +88,7 @@ AI_TEMPERATURE=0.7
 AI_TOP_P=0.8
 
 # Caps on Explain and the Assistant: calls a minute per signed-in user, calls in flight at once,
-# and tokens a day per user and in all (0 turns a budget off; only the hosted API is counted).
+# and tokens a day per user and in all (0 turns a budget off; the hosted API and a model outside this machine's network are counted).
 AI_CHAT_PER_MINUTE=10
 AI_EXPLAIN_PER_MINUTE=10
 AI_MAX_CONCURRENT=4

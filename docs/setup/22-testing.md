@@ -2,7 +2,9 @@
 
 [setup.md](../../setup.md) · previous: [§21](21-alert-noise-flapping.md) · next: [§23](23-hardening-timeouts-rate-limiting-headers.md)
 
-`cd server && npm test`, 3097 tests in 122 files, no live Zabbix required. `cd web && npm test`, 1844 tests in 119 files, in jsdom.
+`cd server && npm test`, 3494 tests in 145 files, no live Zabbix required. `cd web && npm test`, 2045 tests in 141 files, in jsdom.
+
+How much of the code the tests run is measured on request: `npm run test:coverage` at the root (or in `server/` or `web/`) prints it for each folder and file, with no threshold, so that nothing fails on it. On 15 November 2026 the server's tests ran 95.1 % of its statements, 90.0 % of its branches, 95.4 % of its functions and 96.0 % of its lines, and the web app's 92.1 %, 83.9 %, 89.0 % and 93.8 %. A line that runs is not a line that is checked (IN-85).
 
 The mock point. Every Zabbix call in the server funnels through one `fetch` in
 [`zabbix.ts`](../../server/src/clients/zabbix.ts), exposed as `zbx()` and `zbxWrite()`. Mocking that single module

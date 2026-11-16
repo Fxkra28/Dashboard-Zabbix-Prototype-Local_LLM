@@ -4,6 +4,7 @@ import { invalidate } from '../core/cache.js';
 import { config, writeBackEnabled } from '../core/config.js';
 import { notifyProblemsChanged } from '../services/stream.js';
 import { acknowledgeBody } from '../core/schemas.js';
+import { limitMessage, takeEvents } from '../security/actionLimit.js';
 import { isZabbixId } from '../core/validate.js';
 import {
   ACTION_CLOSE,
@@ -100,6 +101,13 @@ export async function actionRoutes(app: FastifyInstance): Promise<void> {
 
     if (asked === 0) {
       return refuse(400, 'bad_request', 'Nothing to do. Supply acknowledge, close, or a message.');
+    }
+
+    // Counted last, once the request is one that will be written, so that a refusal above costs no allowance (SC-51).
+    const wait = takeEvents(req, eventids.length);
+    if (wait !== null) {
+      reply.header('retry-after', String(wait));
+      return refuse(429, 'rate_limited', limitMessage(wait));
     }
 
     // Zabbix files the write under the token's owner, so the portal user goes into the text. The tag

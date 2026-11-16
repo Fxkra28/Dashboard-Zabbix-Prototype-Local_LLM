@@ -4,7 +4,6 @@ import { BrowserRouter, MemoryRouter, Outlet, Route, Routes } from 'react-router
 import { api } from '../../api';
 import { Async } from '../components/states';
 import { ageWords, momentWords, noteStaleCopy, REFRESHING_NOTICE_AFTER_S, staleCopyOf } from './freshness';
-import Availability from '../../features/sla/Availability';
 import Capacity from '../../features/reports/Capacity';
 import Overview from '../../features/dashboard/Overview';
 import Sla from '../../features/sla/Sla';
@@ -527,12 +526,12 @@ describe('a page that shows an old copy says so (IN-05)', () => {
   });
   const capacity = (): CapacityReport => ({ days: 7, metrics: [] });
 
-  it('on the availability page', async () => {
+  it('on a rolling window of the SLA page', async () => {
     vi.spyOn(api, 'availability').mockResolvedValue(old(availabilityReport()));
-    at('/availability');
+    at('/sla?month=d7');
     render(
       <BrowserRouter>
-        <Availability />
+        <Sla />
       </BrowserRouter>,
     );
     expect(await screen.findByText(sentence)).toHaveClass('refresh-failed');
@@ -618,10 +617,10 @@ describe('a page that shows an old copy says so (IN-05)', () => {
 
   it('and not when the report is live', async () => {
     vi.spyOn(api, 'availability').mockResolvedValue(availabilityReport());
-    at('/availability');
+    at('/sla?month=d7');
     render(
       <BrowserRouter>
-        <Availability />
+        <Sla />
       </BrowserRouter>,
     );
     await screen.findByLabelText('Period');

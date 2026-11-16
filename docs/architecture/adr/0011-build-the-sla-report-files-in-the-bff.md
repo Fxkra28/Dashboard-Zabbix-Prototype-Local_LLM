@@ -59,8 +59,7 @@ Chosen: **hand-written writers in the BFF.**
   `web/src/styles/01-tokens.css`, `export-pdf.test.ts` compares the logo byte for byte, and `export-sla-report.test.ts`
   reads the page's source for the sentences. Reports always take the light theme.
 * In the browser, `ReportDownload.tsx` shows the two buttons, *PDF report* and *Excel report*, on the
-  SLA page and, for one calendar month on the ICMP basis, on the Availability page. It fetches the
-  file and saves it under the name the BFF sent.
+  SLA page, for a calendar month. It fetches the file and saves it under the name the BFF sent.
 
 Verified by the `export-*.test.ts` files in `server/src/__tests__/` and by
 `web/src/features/sla/ReportDownload.test.tsx` and `web/src/__tests__/reportApi.test.ts`. The server tests read the
@@ -133,8 +132,7 @@ relay or a folder to write to, and somewhere for the schedule to live, while the
 ([ADR-0003](0003-no-database.md)). Goal 6 stays partial. An emailed report, on an administrator's request, was added on
 4 November 2026: see [ADR-0014](0014-email-the-sla-report-through-smtp.md). Also not done then: a CSV file of this report (other pages have one: Alert noise, the Inventory scorecard and, since
 19 October 2026, the Graphs page's Show data), a chart in the
-workbook, fonts beyond Western European letters, and an export of any page but the SLA report. The
-Availability page's buttons download this report, not that page's own table. Amended 9 November 2026: the scheduled report and the CSV file were built on 4 November 2026 (tracker IN-59 and FR-27, [ADR-0015](0015-keep-a-small-state-file-for-recipients-and-the-schedule.md)).
+workbook, fonts beyond Western European letters, and an export of any page but the SLA report. Amended 9 November 2026: the scheduled report and the CSV file were built on 4 November 2026 (tracker IN-59 and FR-27, [ADR-0015](0015-keep-a-small-state-file-for-recipients-and-the-schedule.md)). Amended 12 November 2026: the Availability page was folded into the SLA page, so the buttons are on the SLA page only, and not for the last 7 or 30 days, which have no month to report.
 
 ## Pros and Cons of the Options
 

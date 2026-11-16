@@ -32,7 +32,7 @@ Nothing else writes a fingerprint over a different one. A build without `--accep
 
 ## The rules
 
-`npm run check:handover` runs `tools/check/handover.check.mjs`, the eleventh checker, and it is part of `npm run check`, of `npm run verify` and of CI. It is read-only. Each rule is a function of text, so it has a self-test with a bad input and a good one.
+`npm run check:handover` runs `tools/check/handover.check.mjs`, one of the twelve checkers, and it is part of `npm run check`, of `npm run verify` and of CI. It is read-only. Each rule is a function of text, so it has a self-test with a bad input and a good one.
 
 | Rule | What it requires |
 |---|---|

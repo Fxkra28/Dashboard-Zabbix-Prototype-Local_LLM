@@ -176,7 +176,13 @@ describe('the default probes', () => {
 
   it('ask Zabbix for one host id with the read-only token, the cheapest authenticated call', async () => {
     await createReadiness().get();
-    expect(zbxMock).toHaveBeenCalledExactlyOnceWith('host.get', { output: ['hostid'], limit: 1 });
+    expect(zbxMock).toHaveBeenCalledExactlyOnceWith('host.get', { output: ['hostid'], limit: 1 }, expect.anything());
+  });
+
+  // BK-63: the client's own limit is 300 s in compose, so a probe that carries none stays open long after the check gave up.
+  it('give the Zabbix call the same time limit as the check, so a hung Zabbix leaves no call open (BK-63)', async () => {
+    await createReadiness().get();
+    expect(zbxMock.mock.calls[0][2]).toEqual({ timeoutMs: READY_TIMEOUT_MS });
   });
 
   it('look at no model that is off, or hosted (a probe would bill it)', async () => {
@@ -190,8 +196,8 @@ describe('the default probes', () => {
   });
 
   it('list the models of a local server, and say down when it is stopped or unwell', async () => {
-    Object.assign(config.ai, { enabled: true, provider: 'openai-compatible', baseUrl: 'http://model.local:11434/v1/' });
-    const fetchMock = vi.fn().mockResolvedValue(new Response('{}', { status: 200 }));
+    Object.assign(config.ai, { enabled: true, provider: 'openai-compatible', baseUrl: 'http://model.local:11434/v1/', model: 'qwen3:8b' });
+    const fetchMock = vi.fn().mockResolvedValue(new Response('{"data":[{"id":"qwen3:8b"}]}', { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
     expect((await createReadiness().get()).model).toBe('ok');
     expect(fetchMock.mock.calls[0][0]).toBe('http://model.local:11434/v1/models');
@@ -202,13 +208,47 @@ describe('the default probes', () => {
     expect((await createReadiness().get()).model).toBe('down');
   });
 
+  // BK-66: a server that answers while AI_MODEL is not installed (a forgotten `ollama pull`, a mistyped name) fails every question.
+  describe('the model name (BK-66)', () => {
+    const ask = async (body: string, model: string) => {
+      Object.assign(config.ai, { enabled: true, provider: 'openai-compatible', baseUrl: 'http://model.local:11434/v1', model });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 200 })));
+      return (await createReadiness().get()).model;
+    };
+    const list = (...ids: string[]) => JSON.stringify({ object: 'list', data: ids.map((id) => ({ id, object: 'model' })) });
+
+    it('is ok when the list holds the configured model', async () => {
+      expect(await ask(list('llama3:8b', 'qwen3:8b'), 'qwen3:8b')).toBe('ok');
+    });
+
+    it('is missing when the server answers and the list does not hold it, an empty list included', async () => {
+      expect(await ask(list('llama3:8b'), 'qwen3:8b')).toBe('missing');
+      expect(await ask(list(), 'qwen3:8b')).toBe('missing');
+    });
+
+    it('takes a name with no tag for its latest, as Ollama does, and no other tag for it', async () => {
+      expect(await ask(list('qwen3:latest'), 'qwen3')).toBe('ok');
+      expect(await ask(list('qwen3:latest'), 'qwen3:8b')).toBe('missing');
+    });
+
+    it('is ok when the answer is not a list it can read, because then it cannot tell', async () => {
+      expect(await ask('{}', 'qwen3:8b')).toBe('ok');
+      expect(await ask('<html>gateway</html>', 'qwen3:8b')).toBe('ok');
+      expect(await ask('{"data":"none"}', 'qwen3:8b')).toBe('ok');
+    });
+
+    it('does not let an entry without an id count, or break the check', async () => {
+      expect(await ask('{"data":[null,{"id":7},{"name":"qwen3:8b"}]}', 'qwen3:8b')).toBe('missing');
+    });
+  });
+
   /** A loopback stand-in for a model server; `key` is what it demands in Authorization, if anything. */
   async function standIn(key?: string) {
     const seen: (string | undefined)[] = [];
     const server = http.createServer((req, res) => {
       seen.push(req.headers.authorization);
       res.statusCode = key && req.headers.authorization !== `Bearer ${key}` ? 401 : 200;
-      res.end('{"data":[]}');
+      res.end(JSON.stringify({ data: [{ id: config.ai.model }] }));
     });
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const { port } = server.address() as AddressInfo;
@@ -250,7 +290,7 @@ describe('GET /api/health', () => {
     await server.ready();
     return server;
   }
-  const DETAIL = ['version', 'startedAt', 'build', 'ready', 'streams'] as const;
+  const DETAIL = ['version', 'startedAt', 'build', 'ready', 'streams', 'logFile'] as const;
   /** What an anonymous caller is not given. `ready` is the exception: anyone gets it as a plain true or false (IN-47). */
   const PRIVATE = DETAIL.filter((field) => field !== 'ready');
   /** A token as sign-in issues it: the portal's own iss and aud, for a user the list holds. */
@@ -369,6 +409,18 @@ describe('GET /api/health', () => {
     expect(body.build).toEqual({ commit: 'unknown', time: 'unknown' });
     expect(body.ready).toEqual({ ok: true, zabbix: 'ok', zabbixMs: 0, model: 'off', checkedAt: 1_788_000_000_000 });
     expect(body.streams).toBe(0);
+    await server.close();
+  });
+
+  // IN-83: the server's own log file can stop being written while the lines still reach stdout; a signed-in monitor can see it.
+  it('shows a signed-in caller the state of the log file and the bytes written to it, and shows it again on /api/ready', async () => {
+    const { createLogStream } = await import('../core/logFile.js');
+    createLogStream({ dir: '', fileMaxMb: 20, fileKeep: 10 });
+    const server = await app();
+    const health = (await server.inject(signedIn(server))).json();
+    expect(health.logFile).toEqual({ state: 'off', written: 0 });
+    const ready = (await server.inject({ url: '/api/ready', headers: { authorization: `Bearer ${tokenFor(server)}` } })).json();
+    expect(ready.logFile).toEqual({ state: 'off', written: 0 });
     await server.close();
   });
 

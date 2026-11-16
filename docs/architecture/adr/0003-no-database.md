@@ -5,6 +5,7 @@
 * Date: 2026-09-07 (recorded as an ADR 2026-09-22)
 * Amended: 2026-10-07, the claim that the portal has no state to back up (the `.env` files are state)
 * Amended: 2026-11-04, by [ADR-0015](0015-keep-a-small-state-file-for-recipients-and-the-schedule.md): the hosted copy keeps one small file of its own, on a volume
+* Amended: 2026-11-16, by [ADR-0016](0016-keep-the-web-check-figures-of-closed-months.md): both copies keep the web check figures of closed months in a second small file on that volume
 
 ## Context and Problem Statement
 
@@ -41,9 +42,10 @@ and its age. The problem list never may.
 * **There is one source of truth, and it is Zabbix.** The portal cannot disagree with it.
 * No database to back up, no migration to run, no schema to version. The portal's settings are the
   exception: see the first negative consequence below.
-* Deleting the portal leaves no data behind, only its `.env` files and, in the hosted copy, one small
-  volume ([ADR-0015](0015-keep-a-small-state-file-for-recipients-and-the-schedule.md)). The local-model
-  copy's compose file declares no volumes at all.
+* Deleting the portal leaves no data behind, only its `.env` files and the small state volume
+  ([ADR-0015](0015-keep-a-small-state-file-for-recipients-and-the-schedule.md), and since 16 November 2026
+  [ADR-0016](0016-keep-the-web-check-figures-of-closed-months.md), which puts it in both copies). Both copies also declare a volume
+  for the server's own copy of its log (tracker SC-42), which holds a log and nothing the portal derives.
 * Freshness is a TTL, visible in one place per route, not an ETL schedule.
 
 ### Negative Consequences
@@ -62,7 +64,7 @@ and its age. The problem list never may.
 * The 24-hour TTL is a ceiling, not a floor. Keys are parameterised: `graph:<ids>:<from>:<to>`,
   `net:interfaces:<hostid>` across 139 hosts, against a 500-entry cap, so ordinary browsing can evict a
   fresh SLA report within minutes. **Nobody has measured the real hit rate.**
-* Portal-side state has nowhere to live. `security/auth.ts:174` says it outright: *"Users come from env:
+* Portal-side state has nowhere to live. the comment above the user list in `security/auth.ts` says it outright: *"Users come from env:
   there is no database yet (that phase was deferred)."* Consequences: a password may still sit in
   plain text in the `.env` file (an scrypt hash is accepted since 7 October 2026), adding a user needs
   a restart, there are no saved views, and, because the single write uses one shared Zabbix token,

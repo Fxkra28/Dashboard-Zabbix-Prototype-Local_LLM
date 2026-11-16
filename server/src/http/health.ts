@@ -4,6 +4,7 @@ import { config, writeBackEnabled } from '../core/config.js';
 import { isSignedIn } from '../security/auth.js';
 import { zbx, ZabbixAuthError, ZabbixTimeoutError } from '../clients/zabbix.js';
 import { connectedClients } from '../services/stream.js';
+import { logFileStatus } from '../core/logFile.js';
 
 /**
  * GET /api/health, public: no host, address or token in it. Anyone gets the liveness
@@ -20,8 +21,8 @@ export const READY_STALE_MS = 60_000;
 export const READY_TIMEOUT_MS = 2_000;
 
 export type ZabbixState = 'ok' | 'token_rejected' | 'timeout' | 'error';
-/** `off` is no model configured; `not_checked` is hosted Anthropic, which a probe would bill. */
-export type ModelState = 'ok' | 'down' | 'off' | 'not_checked';
+/** `off` is no model configured; `missing` is a server that answers without `AI_MODEL` in its list; `not_checked` is hosted Anthropic, which a probe would bill. */
+export type ModelState = 'ok' | 'down' | 'missing' | 'off' | 'not_checked';
 
 export interface Readiness {
   /** The portal can read Zabbix. The model never gates it: the AI layer is optional. */
@@ -40,8 +41,22 @@ export interface Probes {
   model(): Promise<ModelState>;
 }
 
-/** The cheapest authenticated read there is. `apiinfo.version` is not it: Zabbix refuses it with a token. */
-const zabbixProbe = () => zbx('host.get', { output: ['hostid'], limit: 1 });
+/** The cheapest authenticated read there is. `apiinfo.version` is not it: Zabbix refuses it with a token. Its limit is the check's own, so a hung Zabbix leaves no call open (BK-63). */
+const zabbixProbe = () => zbx('host.get', { output: ['hostid'], limit: 1 }, { timeoutMs: READY_TIMEOUT_MS });
+
+/** The ids a `/models` answer lists, or null when the answer is not a list this can read. */
+function listedModels(body: string): string[] | null {
+  try {
+    const data = (JSON.parse(body) as { data?: unknown }).data;
+    if (!Array.isArray(data)) return null;
+    return data.flatMap((m: unknown) => (typeof (m as { id?: unknown } | null)?.id === 'string' ? [(m as { id: string }).id] : []));
+  } catch {
+    return null;
+  }
+}
+
+/** Ollama's rule: a name with no tag is its `latest`. */
+const isListed = (ids: string[], model: string) => ids.includes(model) || (!model.includes(':') && ids.includes(`${model}:latest`));
 
 async function modelProbe(): Promise<ModelState> {
   if (!config.ai.enabled) return 'off';
@@ -52,8 +67,13 @@ async function modelProbe(): Promise<ModelState> {
       headers: config.ai.apiKey ? { Authorization: `Bearer ${config.ai.apiKey}` } : {},
       signal: AbortSignal.timeout(READY_TIMEOUT_MS),
     });
-    void res.body?.cancel();
-    return res.ok ? 'ok' : 'down';
+    if (!res.ok) {
+      void res.body?.cancel();
+      return 'down';
+    }
+    // An answer that is not a list says nothing about the model, so it stays ok (BK-66).
+    const ids = listedModels(await res.text());
+    return ids && !isListed(ids, config.ai.model) ? 'missing' : 'ok';
   } catch {
     return 'down';
   }
@@ -156,6 +176,8 @@ export function registerHealth(app: FastifyInstance, readiness = createReadiness
     startedAt,
     build: { commit: fromEnv('BUILD_COMMIT'), time: fromEnv('BUILD_TIME') },
     streams: connectedClients(),
+    // Whether the server's own log file is being written, so a full disk is not found out at the next rebuild (IN-83).
+    logFile: logFileStatus(),
   });
 
   // For a monitor that holds a session or Bearer token: unlike /api/health, whose status is always

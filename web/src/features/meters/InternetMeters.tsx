@@ -7,6 +7,7 @@ import { Async } from '../../shared/components/states';
 import Gauge from './Gauge';
 import { formatClockLabeled } from '../../shared/lib/time';
 import { useReportTimeZone } from '../../shared/hooks/useReportTimeZone';
+import { roleAllows, useAuth } from '../../shared/hooks/useAuth';
 
 /**
  * The internet traffic meters: one gauge per gauge widget of the Zabbix dashboard HCML keeps (INTERNET_METERS_DASHBOARD). Wall screens, operators and admins only.
@@ -17,6 +18,7 @@ export default function InternetMeters({ q, page }: { q: MetersQuery; page?: { i
   // Only for the words that say how old an old reading is.
   const now = useNow(30_000);
   useReportTimeZone();
+  const { role } = useAuth();
 
   return (
     <section className="panel meters" aria-labelledby={headingId}>
@@ -34,8 +36,11 @@ export default function InternetMeters({ q, page }: { q: MetersQuery; page?: { i
         {(d) =>
           !d.found ? (
             <div className="state">
-              Zabbix has no dashboard named “{d.dashboard}” that the portal can read. Set INTERNET_METERS_DASHBOARD to the
-              name of the one that holds the gauges.
+              Zabbix has no dashboard named “{d.dashboard}” that the portal can read.{' '}
+              {/* The setting's name is for the portal admin; a wall screen or an operator cannot set it (UX-53). */}
+              {roleAllows(role, 'admin')
+                ? 'Set INTERNET_METERS_DASHBOARD to the name of the one that holds the gauges.'
+                : 'Ask the portal admin which Zabbix dashboard holds the gauges.'}
             </div>
           ) : d.meters.length === 0 ? (
             <div className="state">The dashboard “{d.dashboard}” has no gauge widgets.</div>

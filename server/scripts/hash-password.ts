@@ -2,10 +2,10 @@
  * Print an scrypt hash for a portal password, to paste into PORTAL_USERS as the password part
  * (name:HASH:role) or into PORTAL_PASS.
  *
- *   printf '%s' 'the password' | npx tsx scripts/hash-password.ts     (from server/)
- *   npx tsx scripts/hash-password.ts                                   (asks twice, hidden)
+ *   npx tsx scripts/hash-password.ts                                                  (from server/; asks twice, hidden)
+ *   read -rs PW; printf '%s' "$PW" | npx tsx scripts/hash-password.ts; unset PW      (from server/; piped, nothing typed in a command)
  *
- * The password comes from standard input, never from an argument, so it stays out of the shell
+ * The password comes from standard input, never from an argument, and the piped form never types it into a command, so it stays out of the shell
  * history and the process list. One trailing newline is dropped. Each run prints a different hash
  * for the same password (a fresh salt) and any of them signs in. Only the hash goes to standard
  * output; prompts and errors go to standard error.

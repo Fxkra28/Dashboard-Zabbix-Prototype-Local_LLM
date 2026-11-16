@@ -4,8 +4,8 @@ import { zonedDate, zonedDayStart } from '../sli/time.js';
 
 /**
  * Per-user caps on the AI routes, which the global limit does not give: it is one bucket per
- * address. Calls a minute (every provider, Assistant and Explain counted apart), tokens a day (the
- * hosted API only, a local model has no bill), and in ai.ts hosted calls at once. Counts live in
+ * address. Calls a minute (every provider, Assistant and Explain counted apart), tokens a day (a model
+ * outside this machine's network only, a local model has no bill), and in ai.ts hosted calls at once. Counts live in
  * memory, per BFF process: a restart gives everyone a fresh allowance.
  */
 
@@ -33,18 +33,21 @@ export class MinuteLimit {
     private readonly windowMs: number = WINDOW_MS,
   ) {}
 
-  /** Count a call: null when it may go ahead, else the seconds until this key's minute is over. */
-  take(key: string): number | null {
+  /**
+   * Count a call, or `weight` of them: null when it may go ahead, else the seconds until this key's minute is over. A call that would pass
+   * the limit is refused whole and leaves the count where it was; the first call of a minute always goes ahead.
+   */
+  take(key: string, weight = 1): number | null {
     const now = this.now();
     const window = this.windows.get(key);
     if (!window || window.resetAt <= now) {
       this.windows.delete(key); // re-inserted, so the oldest key is always first
-      this.windows.set(key, { count: 1, resetAt: now + this.windowMs });
+      this.windows.set(key, { count: weight, resetAt: now + this.windowMs });
       if (this.windows.size > MAX_KEYS) this.prune(now);
       return null;
     }
-    if (window.count >= this.max) return Math.max(1, Math.ceil((window.resetAt - now) / 1000));
-    window.count++;
+    if (window.count + weight > this.max) return Math.max(1, Math.ceil((window.resetAt - now) / 1000));
+    window.count += weight;
     return null;
   }
 
@@ -183,8 +186,16 @@ export const aiBudget = new DailyTokens(
 export const chargeTo = (req: FastifyRequest) => (tokens: number) => aiBudget.record(callerOf(req), tokens);
 
 /**
- * The route guard for an AI route: too many calls this minute, or no tokens left
- * today, answers 429 in words a reader can act on. A preHandler, so it runs after
+ * People with a model call waiting or running, for a model that takes one call at a time (BK-67). An entry goes when its response
+ * ends, or after the longest a call can last (the slot wait, the model's own limit and a margin), so a response that never says it closed cannot hold anyone.
+ */
+const inFlight = new Map<string, { at: number }>();
+const SLOT_WAIT_AND_MARGIN_MS = 50_000;
+const inFlightLimitMs = () => config.ai.timeoutMs + SLOT_WAIT_AND_MARGIN_MS;
+
+/**
+ * The route guard for an AI route: too many calls this minute, no tokens left today, or (for a model that takes one
+ * call at a time) a call of the same person still waiting or running, answers 429 in words a reader can act on. A preHandler, so it runs after
  * the auth guard has verified the token and set `req.user`, and before the route
  * reads its body or hijacks the stream.
  *
@@ -194,6 +205,15 @@ export const chargeTo = (req: FastifyRequest) => (tokens: number) => aiBudget.re
 export function aiGuard(kind: AiKind) {
   return async function guard(req: FastifyRequest, reply: FastifyReply): Promise<FastifyReply | void> {
     const caller = callerOf(req);
+    // The one slot is Ollama's: a person with a call waiting or running may not queue another behind it. Checked first, so a refusal costs no allowance.
+    const single = config.ai.provider !== 'anthropic';
+    const holding = single ? inFlight.get(caller) : undefined;
+    if (holding && Date.now() - holding.at < inFlightLimitMs()) {
+      return reply
+        .code(429)
+        .header('retry-after', '5')
+        .send({ error: 'rate_limited', message: 'Your last question is still being answered. Ask again when it has finished.' });
+    }
     const wait = perMinute[kind].take(`${kind}|${caller}`);
     if (wait !== null) {
       const { max, unit } = WHAT[kind];
@@ -205,11 +225,19 @@ export function aiGuard(kind: AiKind) {
           message: `You are asking too quickly: the limit is ${max} ${unit} a minute for each person. Try again in ${wait} second${wait === 1 ? '' : 's'}.`,
         });
     }
-    // Only the hosted API is billed.
-    if (config.ai.provider !== 'anthropic') return;
-    const refusal = aiBudget.refusal(caller);
+    // Only a call that leaves the machine's network can be billed: the hosted API, or a gateway outside it (SC-53).
+    const refusal = config.ai.external ? aiBudget.refusal(caller) : null;
     if (refusal) {
       return reply.code(429).header('retry-after', String(refusal.retryAfter)).send({ error: 'ai_budget', message: refusal.message });
     }
+    if (!single) return;
+    const mark = { at: Date.now() };
+    inFlight.set(caller, mark);
+    const release = () => {
+      if (inFlight.get(caller) === mark) inFlight.delete(caller);
+    };
+    reply.raw.once('finish', release);
+    reply.raw.once('close', release);
+    if (reply.raw.destroyed || reply.raw.writableEnded) release();
   };
 }

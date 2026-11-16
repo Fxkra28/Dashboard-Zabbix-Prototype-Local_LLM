@@ -159,3 +159,61 @@ describe('useAsync and a hidden tab (FR-25)', () => {
     expect(runs).toHaveLength(1);
   });
 });
+
+// UX-49: Try again must visibly do something, so a retry of a failed load shows the loading state at once and not the old error until the answer lands.
+describe('useAsync reload after a failure (UX-49)', () => {
+  it('shows the loading state again when a failed first load is retried, then holds the data', async () => {
+    const again = deferred<string>();
+    let calls = 0;
+    const { result } = renderHook(() => useAsync(() => (++calls === 1 ? Promise.reject(new Error('Failed to fetch')) : again.promise)));
+    await waitFor(() => expect(result.current.error).toBe('Failed to fetch'));
+    act(() => result.current.reload());
+    expect(result.current).toMatchObject({ loading: true, error: null, data: null });
+    await act(async () => again.resolve('ok'));
+    expect(result.current).toMatchObject({ loading: false, error: null, data: 'ok', stale: false });
+  });
+
+  it('says the failure again when the retry fails too', async () => {
+    let calls = 0;
+    const { result } = renderHook(() => useAsync(() => Promise.reject(new Error(`try ${++calls}`))));
+    await waitFor(() => expect(result.current.error).toBe('try 1'));
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.error).toBe('try 2'));
+    expect(result.current.loading).toBe(false);
+  });
+
+  it('keeps the old selection dimmed, and loading, when the retry is for a selection that failed over it', async () => {
+    const again = deferred<string>();
+    let fails = true;
+    const { result, rerender } = renderHook(
+      ({ host }) => useAsync(() => (host === 'A' ? Promise.resolve('A') : fails ? Promise.reject(new Error('Failed to fetch')) : again.promise), [host]),
+      { initialProps: { host: 'A' } },
+    );
+    await waitFor(() => expect(result.current.data).toBe('A'));
+    rerender({ host: 'B' });
+    await waitFor(() => expect(result.current.error).toBe('Failed to fetch'));
+    expect(result.current).toMatchObject({ data: 'A', stale: true });
+    fails = false;
+    act(() => result.current.reload());
+    expect(result.current).toMatchObject({ loading: true, error: null, data: 'A', stale: true });
+    await act(async () => again.resolve('B'));
+    expect(result.current).toMatchObject({ data: 'B', stale: false, error: null });
+  });
+
+  it('does not blank a page that still has its own data: a refresh that failed keeps its note until the next answer', async () => {
+    let calls = 0;
+    const { result } = renderHook(() =>
+      useAsync(() => {
+        calls += 1;
+        return calls === 2 ? Promise.reject(new Error('Zabbix is unreachable')) : Promise.resolve(`data ${calls}`);
+      }),
+    );
+    await waitFor(() => expect(result.current.data).toBe('data 1'));
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.error).toBe('Zabbix is unreachable'));
+    act(() => result.current.reload());
+    expect(result.current).toMatchObject({ data: 'data 1', error: 'Zabbix is unreachable', loading: false });
+    await waitFor(() => expect(result.current.data).toBe('data 3'));
+    expect(result.current.error).toBeNull();
+  });
+});

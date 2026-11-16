@@ -59,7 +59,7 @@ A rejected token and a Zabbix that does not answer within `ZABBIX_TIMEOUT_MS` ar
 | `SITE_TAG`, `SITE_GROUP_PREFIX`, `OWNER_TAG`, `CRITICALITY_TAG`, `HOST_NAME_PATTERN` | `site`, none, `owner`, `criticality`, none | How the portal reads sites, owners and criticality from Zabbix's tags and names |
 | `INTERNET_METERS_DASHBOARD` | `Global view` | The name of the Zabbix dashboard whose gauge widgets are the meters |
 | `SLI_REPORT_TRIGGERS`, `SLI_AVAILABILITY_TRIGGERS` | `High ICMP ping loss`, and that plus `Unavailable by ICMP ping` | The names of the triggers that the two SLA methods count |
-| `AVAILABILITY_MIN_SEVERITY`, `SLA_TIMEZONE`, `SLO_TARGET` | 2, `Asia/Jakarta`, 99 | The lowest severity that counts for availability, the zone that cuts the months, and the target |
+| `AVAILABILITY_MIN_SEVERITY`, `SLA_TIMEZONE`, `SLO_TARGET` | 2, `Asia/Jakarta`, 99 | The lowest severity that counts in the original any-problem availability report (no page asks for it now; the SLA figures do not use it), the zone that cuts the months, and the target |
 
 The full list of settings, with every default, is in `deploy/settings.example`.
 

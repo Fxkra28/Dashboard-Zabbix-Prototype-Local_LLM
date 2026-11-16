@@ -18,7 +18,7 @@ Five jobs run side by side, so a failure names its package.
 |---|---|---|
 | Server | 15 min | Installs from the lockfile, audits the packages that ship, typechecks, lints, tests and builds |
 | Web | 15 min | The same for the web app |
-| Checks | 10 min | Installs the server's packages, which hold the TypeScript runner and the compiler the checkers use, then runs eleven checkers (below) |
+| Checks | 10 min | Installs the server's packages, which hold the TypeScript runner and the compiler the checkers use, then runs each checker as a step of its own: eleven of the twelve (below). The twelfth, which compares the installed packages with the lock files, is for a working copy and not for CI, which installs from them |
 | Secret scan | 10 min | Scans the commits that were pushed for secrets |
 | Docker images | 20 min | Builds both images without pushing them, and runs nginx's own syntax check inside the web image |
 
@@ -36,7 +36,7 @@ The checkers, each a step with a name that says what it guarantees:
 10. The handover handbook matches the code and follows its rules.
 11. The parity checker's own checks. CI holds one tree, so this runs only the script's own checks and says it compared nothing.
 
-`npm run verify` at the root runs the same steps, apart from the installs, the audit, the secret scan and the image builds, and adds the typechecks, lint, tests and builds of both packages. It takes about five minutes. Run it before anything is committed.
+`npm run verify` at the root runs the same checks and tests, apart from the installs, the audit, the secret scan and the image builds. It adds what CI cannot do with one tree: the check that the installed packages are the ones the lock files name, first, and the full parity check, last, against the other copy. It takes about five minutes. Run it before anything is committed, in each copy.
 
 ## The secret scan
 

@@ -24,7 +24,6 @@ The sidebar is the list. Which role may see a page is not written in the web app
 | Links and WAN health | `/links` | `web/src/features/network/Links.tsx` |
 | Services | `/services` | `web/src/features/sla/Services.tsx` |
 | SLA | `/sla` | `web/src/features/sla/Sla.tsx` |
-| Availability and response | `/reports/availability` | `web/src/features/sla/Availability.tsx` |
 | Capacity trends | `/reports/capacity` | `web/src/features/reports/Capacity.tsx` |
 | Alert noise | `/reports/noise` | `web/src/features/reports/AlertNoise.tsx` |
 | Top 100 triggers | `/reports/top-triggers` | `web/src/features/reports/TopTriggers.tsx` |
@@ -38,7 +37,7 @@ The sidebar is the list. Which role may see a page is not written in the web app
 ### Live list or poll
 
 <!-- gen:snippet web/src/features/dashboard/Overview.tsx#Overview lines=58-96 sha=3f61407d160e -->
-`web/src/features/dashboard/Overview.tsx:178-216` (lines 58 to 96 of Overview)
+`web/src/features/dashboard/Overview.tsx:179-217` (lines 58 to 96 of Overview)
 
 ```tsx
 // Live problems over SSE. The poll is a safety net for a dropped stream, not a second source of
@@ -547,13 +546,13 @@ export function parseInline(text: string, allowBold = true): Inline[] {
 2. An inline marker counts only when it has a closing partner. A half-streamed answer, such as `**11.1 FG-60` with no closing stars, stays readable text and does not flicker bold while it arrives.
 3. A backtick with a closing partner opens a code span, whose content is literal. Two stars with a closing partner open bold, whose content may hold code spans but not more bold.
 
-Tests: `web/scripts/markdown.check.ts` is one of the eleven checkers. It holds the parser's cases and runs in `npm run check`.
+Tests: `web/scripts/markdown.check.ts` is one of the twelve checkers. It holds the parser's cases and runs in `npm run check`.
 
 ## The other pages
 
-- Network and Sites: `Sites.tsx` lists each site with its hosts and problems. `Network.tsx` shows the devices grouped by site, with their interfaces in pages, and `Links.tsx` the ping links and the redundant paths. `Maps.tsx` draws Zabbix's own maps.
-- Hosts: `Hosts.tsx` is the host list with its state and problems, `Devices.tsx` the same hosts as devices of one kind, and `LatestData.tsx` the latest values, paged on the server.
-- SLA: `Sla.tsx` and `Sli.tsx` show the derived monthly SLA and its two methods, `Services.tsx` the service tree, and `Availability.tsx` the availability report. The three download buttons (PDF, Excel and CSV zip) are `ReportDownload.tsx`, the style button is `ReportStyleButton.tsx`, and an administrator also gets the Email report and Schedule dialogs (`EmailReport.tsx` and `ReportSchedule.tsx`), and `percent.ts` prints a percentage without rounding a miss up to the target.
-- Reports: `Capacity.tsx`, `AlertNoise.tsx`, `TopTriggers.tsx` and `Inventory.tsx`, the last for admins only. Each has its filters in the address and each uses `Async` for its states.
+- Network and Sites: `Sites.tsx` lists each site with its hosts and problems. `Network.tsx` shows the devices grouped by site, with their interfaces in pages, and `Links.tsx` the ping links and the redundant paths. `Maps.tsx` draws Zabbix's own maps, and its list has a Try again button when it could not be read. Choosing a site card, or a port, opens a panel further down, so `useReveal` brings it into view and puts the focus on its heading, with the jump and not the glide for somebody who asked for less motion (UX-62). The pager of the ports table is drawn outside the content that goes inert while the next page loads, so the button pressed keeps its focus (UX-57), and the count in the selected Status button has a colour of its own, which the contrast check computes, and no opacity (UX-59).
+- Hosts: `Hosts.tsx` is the host list with its state and problems, `Devices.tsx` the same hosts as devices of one kind, and `LatestData.tsx` the latest values, paged on the server, with its pager outside the content that goes inert while the next page loads (UX-57) and a Try again button on the notice for the host and group menus (UX-60).
+- SLA: `Sla.tsx` and `Sli.tsx` show the derived monthly SLA and its two methods, `Rolling.tsx` the last 7 or 30 days in the same page, `Response.tsx` the problems nobody has acknowledged, by age, in the Response tab, and `Services.tsx` the service tree, whose Month and Method controls are drawn once, above the read, so that the one pressed keeps its focus while the tree loads (UX-56). `AvailabilityRedirect.tsx` sends the old address of the Availability and response page to the derived view of the SLA page, on the last 7 days unless the address names a period. The three download buttons (PDF, Excel and CSV zip) are `ReportDownload.tsx`, the style button is `ReportStyleButton.tsx`, and an administrator also gets the Email report and Schedule dialogs (`EmailReport.tsx` and `ReportSchedule.tsx`), and `percent.ts` prints a percentage without rounding a miss up to the target.
+- Reports: `Capacity.tsx`, `AlertNoise.tsx`, `TopTriggers.tsx` and `Inventory.tsx`, the last for admins only. Each has its filters in the address and each uses `Async` for its states. Capacity leaves the Graph button off its interface rows for a viewer, whom `/api/graph` would refuse (FR-55).
 - Auth: `Login.tsx` is the sign-in page. It keeps `next` as a safe path, never an address on another site, so a sign-in returns to the page it came from.
 - Shell: `Sidebar.tsx`, `Layout.tsx` and the rest are in [the shell chapter](web-shell-and-shared.md).

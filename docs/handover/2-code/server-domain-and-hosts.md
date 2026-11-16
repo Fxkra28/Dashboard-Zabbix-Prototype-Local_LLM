@@ -446,7 +446,7 @@ export function collectingStatus(
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/reports.ts#getFreshness sha=280866a067ac -->
-`server/src/services/reports.ts:144-147`
+`server/src/services/reports.ts:146-149`
 
 ```ts
 export async function getFreshness() {
@@ -703,7 +703,7 @@ Tests: `viewer-network.test.ts` and `routes.test.ts`.
 `server/src/services/reports.ts`. The Dashboard's counts: hosts, items, triggers, groups, problems, the unacknowledged ones and the problems by severity.
 
 <!-- gen:snippet server/src/services/reports.ts#countIfReady sha=a617352ddd2a -->
-`server/src/services/reports.ts:87-112`
+`server/src/services/reports.ts:89-114`
 
 ```ts
 async function countIfReady(what: Counted): Promise<number | null> {
@@ -736,7 +736,7 @@ async function countIfReady(what: Counted): Promise<number | null> {
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/reports.ts#getStats sha=5c69a39f56c8 -->
-`server/src/services/reports.ts:115-141`
+`server/src/services/reports.ts:117-143`
 
 ```ts
 export function getStats() {

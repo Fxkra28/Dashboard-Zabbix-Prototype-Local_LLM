@@ -4,8 +4,8 @@ import Fastify from 'fastify';
 /**
  * How the environment sets the AI notice and the caps. The portal says in /api/health whether a
  * question to the AI leaves this machine, and the web shows a notice from that and nothing else:
- * only the hosted Anthropic backend sends data out, so a local model, on whatever address, shows
- * nothing. config.ts also reads each cap from the environment with a default, and never requires
+ * the hosted Anthropic backend and a model on a host outside this machine's own network send data out, and a model inside it shows
+ * nothing (SC-53). config.ts also reads each cap from the environment with a default, and never requires
  * one. Each case re-imports config, which reads the environment once.
  */
 
@@ -20,6 +20,8 @@ const NAMES = [
   'AI_API_KEY',
   'ANTHROPIC_API_KEY',
   'AI_BASE_URL',
+  'AI_LOCAL_ONLY',
+  'AI_ALLOW_REMOTE',
   'AI_CHAT_PER_MINUTE',
   'AI_EXPLAIN_PER_MINUTE',
   'AI_MAX_CONCURRENT',
@@ -62,7 +64,7 @@ describe('GET /api/health says whether a question leaves this machine', () => {
     expect(await healthUnder({ ANTHROPIC_API_KEY: 'fake-key-for-tests' })).toMatchObject({ aiProvider: 'anthropic', aiExternal: true });
   });
 
-  it('shows nothing for a local model, whatever its address', async () => {
+  it('shows nothing for a model on this machine or its own network', async () => {
     for (const baseUrl of [
       'http://localhost:11434/v1',
       'http://127.0.0.1:11434/v1',
@@ -71,6 +73,17 @@ describe('GET /api/health says whether a question leaves this machine', () => {
     ]) {
       const body = await healthUnder({ AI_PROVIDER: 'openai-compatible', AI_BASE_URL: baseUrl });
       expect(body, baseUrl).toMatchObject({ ai: true, aiProvider: 'openai-compatible', aiExternal: false });
+    }
+  });
+
+  // SC-53: the notice follows where the model is, not the provider's name, so a gateway on a public host is not "nothing left".
+  it('says so for a model on a public host, and the provider stays openai-compatible', async () => {
+    for (const baseUrl of ['https://gateway.example.com/v1', 'https://api.openai.com/v1', 'http://8.8.8.8:11434/v1']) {
+      expect(await healthUnder({ AI_PROVIDER: 'openai-compatible', AI_BASE_URL: baseUrl }), baseUrl).toMatchObject({
+        ai: true,
+        aiProvider: 'openai-compatible',
+        aiExternal: true,
+      });
     }
   });
 
@@ -87,10 +100,11 @@ describe('GET /api/health says whether a question leaves this machine', () => {
 });
 
 describe('config.ai.external', () => {
-  it('is true only for the hosted backend', async () => {
+  it('is true for the hosted backend and for a model outside this machine and its network, and false for one inside', async () => {
     expect((await load(HOSTED)).config.ai.external).toBe(true);
-    expect((await load({ AI_PROVIDER: 'openai-compatible', AI_BASE_URL: 'https://gateway.example.com/v1' })).config.ai.external).toBe(false);
+    expect((await load({ AI_PROVIDER: 'openai-compatible', AI_BASE_URL: 'https://gateway.example.com/v1' })).config.ai.external).toBe(true);
     expect((await load({ AI_PROVIDER: 'openai-compatible', AI_BASE_URL: 'http://localhost:11434/v1' })).config.ai.external).toBe(false);
+    expect((await load({ AI_PROVIDER: 'openai-compatible', AI_BASE_URL: 'http://192.168.4.5:11434/v1' })).config.ai.external).toBe(false);
   });
 });
 

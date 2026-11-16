@@ -44,7 +44,7 @@ Users come from the environment, in `PORTAL_USERS` as `name:password:role`. A ro
 
 ## 5. Change a threshold
 
-The thresholds are settings: `LINK_LOSS_WARN` and `LINK_LOSS_CRIT` for the Links page, `NOISE_SHORT_SECONDS` and `NOISE_MIN_COUNT` for the noise report, `SLO_TARGET` for the SLA, `SLI_MIN_COVERAGE` for how much data a figure needs, `AVAILABILITY_MIN_SEVERITY` for the availability report. Follow recipe 4's steps 2 and 3. A threshold that changes a published figure, such as `SLO_TARGET`, changes the SLA pages and the report files for every month at once, so say so to the people who read them. To change a default for every deployment and not for one, change the number in `server/src/core/config.ts` and in `deploy/settings.example`, and the sentence that states it in the README's Configuration section.
+The thresholds are settings: `LINK_LOSS_WARN` and `LINK_LOSS_CRIT` for the Links page, `NOISE_SHORT_SECONDS` and `NOISE_MIN_COUNT` for the noise report, `SLO_TARGET` for the SLA, `SLI_MIN_COVERAGE` for how much data a figure needs. Follow recipe 4's steps 2 and 3. A threshold that changes a published figure, such as `SLO_TARGET`, changes the SLA pages and the report files for every month at once, so say so to the people who read them. To change a default for every deployment and not for one, change the number in `server/src/core/config.ts` and in `deploy/settings.example`, and the sentence that states it in the README's Configuration section.
 
 ## 6. Add a Zabbix method
 
@@ -77,8 +77,9 @@ The thresholds are settings: `LINK_LOSS_WARN` and `LINK_LOSS_CRIT` for the Links
 ## 10. Keep the two copies equal
 
 1. Edit shared files in `hcml-portal`. Bring `hcml-portal-ollama` equal with a dry run of the copy command first, and read what it would change. The files that differ on purpose are listed in `tools/check/parity.check.mjs` and in [the two copies](../1-folders/the-two-copies.md), and are edited by hand in both.
-2. Run `npm run check:parity` from either copy. It lists every file that differs or exists in one only, outside the list.
-3. Never copy `docker-compose.override.yml` or an `.env` file, and never commit them.
+2. If a `package.json` or a `package-lock.json` changed, run `npm run install:all` in the second folder: the copy step leaves `node_modules/` alone, and `npm run verify` fails, naming the package, when what is installed is not what the lock file says.
+3. Run `npm run check:parity` from either copy. It lists every file that differs or exists in one only, outside the list.
+4. Never copy `docker-compose.override.yml` or an `.env` file, and never commit them.
 
 ## 11. Update this handbook
 

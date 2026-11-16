@@ -16,10 +16,10 @@ Sign-in decides who may open the portal and what they may do. There is no user t
 
 An account is a name, a password and a role. They are written in the settings as `PORTAL_USERS`, comma-separated triples of `name:password:role`. The name is what comes before the first colon and the role what comes after the last, so a password may hold colons, but not commas. The roles are `viewer`, `wall`, `operator` and `admin`. An entry with a role the portal does not know is a viewer, and a warning says so; an entry with no role is a viewer too, without a warning. The warnings name an entry by its position, never by its text, so a malformed entry cannot put a password in the log.
 
-- A password is either plain text or a self-describing scrypt hash, `scrypt.N.r.p.salt.hash`, which `server/scripts/hash-password.ts` makes. It asks twice with the input hidden, or reads the password from standard input, never from an argument, so it stays out of the shell history. The cost settings travel with each hash, so raising them later leaves older entries working. A hash holds no `:`, `,` or `$`, the three characters that would break the settings.
+- A password is either plain text or a self-describing scrypt hash, `scrypt.N.r.p.salt.hash`, which `server/scripts/hash-password.ts` makes. It asks twice with the input hidden, or reads the password from standard input, never from an argument: pipe it in from a variable read without echo (`read -rs PW; printf '%s' "$PW" | npx tsx scripts/hash-password.ts; unset PW`), not from a command that holds the password as text, so that it stays out of the shell history. The cost settings travel with each hash, so raising them later leaves older entries working. A hash holds no `:`, `,` or `$`, the three characters that would break the settings.
 - When `PORTAL_USERS` holds at least one valid entry, `PORTAL_USER` and `PORTAL_PASS` are ignored. Those two are the single-admin shorthand, for a portal with one account. So adding a `wall` entry beside a shorthand admin removes the admin, unless the admin is written into `PORTAL_USERS` too.
 - Sign-in ignores the case of a name. A name listed twice can sign in with either entry, but its sessions are not renewed, because a token names its user and cannot say which entry it came from.
-- The server refuses to start with an empty password, with the built-in `admin`, or with a hash it cannot read. It names the users and never the passwords.
+- The server refuses to start with an empty password, with the built-in `admin`, with a plain password under 8 characters, or with a hash it cannot read. It names the users and never the passwords.
 
 An account is looked up again on every request. Remove a name from the settings and recreate the server container, and that person's session stops working on the next click. Change a role and it takes effect on the next click. Both wait for a recreate of the server container (`docker compose up -d`; a plain restart keeps the old settings), because the settings are read once.
 
@@ -51,14 +51,14 @@ The route is judged by the route the router matched, not by the raw text of the 
 
 ## The cross-site check
 
-A page on another site must not be able to make a signed-in browser acknowledge a problem. So every `POST` that the browser authenticates by itself, with the cookie, must carry the header `X-HCML-CSRF: 1`, and when it carries an `Origin`, that must be the `Host` the server received. Sign-in and sign-out are checked always. A script holding a Bearer token needs neither. CORS allows only `WEB_ORIGIN`, so another site's preflight for the custom header fails, and `X-HCML-CSRF` cannot be added without a preflight.
+A page on another site must not be able to make a signed-in browser acknowledge a problem. So every `POST`, `PUT`, `PATCH` or `DELETE` that the browser authenticates by itself, with the cookie, must carry the header `X-HCML-CSRF: 1`, and when it carries an `Origin`, that must be the `Host` the server received. Sign-in and sign-out are checked always. A script holding a Bearer token needs neither. CORS allows only `WEB_ORIGIN`, so another site's preflight for the custom header fails, and `X-HCML-CSRF` cannot be added without a preflight.
 
 ## The brakes on guessing
 
 - **The overall limit.** `RATE_LIMIT_PER_MINUTE` (300) for one client address, counted before the guard, so a flood is counted before any token is verified. The live stream, the health check and sign-out are exempt, because a wall holds one connection and the others are polled on purpose.
 - **Sign-in.** Ten attempts a minute for one account from one address. After ten failures in a row from one address for one account, the next sign-in is refused for a minute, and each further failure doubles the lock up to five minutes. A correct sign-in clears the count. The lock is short because everyone behind Docker's gateway shares one address.
 - **The cost of a miss.** A name nobody holds still costs one hash check, so an unknown name is not quicker to refuse than a known one.
-- **The log.** Every attempt is logged as `sign_in` with the name as typed (control characters removed), the outcome and the address, never the password. Every fifth failure in a row for one name, from any address within fifteen minutes, logs a warning.
+- **The log.** Every attempt is logged as `sign_in` with the account's name when an account holds it, or `unknown` and the length of what was typed when none does (so a password typed into the name box stays out of a log that lasts), the outcome and the address, never the password. Every fifth failure in a row for one name, from any address within fifteen minutes, logs a warning.
 - **The body.** A name and a password fit in 4 KB, so a megabyte-long name cannot reach the limiter's memory.
 
 ## With sign-in off
@@ -72,7 +72,7 @@ A page on another site must not be able to make a signed-in browser acknowledge 
 | `AUTH_ENABLED` | `true` | Sign-in on or off |
 | `JWT_SECRET` | none, and compose refuses to start without it | Signs the sessions. A value published in the repository, or under 32 bytes, stops the server. Each copy has its own |
 | `PORTAL_USERS` | none | The accounts: `name:password-or-hash:role`, comma-separated |
-| `PORTAL_USER`, `PORTAL_PASS` | `admin`, none | The single-admin shorthand. An empty password or `admin` stops the server |
+| `PORTAL_USER`, `PORTAL_PASS` | `admin`, none | The single-admin shorthand. An empty password, `admin` or a plain password shorter than 8 characters stops the server, and a `$` in one needs single quotes in `.env` |
 | `SESSION_COOKIE` | `hcml_session`, or `hcml_session_ollama` | The cookie's name, which is also the token's issuer and audience |
 | `SESSION_HOURS` | 12 | How long a session lasts, from 2 to 24 |
 | `SESSION_EPOCH` | 1 | A label inside every token. Changing it ends every session |

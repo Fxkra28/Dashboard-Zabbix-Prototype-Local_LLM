@@ -43,7 +43,7 @@ sibling sends to Anthropic (host names, trigger text, the estate snapshot) but i
 `localhost:11434` and stops there. For that reason the line the sibling shows under every AI answer,
 naming Anthropic as the external service, never appears here. The per-user limits on Explain and the
 assistant (10 calls a minute each) are the same in both copies; the daily token budget counts the
-hosted API only, so it does nothing here.
+hosted API and a model outside the machine's network, so it does nothing while this copy runs a model on the machine.
 
 `flow/DataFlow.pdf` draws that box green, and carries no trust boundary at all, because there is
 none to draw. In the sibling repo the same box is red and reads *LEAVES THIS MACHINE*.

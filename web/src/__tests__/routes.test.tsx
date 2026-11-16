@@ -47,6 +47,24 @@ describe('an address that is not a page (FR-06)', () => {
   });
 });
 
+describe('the old Availability address, in the route table', () => {
+  const Full = () => {
+    const l = useLocation();
+    return <output data-testid="full">{`${l.pathname}${l.search}`}</output>;
+  };
+
+  it('is already on the SLA page when the first render is done, so no chunk is waited for and the title never reads Page not found', () => {
+    render(
+      <MemoryRouter initialEntries={['/reports/availability?period=d30&method=hcml-report']}>
+        <AppRoutes />
+        <Full />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('full')).toHaveTextContent('/sla?month=d30&method=hcml-report&tab=derived');
+    expect(document.title).toBe(`SLA · ${APP_TITLE}`);
+  });
+});
+
 describe('the way past the menu (UX-10)', () => {
   it('puts a skip link before the sidebar, and it moves focus to the main landmark', async () => {
     open('/no-such-page');

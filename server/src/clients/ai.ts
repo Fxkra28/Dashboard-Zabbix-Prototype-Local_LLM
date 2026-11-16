@@ -503,8 +503,28 @@ export function billedTokens(usage: {
   );
 }
 
-/** Called once with a finished hosted call's token count, to charge it to whoever asked (limits.ts). */
+/** Called once with a finished call's token count, to charge it to whoever asked (limits.ts). */
 export type OnUsage = (tokens: number) => void;
+
+/** What a model says about the tokens a call used; any of the three may be missing. */
+export interface ModelCounts {
+  total?: number | null;
+  prompt?: number | null;
+  completion?: number | null;
+}
+
+/** The model's own number for a call: its total, else the prompt and the answer added, else null (BK-69). */
+export function countedTokens(counts: ModelCounts | null | undefined): number | null {
+  if (!counts) return null;
+  if (typeof counts.total === 'number' && counts.total > 0) return counts.total;
+  const sum = (typeof counts.prompt === 'number' ? counts.prompt : 0) + (typeof counts.completion === 'number' ? counts.completion : 0);
+  return sum > 0 ? sum : null;
+}
+
+/** Charges a call to a model outside the machine's network as hosted Claude's are: its own count, else the size of what went in and out. A model on this machine is not counted (BK-69). */
+export function chargeOutside(onUsage: OnUsage | undefined, counted: number | null, sentChars: number, receivedChars: number): void {
+  if (onUsage && config.ai.external) onUsage(counted ?? estimatedTokens(sentChars + receivedChars));
+}
 
 
 /**
@@ -526,6 +546,8 @@ export async function postModel(url: string, body: unknown, signal: AbortSignal)
       signal,
     });
   } catch (err) {
+    // A reader who left (BK-67) is not a failed model: their reason goes on as it is, so nothing is logged as an AI failure.
+    if (signal.aborted && !(signal.reason instanceof Error && signal.reason.name === 'TimeoutError')) throw signal.reason;
     // The viewer gets a fixed sentence; the log gets what the owner needs to fix it.
     if (err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
       throw new AiUpstreamError(
@@ -615,18 +637,30 @@ export async function prefillModel(system: string, log?: AiLog): Promise<boolean
   }
 }
 
+/** The model's own time limit, and also the reader's leaving when there is one (BK-67). */
+const withTimeout = (leaves?: AbortSignal): AbortSignal =>
+  leaves ? AbortSignal.any([AbortSignal.timeout(config.ai.timeoutMs), leaves]) : AbortSignal.timeout(config.ai.timeoutMs);
+
 /** Hosted Claude. `output_config.format` is its spelling of "obey this schema". */
-async function callAnthropic(kind: Kind, prompt: string, onUsage?: OnUsage): Promise<string> {
+async function callAnthropic(kind: Kind, prompt: string, onUsage?: OnUsage, signal?: AbortSignal): Promise<string> {
   let res;
   try {
-    res = await getAnthropic().messages.create({
-      model: config.ai.model,
-      max_tokens: MAX_TOKENS,
-      system: SYSTEM,
-      messages: [{ role: 'user', content: prompt }],
-      output_config: { format: { type: 'json_schema', schema: SCHEMAS[kind] } },
-    });
+    res = await getAnthropic().messages.create(
+      {
+        model: config.ai.model,
+        max_tokens: MAX_TOKENS,
+        system: SYSTEM,
+        messages: [{ role: 'user', content: prompt }],
+        output_config: { format: { type: 'json_schema', schema: SCHEMAS[kind] } },
+      },
+      signal ? { signal } : undefined,
+    );
   } catch (err) {
+    if (signal?.aborted) {
+      // The request had gone out, so its input is billed whether or not anyone reads the answer (BK-72).
+      onUsage?.(estimatedTokens(SYSTEM.length + prompt.length));
+      throw signal.reason; // the reader left (BK-67)
+    }
     if (err instanceof Anthropic.APIError) throw anthropicFailure(err);
     throw err;
   }
@@ -646,28 +680,41 @@ async function callAnthropic(kind: Kind, prompt: string, onUsage?: OnUsage): Pro
  * `output_config.format`, and Ollama enforces it by constraining the sampler to the schema's
  * grammar, as on the hosted path.
  */
-async function callOpenAiCompatible(kind: Kind, prompt: string): Promise<string> {
-  const res = await postModel(
-    `${config.ai.baseUrl.replace(/\/$/, '')}/chat/completions`,
-    {
-      model: config.ai.model,
-      max_tokens: MAX_TOKENS,
-      ...thinkingControl(config.ai.model),
-      messages: [
-        { role: 'system', content: SYSTEM },
-        { role: 'user', content: prompt },
-      ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: { name: kind, strict: true, schema: SCHEMAS[kind] },
+async function callOpenAiCompatible(kind: Kind, prompt: string, onUsage?: OnUsage, signal?: AbortSignal): Promise<string> {
+  const sent = SYSTEM.length + prompt.length;
+  let res: Response;
+  try {
+    res = await postModel(
+      `${config.ai.baseUrl.replace(/\/$/, '')}/chat/completions`,
+      {
+        model: config.ai.model,
+        max_tokens: MAX_TOKENS,
+        ...thinkingControl(config.ai.model),
+        messages: [
+          { role: 'system', content: SYSTEM },
+          { role: 'user', content: prompt },
+        ],
+        response_format: {
+          type: 'json_schema',
+          json_schema: { name: kind, strict: true, schema: SCHEMAS[kind] },
+        },
       },
-    },
-    // `fetch` has no default timeout: the same trap zabbix.ts guards against.
-    AbortSignal.timeout(config.ai.timeoutMs),
-  );
+      // `fetch` has no default timeout: the same trap zabbix.ts guards against.
+      withTimeout(signal),
+    );
+  } catch (err) {
+    // The request had gone out, so its input is billed whether or not anyone reads the answer (BK-69, as BK-72).
+    if (signal?.aborted) chargeOutside(onUsage, null, sent, 0);
+    throw err;
+  }
 
-  const body = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  const body = (await res.json()) as {
+    choices?: { message?: { content?: string } }[];
+    usage?: { total_tokens?: number; prompt_tokens?: number; completion_tokens?: number };
+  };
   const text = body.choices?.[0]?.message?.content;
+  // Billed whether or not the answer is usable.
+  chargeOutside(onUsage, countedTokens({ total: body.usage?.total_tokens, prompt: body.usage?.prompt_tokens, completion: body.usage?.completion_tokens }), sent, text?.length ?? 0);
   if (!text) throw new AiUpstreamError(AI_MESSAGE.unusable, `${config.ai.model} returned no content`);
   return text;
 }
@@ -678,22 +725,30 @@ async function callOpenAiCompatible(kind: Kind, prompt: string): Promise<string>
  * options are the chat's, so an Explain click never restarts the runner the
  * assistant is answering from.
  */
-async function callOllamaNative(kind: Kind, prompt: string): Promise<string> {
-  const res = await postModel(
-    `${ollamaRoot()}/api/chat`,
-    ollamaChatBody(
-      [
-        { role: 'system', content: SYSTEM },
-        { role: 'user', content: prompt },
-      ],
-      { numPredict: MAX_TOKENS, format: SCHEMAS[kind] },
-    ),
-    AbortSignal.timeout(config.ai.timeoutMs),
-  );
+async function callOllamaNative(kind: Kind, prompt: string, onUsage?: OnUsage, signal?: AbortSignal): Promise<string> {
+  const sent = SYSTEM.length + prompt.length;
+  let res: Response;
+  try {
+    res = await postModel(
+      `${ollamaRoot()}/api/chat`,
+      ollamaChatBody(
+        [
+          { role: 'system', content: SYSTEM },
+          { role: 'user', content: prompt },
+        ],
+        { numPredict: MAX_TOKENS, format: SCHEMAS[kind] },
+      ),
+      withTimeout(signal),
+    );
+  } catch (err) {
+    if (signal?.aborted) chargeOutside(onUsage, null, sent, 0);
+    throw err;
+  }
 
   const body = (await res.json().catch(() => ({}))) as OllamaLine;
   if (body.error) throw new AiUpstreamError(AI_MESSAGE.failed, `${config.ai.model}: ${body.error}`);
   const text = body.message?.content;
+  chargeOutside(onUsage, countedTokens({ prompt: body.prompt_eval_count, completion: body.eval_count }), sent, text?.length ?? 0);
   if (!text) throw new AiUpstreamError(AI_MESSAGE.unusable, `${config.ai.model} returned no content`);
   return text;
 }
@@ -719,25 +774,27 @@ function assertComplete(kind: Kind, parsed: Record<string, unknown>): void {
  * Ask the configured model to rewrite one Zabbix artifact. Both backends are
  * handed the same prompt and the same schema, and both enforce it, so the
  * caller can parse without a validation dependency, and so the two are
- * directly comparable on the same problem.
+ * directly comparable on the same problem. `signal` fires when nobody is left to read the
+ * answer: the wait for the slot and a call that is running both stop (BK-67).
  */
-export async function humanize<K extends Kind>(kind: K, payload: unknown, onUsage?: OnUsage): Promise<Result<K>> {
+export async function humanize<K extends Kind>(kind: K, payload: unknown, onUsage?: OnUsage, signal?: AbortSignal): Promise<Result<K>> {
   if (!config.ai.enabled) throw new AiDisabledError();
+  if (signal?.aborted) throw signal.reason; // the reader left before the call began (BK-71)
 
   const prompt = `${INSTRUCTION[kind]}\n\n${JSON.stringify(payload, null, 2)}`;
   let text: string;
   if (config.ai.provider === 'anthropic') {
-    const release = await acquireHostedSlot();
+    const release = await acquireHostedSlot(signal);
     try {
-      text = await callAnthropic(kind, prompt, onUsage);
+      text = await callAnthropic(kind, prompt, onUsage, signal);
     } finally {
       release();
     }
   } else {
     const native = await usesOllamaNative();
-    const release = await acquireModelSlot();
+    const release = await acquireModelSlot(signal);
     try {
-      text = native ? await callOllamaNative(kind, prompt) : await callOpenAiCompatible(kind, prompt);
+      text = native ? await callOllamaNative(kind, prompt, onUsage, signal) : await callOpenAiCompatible(kind, prompt, onUsage, signal);
     } finally {
       release();
     }

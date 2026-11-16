@@ -140,7 +140,13 @@ export function useAsync<T>(
       };
     };
 
-    return { attach, schedule, reload: () => start(false) };
+    // A failure with nothing of its own to show is cleared at once, so that Try again visibly starts something (UX-49).
+    const reload = () => {
+      setSnap((s) => (s.error && (s.data === null || s.stale) ? { ...s, loading: true, error: null } : s));
+      start(false);
+    };
+
+    return { attach, schedule, reload };
   });
 
   // eslint-disable-next-line react-hooks/exhaustive-deps

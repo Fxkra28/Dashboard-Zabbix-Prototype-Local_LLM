@@ -340,6 +340,10 @@ a.btn.sm {
   border-color: var(--warn-line);
   border-left-color: var(--warn);
 }
+/* A button at the end of a notice's line, such as Try again. */
+.notice-action {
+  margin-left: var(--s-3);
+}
 
 /* Role chip (RBAC) */
 .role-chip {

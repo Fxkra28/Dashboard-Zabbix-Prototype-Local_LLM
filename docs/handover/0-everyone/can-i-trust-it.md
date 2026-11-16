@@ -24,9 +24,9 @@ The portal keeps each answer for a while, because asking Zabbix is slow. HCML's 
 |---|---|---|
 | The problem list and the Dashboard's live list | Fifteen seconds. The live connection sends a new list as soon as something a screen shows has changed, and the server signals at least every fifteen seconds that the line is still alive | Never shown from an old copy kept on purpose. If a refresh fails, the page keeps the last good list on screen and says how old it is |
 | Views that are slow to build: Hosts overview, Devices, the Network and Maps pages, the internet meters, the busiest hosts, web monitoring, the SLA and the service pages | Up to ten minutes. The portal shows its last copy at once and reads a new one in the background | Once the copy is two minutes old, a line says "Data from 08:48 (12 min ago); a newer copy is being read from Zabbix." Younger than two minutes, it says nothing, because it is no older than Zabbix's own data |
-| The Availability and Alert noise reports | Kept for two minutes, then the previous run is shown for two more minutes while a new one is built | The page says how old the copy is |
+| The last 7 and 30 days of the SLA page, and the Alert noise report | Kept for two minutes, then the previous run is shown for two more minutes while a new one is built | The page says how old the copy is |
 | The Capacity report | Kept for an hour, then the previous run is shown for up to a day while the next one is built, because a run takes minutes on HCML's Zabbix | The page says how old the copy is |
-| Any of those reports when Zabbix fails | The last copy the portal kept, however old | The SLA, Availability, Capacity and Alert noise pages say "Zabbix did not answer, so this is the last copy the portal kept, from 08:48 (1 h 12 min ago)." |
+| Any of those reports when Zabbix fails | The last copy the portal kept, however old | The SLA, Capacity and Alert noise pages say "Zabbix did not answer, so this is the last copy the portal kept, from 08:48 (1 h 12 min ago)." |
 
 The times in those lines are examples. The page works the real ones out.
 

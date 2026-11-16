@@ -4,7 +4,7 @@
 |---|---|---|---|
 | Developers | about 25 min | [Server: routes](server-routes.md) | [Web app files, one card each](files-web.md) |
 
-Every code file of the server has one card on this page, 120 in all, grouped by folder and in alphabetical order. A card is the file in a few lines. The sentence under its heading says what the file is for and where the handbook walks through it, and a person wrote it. The block below that sentence is written by `npm run handover:build` from the code, so it cannot drift: the file's size, its exports with the first sentence of each comment, what it imports, who imports it, and which tests import it.
+Every code file of the server has one card on this page, 127 in all, grouped by folder and in alphabetical order. A card is the file in a few lines. The sentence under its heading says what the file is for and where the handbook walks through it, and a person wrote it. The block below that sentence is written by `npm run handover:build` from the code, so it cannot drift: the file's size, its exports with the first sentence of each comment, what it imports, who imports it, and which tests import it.
 
 Use the page when you know a file name and want to know what it is for and what would be hit if you changed it. The A to Z index of every name is [the symbols page](symbols.md). The same cards for the web app and for the tools are [Web app files](files-web.md) and [Tools files](files-tools.md).
 
@@ -35,7 +35,7 @@ Tests that import it: none
 The test settings: tests under src/__tests__, isolated per file, never reading a real .env. Walked through in [Tests and checkers](tests-and-checkers.md).
 
 <!-- gen:card server/vitest.config.ts -->
-25 lines, 1 export. Imported by 0 files.
+35 lines, 1 export. Imported by 0 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -71,7 +71,7 @@ Tests that import it: none
 Compares the derived SLA with HCML's own Availability Reports, which only the owner has. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card server/scripts/validate-sli.ts -->
-224 lines, 0 exports. Imported by 0 files.
+233 lines, 0 exports. Imported by 0 files.
 
 Imports: none
 
@@ -89,9 +89,9 @@ Tests that import it: none
 The composition root: builds the app, registers the plugins and hooks in a fixed order, mounts every route module, then listens and warms the caches. Walked through in [One request, from start to finish](one-request.md), [Server: the core and the clients](server-core-and-clients.md), [Server: live and assistant](server-live-and-assistant.md), [Server: routes](server-routes.md), [Server: security and http](server-security-and-http.md), [Web app: the API client, the types and the guards](web-api-types-guards.md).
 
 <!-- gen:card server/src/index.ts -->
-163 lines, 0 exports. Imported by 0 files.
+186 lines, 0 exports. Imported by 0 files.
 
-Imports: `clients/ai.ts`, `core/cache.ts`, `core/config.ts`, `core/schemas.ts`, `core/staleness.ts`, `http/compress.ts`, `http/errors.ts`, `http/health.ts`, `http/hostCheck.ts`, `http/logging.ts`, `http/noStore.ts`, `http/rateLimit.ts`, `http/requestId.ts`, `http/shutdown.ts`, `routes/actions.ts`, `routes/analytics.ts`, and 27 more
+Imports: `clients/ai.ts`, `core/cache.ts`, `core/config.ts`, `core/logFile.ts`, `core/schemas.ts`, `core/staleness.ts`, `http/compress.ts`, `http/errors.ts`, `http/health.ts`, `http/hostCheck.ts`, `http/logging.ts`, `http/noStore.ts`, `http/rateLimit.ts`, `http/requestId.ts`, `http/shutdown.ts`, `routes/actions.ts`, and 31 more
 
 Packages: `@fastify/cors`, `@fastify/helmet`, `fastify`
 
@@ -107,7 +107,7 @@ Tests that import it: none
 Where a model credential is used to ask a question: Explain and the Assistant call hosted Claude or an OpenAI-compatible server from here, and every answer is checked against a schema. The readiness check in `http/health.ts` sends the same key when it lists a local server's models. Walked through in [Server: the core and the clients](server-core-and-clients.md), [Server: live and assistant](server-live-and-assistant.md).
 
 <!-- gen:card server/src/clients/ai.ts -->
-754 lines, 24 exports. Imported by 8 files.
+811 lines, 27 exports. Imported by 8 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -130,11 +130,14 @@ Where a model credential is used to ask a question: Explain and the Assistant ca
 | `tryAcquireModelSlot` | function | 432 | `function tryAcquireModelSlot(): (() => void) \| null` | The model if nobody holds it this instant, else `null`: for work only worth doing while idle. |
 | `acquireHostedSlot` | function | 461 | `function acquireHostedSlot(signal?: AbortSignal, waitMs = SLOT_WAIT_MS): Promise<() => void>` | Wait for a hosted call's turn, then hold it until the returned function is called. |
 | `billedTokens` | function | 492 | `function billedTokens(usage: { input_tokens?: number \| null; output_tokens?: number \| null...` | Tokens a hosted call is billed for: what it read, cache included, and what it wrote. |
-| `OnUsage` | type | 507 | `type OnUsage = (tokens: number) => void` | Called once with a finished hosted call's token count, to charge it to whoever asked (limits.ts). |
-| `postModel` | function | 515 | `async function postModel(url: string, body: unknown, signal: AbortSignal): Promise<Response>` | POST one request to the model server with raw `fetch`, mirroring `zabbix.ts`: there is no HTTP helper to import, and a second SDK would be a... |
-| `warmModel` | function | 564 | `async function warmModel(log?: { debug: (obj: unknown, msg?: string) => void }): Promise<void>` | Load the local model before anyone waits on it (a cold qwen3:8b takes ~10 s to its first token). |
-| `prefillModel` | function | 592 | `async function prefillModel(system: string, log?: AiLog): Promise<boolean>` | Have the model read a system prompt before the question that needs it, so that question pays only for its own words (Ollama keeps it in its prompt... |
-| `humanize` | function | 724 | `async function humanize<K extends Kind>(kind: K, payload: unknown, onUsage?: OnUsage): Promise<Result<K>>` | Ask the configured model to rewrite one Zabbix artifact. |
+| `OnUsage` | type | 507 | `type OnUsage = (tokens: number) => void` | Called once with a finished call's token count, to charge it to whoever asked (limits.ts). |
+| `ModelCounts` | interface | 510 | `interface ModelCounts` | What a model says about the tokens a call used; any of the three may be missing. |
+| `countedTokens` | function | 517 | `function countedTokens(counts: ModelCounts \| null \| undefined): number \| null` | The model's own number for a call: its total, else the prompt and the answer added, else null (BK-69). |
+| `chargeOutside` | function | 525 | `function chargeOutside(onUsage: OnUsage \| undefined, counted: number \| null, sentChars: number, receivedChars:...` | Charges a call to a model outside the machine's network as hosted Claude's are: its own count, else the size of what went in and out. |
+| `postModel` | function | 535 | `async function postModel(url: string, body: unknown, signal: AbortSignal): Promise<Response>` | POST one request to the model server with raw `fetch`, mirroring `zabbix.ts`: there is no HTTP helper to import, and a second SDK would be a... |
+| `warmModel` | function | 586 | `async function warmModel(log?: { debug: (obj: unknown, msg?: string) => void }): Promise<void>` | Load the local model before anyone waits on it (a cold qwen3:8b takes ~10 s to its first token). |
+| `prefillModel` | function | 614 | `async function prefillModel(system: string, log?: AiLog): Promise<boolean>` | Have the model read a system prompt before the question that needs it, so that question pays only for its own words (Ollama keeps it in its prompt... |
+| `humanize` | function | 780 | `async function humanize<K extends Kind>(kind: K, payload: unknown, onUsage?: OnUsage, signal?: AbortSignal):...` | Ask the configured model to rewrite one Zabbix artifact. |
 
 Imports: `clients/limits.ts`, `core/config.ts`
 
@@ -142,7 +145,7 @@ Packages: `@anthropic-ai/sdk`
 
 Imported by: `http/errors.ts`, `index.ts`, `routes/chat.ts`, `routes/explain.ts`, `security/audit.ts`, `services/assistantAnswer.ts`, `services/chat.ts`, `services/explain.ts`
 
-Tests that import it: `__tests__/ai-errors.test.ts`, `__tests__/ai-hosted-limits.test.ts`, `__tests__/ai-limits.test.ts`, `__tests__/ai.test.ts`, `__tests__/chat-route.test.ts`, `__tests__/explain-problem.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/plain-wording.test.ts`, and 2 more
+Tests that import it: `__tests__/ai-errors.test.ts`, `__tests__/ai-hosted-limits.test.ts`, `__tests__/ai-limits.test.ts`, `__tests__/ai-outside-usage.test.ts`, `__tests__/ai.test.ts`, `__tests__/chat-route.test.ts`, `__tests__/explain-problem.test.ts`, `__tests__/explain-reader-left.test.ts`, and 4 more
 <!-- /gen -->
 
 ### `server/src/clients/limits.ts`
@@ -150,29 +153,29 @@ Tests that import it: `__tests__/ai-errors.test.ts`, `__tests__/ai-hosted-limits
 Per-person caps on the model: calls a minute, and for the hosted model the tokens a day. Walked through in [Server: the core and the clients](server-core-and-clients.md).
 
 <!-- gen:card server/src/clients/limits.ts -->
-215 lines, 11 exports. Imported by 7 files.
+243 lines, 11 exports. Imported by 9 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `AiKind` | type | 12 | `type AiKind = 'chat' \| 'explain'` |  |
 | `callerOf` | function | 15 | `function callerOf(req: FastifyRequest): string` | Who a call counts against: the signed-in user, or the client address when auth is off (as services/stream.ts). |
 | `MinuteLimit` | class | 27 | `class MinuteLimit` | One fixed window per key, started by that key's first call: a minute unless told otherwise. |
-| `HourLimit` | class | 58 | `class HourLimit extends MinuteLimit` | The same count over an hour. |
-| `estimatedTokens` | function | 67 | `const estimatedTokens = (chars: number): number =>` | Roughly four characters to a token: for a call whose answer carried no count. |
-| `BudgetLimits` | interface | 69 | `interface BudgetLimits` |  |
-| `BudgetRefusal` | interface | 76 | `interface BudgetRefusal` |  |
-| `DailyTokens` | class | 107 | `class DailyTokens` | Tokens used today, by caller and in all, reset when the calendar day (in the portal's time zone) changes. |
-| `aiBudget` | constant | 177 | `const aiBudget = new DailyTokens(() => ({ perUser: limits.dailyTokensPerUser, total: limits.dailyTokensTotal }), ()...` | The portal's one budget, read from config.ts. |
-| `chargeTo` | function | 183 | `const chargeTo = (req: FastifyRequest) =>` | What to give `humanize` and `streamAnswer` so a finished call is charged to whoever asked. |
-| `aiGuard` | function | 194 | `function aiGuard(kind: AiKind)` | The route guard for an AI route: too many calls this minute, or no tokens left today, answers 429 in words a reader can act on. |
+| `HourLimit` | class | 61 | `class HourLimit extends MinuteLimit` | The same count over an hour. |
+| `estimatedTokens` | function | 70 | `const estimatedTokens = (chars: number): number =>` | Roughly four characters to a token: for a call whose answer carried no count. |
+| `BudgetLimits` | interface | 72 | `interface BudgetLimits` |  |
+| `BudgetRefusal` | interface | 79 | `interface BudgetRefusal` |  |
+| `DailyTokens` | class | 110 | `class DailyTokens` | Tokens used today, by caller and in all, reset when the calendar day (in the portal's time zone) changes. |
+| `aiBudget` | constant | 180 | `const aiBudget = new DailyTokens(() => ({ perUser: limits.dailyTokensPerUser, total: limits.dailyTokensTotal }), ()...` | The portal's one budget, read from config.ts. |
+| `chargeTo` | function | 186 | `const chargeTo = (req: FastifyRequest) =>` | What to give `humanize` and `streamAnswer` so a finished call is charged to whoever asked. |
+| `aiGuard` | function | 205 | `function aiGuard(kind: AiKind)` | The route guard for an AI route: too many calls this minute, no tokens left today, or (for a model that takes one call at a time) a call of the... |
 
 Imports: `core/config.ts`, `sli/time.ts`
 
 Packages: `fastify`
 
-Imported by: `clients/ai.ts`, `routes/chat.ts`, `routes/explain.ts`, `security/audit.ts`, `security/mailLimit.ts`, `security/searchLimit.ts`, `services/assistantAnswer.ts`
+Imported by: `clients/ai.ts`, `routes/chat.ts`, `routes/explain.ts`, `security/actionLimit.ts`, `security/audit.ts`, `security/heavyLimit.ts`, `security/mailLimit.ts`, `security/searchLimit.ts`, `services/assistantAnswer.ts`
 
-Tests that import it: `__tests__/ai-limits.test.ts`, `__tests__/mail-limit.test.ts`
+Tests that import it: `__tests__/action-limit.test.ts`, `__tests__/ai-limits.test.ts`, `__tests__/ai-outside-usage.test.ts`, `__tests__/mail-limit.test.ts`
 <!-- /gen -->
 
 ### `server/src/clients/mail.ts`
@@ -202,7 +205,7 @@ Packages: `node:tls`, `nodemailer`
 
 Imported by: `http/errors.ts`, `routes/sliMail.ts`, `services/reportSchedule.ts`, `services/sliMail.ts`
 
-Tests that import it: `__tests__/email-without-auth.test.ts`, `__tests__/empty-report-retry.test.ts`, `__tests__/mail-client.test.ts`, `__tests__/mail-options.test.ts`, `__tests__/mail-route.test.ts`, `__tests__/mail-service.test.ts`, `__tests__/report-schedule.test.ts`
+Tests that import it: `__tests__/email-without-auth.test.ts`, `__tests__/empty-report-retry.test.ts`, `__tests__/mail-client.test.ts`, `__tests__/mail-options.test.ts`, `__tests__/mail-route.test.ts`, `__tests__/mail-service.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/report-schedule.test.ts`
 <!-- /gen -->
 
 ### `server/src/clients/pinnedTls.ts`
@@ -255,7 +258,7 @@ Imports: `clients/pinnedTls.ts`, `core/config.ts`
 
 Imported by: `domain/queries.ts`, `domain/reachability.ts`, `domain/recentValues.ts`, `http/errors.ts`, `http/health.ts`, `routes/actions.ts`, `routes/chat.ts`, `security/viewerPolicy.ts`, `services/actions.ts`, `services/capacity.ts`, `services/chat.ts`, `services/devices.ts`, `services/history.ts`, `services/hosts.ts`, and 15 more
 
-Tests that import it: `__tests__/api-hygiene.test.ts`, `__tests__/chat-route.test.ts`, `__tests__/devices-route.test.ts`, `__tests__/export-route.test.ts`, `__tests__/freshness.test.ts`, `__tests__/graphs.test.ts`, `__tests__/health-timezone.test.ts`, `__tests__/health.test.ts`, and 28 more
+Tests that import it: `__tests__/action-limit.test.ts`, `__tests__/api-hygiene.test.ts`, `__tests__/chat-route.test.ts`, `__tests__/devices-route.test.ts`, `__tests__/export-route.test.ts`, `__tests__/freshness.test.ts`, `__tests__/graphs.test.ts`, `__tests__/health-timezone.test.ts`, and 33 more
 <!-- /gen -->
 
 ## `server/src/core`
@@ -284,31 +287,32 @@ Tests that import it: `__tests__/compress.test.ts`
 The in-memory cache: lifetimes, one fetch shared by concurrent callers, a size cap, an old copy kept while a slow refresh runs, and invalidation after a write. Walked through in [One request, from start to finish](one-request.md), [Server: the core and the clients](server-core-and-clients.md).
 
 <!-- gen:card server/src/core/cache.ts -->
-356 lines, 15 exports. Imported by 29 files.
+436 lines, 16 exports. Imported by 29 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `CacheOptions` | interface | 72 | `interface CacheOptions` |  |
-| `SLOW_VIEW` | constant | 91 | `const SLOW_VIEW: CacheOptions` | A view HCML's Zabbix takes tens of seconds to build: past its TTL, its last copy and age for 10 minutes while one refresh runs. |
-| `CacheLogger` | interface | 94 | `interface CacheLogger` | The part of Fastify's logger the cache uses. |
-| `InvalidateOptions` | interface | 98 | `interface InvalidateOptions` |  |
-| `MAX_ENTRIES` | constant | 108 | `const MAX_ENTRIES = 500` |  |
-| `MAX_TYPED_ENTRIES` | constant | 110 | `const MAX_TYPED_ENTRIES = 150` | The share of those that keys a caller can multiply at will may take. |
-| `MAX_BYTES` | constant | 112 | `const MAX_BYTES = 64 * 1024 * 1024` | About 130 KB per entry at the entry cap: the problem list is ~450 KB (stream.ts), most values far less. |
-| `MAX_PINNED_BYTES` | constant | 113 | `const MAX_PINNED_BYTES = MAX_BYTES / 2` |  |
-| `HOLD_TTL_MS` | constant | 114 | `const HOLD_TTL_MS = 2_000` |  |
-| `REFRESH_RETRY_MS` | constant | 116 | `const REFRESH_RETRY_MS = 60_000` | After a fetch of a value with an old copy fails, none starts for this long, so a Zabbix that is down is asked about each value once a minute and... |
-| `approxBytes` | function | 126 | `function approxBytes(value: unknown, budget = 500_000): number` | A rough size in bytes: strings by length, numbers as 8, objects and arrays by their slots, Maps and typed arrays by what they hold. |
-| `setCacheLogger` | function | 168 | `function setCacheLogger(logger: CacheLogger \| undefined): void` | Where stale answers and failed background refreshes are reported (index.ts passes app.log). |
-| `cacheLogger` | function | 173 | `function cacheLogger(): CacheLogger \| undefined` | The same logger, for a caller that reports a failed background read of its own. |
-| `cached` | function | 181 | `async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>, opts: CacheOptions = {}): Promise<T>` |  |
-| `invalidate` | function | 337 | `function invalidate(prefix: string, opts: InvalidateOptions = {}): number` | Drop cached entries so the next read refetches. |
+| `FetchContext` | interface | 83 | `interface FetchContext` | What a fetch is told about itself. |
+| `CacheOptions` | interface | 94 | `interface CacheOptions` |  |
+| `SLOW_VIEW` | constant | 118 | `const SLOW_VIEW: CacheOptions` | A view HCML's Zabbix takes tens of seconds to build: past its TTL, its last copy and age for 10 minutes while one refresh runs. |
+| `CacheLogger` | interface | 121 | `interface CacheLogger` | The part of Fastify's logger the cache uses. |
+| `InvalidateOptions` | interface | 125 | `interface InvalidateOptions` |  |
+| `MAX_ENTRIES` | constant | 135 | `const MAX_ENTRIES = 500` |  |
+| `MAX_TYPED_ENTRIES` | constant | 137 | `const MAX_TYPED_ENTRIES = 150` | The share of those that keys a caller can multiply at will may take. |
+| `MAX_BYTES` | constant | 139 | `const MAX_BYTES = 64 * 1024 * 1024` | About 130 KB per entry at the entry cap: the problem list is ~450 KB (stream.ts), most values far less. |
+| `MAX_PINNED_BYTES` | constant | 140 | `const MAX_PINNED_BYTES = MAX_BYTES / 2` |  |
+| `HOLD_TTL_MS` | constant | 141 | `const HOLD_TTL_MS = 2_000` |  |
+| `REFRESH_RETRY_MS` | constant | 143 | `const REFRESH_RETRY_MS = 60_000` | After a fetch of a value with an old copy fails, none starts for this long, so a Zabbix that is down is asked about each value once a minute and... |
+| `approxBytes` | function | 153 | `function approxBytes(value: unknown, budget = 500_000): number` | A rough size in bytes: strings by length, numbers as 8, objects and arrays by their slots, Maps and typed arrays by what they hold. |
+| `setCacheLogger` | function | 195 | `function setCacheLogger(logger: CacheLogger \| undefined): void` | Where stale answers and failed background refreshes are reported (index.ts passes app.log). |
+| `cacheLogger` | function | 200 | `function cacheLogger(): CacheLogger \| undefined` | The same logger, for a caller that reports a failed background read of its own. |
+| `cached` | function | 208 | `async function cached<T>(key: string, ttlMs: number, fn: (ctx: FetchContext) => Promise<T>, opts: CacheOptions =...` |  |
+| `invalidate` | function | 417 | `function invalidate(prefix: string, opts: InvalidateOptions = {}): number` | Drop cached entries so the next read refetches. |
 
-Imports: `core/staleness.ts`
+Imports: `core/gate.ts`, `core/staleness.ts`
 
 Imported by: `domain/queries.ts`, `domain/reachability.ts`, `index.ts`, `routes/actions.ts`, `routes/inventory.ts`, `routes/sla.ts`, `security/viewerPolicy.ts`, `services/aging.ts`, `services/assistantSnapshot.ts`, `services/availability.ts`, `services/capacity.ts`, `services/devices.ts`, `services/explain.ts`, `services/history.ts`, and 15 more
 
-Tests that import it: `__tests__/ai-limits.test.ts`, `__tests__/api-hygiene.test.ts`, `__tests__/cache.test.ts`, `__tests__/chat.test.ts`, `__tests__/devices-route.test.ts`, `__tests__/empty-report-retry.test.ts`, `__tests__/explain-problem.test.ts`, `__tests__/export-route.test.ts`, and 21 more
+Tests that import it: `__tests__/ai-limits.test.ts`, `__tests__/api-hygiene.test.ts`, `__tests__/cache.test.ts`, `__tests__/chat.test.ts`, `__tests__/closed-web-freeze.test.ts`, `__tests__/devices-route.test.ts`, `__tests__/empty-report-retry.test.ts`, `__tests__/explain-problem.test.ts`, and 27 more
 <!-- /gen -->
 
 ### `server/src/core/config.ts`
@@ -316,39 +320,39 @@ Tests that import it: `__tests__/ai-limits.test.ts`, `__tests__/api-hygiene.test
 Every setting read from the environment, typed, with the checks that refuse an unsafe start. Walked through in [Server: the core and the clients](server-core-and-clients.md).
 
 <!-- gen:card server/src/core/config.ts -->
-708 lines, 21 exports. Imported by 42 files.
+744 lines, 21 exports. Imported by 44 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `DEFAULT_JWT_SECRET` | constant | 8 | `const DEFAULT_JWT_SECRET` | The placeholder JWT secret. |
-| `SESSION_HOURS_DEFAULT` | constant | 16 | `const SESSION_HOURS_DEFAULT = 12` | A sign-in lasts this many hours unless SESSION_HOURS says otherwise. |
-| `SESSION_HOURS_MIN` | constant | 18 | `const SESSION_HOURS_MIN = 2` | Renewal comes an hour before the end, so a shorter session could never be renewed in time. |
-| `SESSION_HOURS_MAX` | constant | 19 | `const SESSION_HOURS_MAX = 24` |  |
-| `SESSION_EPOCH_DEFAULT` | constant | 20 | `const SESSION_EPOCH_DEFAULT` |  |
-| `SESSION_EPOCH_PATTERN` | constant | 22 | `const SESSION_EPOCH_PATTERN = /^[A-Za-z0-9._-]{1,32}$/` | What SESSION_EPOCH may hold: a short label, so it can sit in a token and in a log line. |
-| `AiProvider` | type | 58 | `type AiProvider = (typeof AI_PROVIDERS)[number]` |  |
-| `OllamaNative` | type | 92 | `type OllamaNative = 'auto' \| 'true' \| 'false'` | `auto` asks the server whether it is Ollama (see ai.ts `usesOllamaNative`); `true` and `false` skip the question. |
-| `parseNoDataWindows` | function | 117 | `function parseNoDataWindows(raw: string \| undefined): [number, number][] \| undefined` | SLA_NO_DATA_WINDOWS: spans known not to have been measured truly, such as a collector that ran outside HCML's network, as `start/end` ISO times... |
-| `TlsPin` | interface | 133 | `interface TlsPin` | ZBX_TLS_PIN_SHA256 and ZBX_TLS_PIN_UNTIL read together (clients/pinnedTls.ts). |
-| `parseTlsPin` | function | 143 | `function parseTlsPin(rawFingerprint: string \| undefined, rawUntil: string \| undefined): TlsPin \| undefined` | Undefined when either is blank or cannot be read: the exception is then off and an expired certificate is refused. |
-| `SliProfile` | type | 154 | `type SliProfile = (typeof SLI_PROFILES)[number]` |  |
-| `toSliProfile` | function | 155 | `function toSliProfile(raw: string \| undefined): SliProfile \| undefined` |  |
-| `trustProxyOption` | function | 174 | `function trustProxyOption(hops: number \| false): false \| ((addr: string, hop: number) => boolean)` | The hop count as the `trustProxy` option Fastify 5 takes. |
-| `parseAuthEnabled` | function | 185 | `function parseAuthEnabled(raw: string \| undefined): boolean \| undefined` |  |
-| `config` | constant | 192 | `const config` | Central, typed view of the environment. |
-| `writeBackEnabled` | function | 487 | `function writeBackEnabled(): boolean` | Whether acknowledge and close may run: a write token is set, and either sign-in is on or the dev opt-in is. |
-| `signInRefusal` | function | 495 | `function signInRefusal(): string` | Why the saved list of recipients and the schedule (and what the page shows of them) are refused: sign-in is off and the opt-in is not given. |
-| `emailRefusal` | function | 504 | `function emailRefusal(): string` | Why email is refused although it is set up: sign-in is off and the opt-in is not given. |
-| `mailNow` | function | 509 | `function mailNow(): MailSettings & { off: string }` | The mail settings as they apply now: `enabled` is false while email is refused, and `off` says why. |
-| `assertConfig` | function | 560 | `function assertConfig(warn: (msg: string) => void): void` | Warn on suspicious config so the scaffold still boots, except for a weak signing secret when auth is on, an AUTH_ENABLED it cannot read, or a... |
+| `DEFAULT_JWT_SECRET` | constant | 9 | `const DEFAULT_JWT_SECRET` | The placeholder JWT secret. |
+| `SESSION_HOURS_DEFAULT` | constant | 17 | `const SESSION_HOURS_DEFAULT = 12` | A sign-in lasts this many hours unless SESSION_HOURS says otherwise. |
+| `SESSION_HOURS_MIN` | constant | 19 | `const SESSION_HOURS_MIN = 2` | Renewal comes an hour before the end, so a shorter session could never be renewed in time. |
+| `SESSION_HOURS_MAX` | constant | 20 | `const SESSION_HOURS_MAX = 24` |  |
+| `SESSION_EPOCH_DEFAULT` | constant | 21 | `const SESSION_EPOCH_DEFAULT` |  |
+| `SESSION_EPOCH_PATTERN` | constant | 23 | `const SESSION_EPOCH_PATTERN = /^[A-Za-z0-9._-]{1,32}$/` | What SESSION_EPOCH may hold: a short label, so it can sit in a token and in a log line. |
+| `AiProvider` | type | 59 | `type AiProvider = (typeof AI_PROVIDERS)[number]` |  |
+| `OllamaNative` | type | 93 | `type OllamaNative = 'auto' \| 'true' \| 'false'` | `auto` asks the server whether it is Ollama (see ai.ts `usesOllamaNative`); `true` and `false` skip the question. |
+| `parseNoDataWindows` | function | 118 | `function parseNoDataWindows(raw: string \| undefined): [number, number][] \| undefined` | SLA_NO_DATA_WINDOWS: spans known not to have been measured truly, such as a collector that ran outside HCML's network, as `start/end` ISO times... |
+| `TlsPin` | interface | 134 | `interface TlsPin` | ZBX_TLS_PIN_SHA256 and ZBX_TLS_PIN_UNTIL read together (clients/pinnedTls.ts). |
+| `parseTlsPin` | function | 144 | `function parseTlsPin(rawFingerprint: string \| undefined, rawUntil: string \| undefined): TlsPin \| undefined` | Undefined when either is blank or cannot be read: the exception is then off and an expired certificate is refused. |
+| `SliProfile` | type | 155 | `type SliProfile = (typeof SLI_PROFILES)[number]` |  |
+| `toSliProfile` | function | 156 | `function toSliProfile(raw: string \| undefined): SliProfile \| undefined` |  |
+| `trustProxyOption` | function | 175 | `function trustProxyOption(hops: number \| false): false \| ((addr: string, hop: number) => boolean)` | The hop count as the `trustProxy` option Fastify 5 takes. |
+| `parseAuthEnabled` | function | 186 | `function parseAuthEnabled(raw: string \| undefined): boolean \| undefined` |  |
+| `config` | constant | 193 | `const config` | Central, typed view of the environment. |
+| `writeBackEnabled` | function | 509 | `function writeBackEnabled(): boolean` | Whether acknowledge and close may run: a write token is set, and either sign-in is on or the dev opt-in is. |
+| `signInRefusal` | function | 517 | `function signInRefusal(): string` | Why the saved list of recipients and the schedule (and what the page shows of them) are refused: sign-in is off and the opt-in is not given. |
+| `emailRefusal` | function | 526 | `function emailRefusal(): string` | Why email is refused although it is set up: sign-in is off and the opt-in is not given. |
+| `mailNow` | function | 531 | `function mailNow(): MailSettings & { off: string }` | The mail settings as they apply now: `enabled` is false while email is refused, and `off` says why. |
+| `assertConfig` | function | 582 | `function assertConfig(warn: (msg: string) => void): void` | Warn on suspicious config so the scaffold still boots, except for a weak signing secret when auth is on, an AUTH_ENABLED it cannot read, or a... |
 
-Imports: `core/mailConfig.ts`
+Imports: `core/localHost.ts`, `core/mailConfig.ts`
 
 Packages: `dotenv`
 
-Imported by: `clients/ai.ts`, `clients/limits.ts`, `clients/pinnedTls.ts`, `clients/zabbix.ts`, `http/health.ts`, `http/hostCheck.ts`, `http/rateLimit.ts`, `index.ts`, `routes/actions.ts`, `routes/analytics.ts`, `routes/chat.ts`, `routes/explain.ts`, `routes/maps.ts`, `routes/services.ts`, and 28 more
+Imported by: `clients/ai.ts`, `clients/limits.ts`, `clients/pinnedTls.ts`, `clients/zabbix.ts`, `http/health.ts`, `http/hostCheck.ts`, `http/rateLimit.ts`, `index.ts`, `routes/actions.ts`, `routes/analytics.ts`, `routes/chat.ts`, `routes/explain.ts`, `routes/maps.ts`, `routes/services.ts`, and 30 more
 
-Tests that import it: `__tests__/ai-notice.test.ts`, `__tests__/ai.test.ts`, `__tests__/api-hygiene.test.ts`, `__tests__/chat.test.ts`, `__tests__/compose-env.test.ts`, `__tests__/config-placeholder-key.test.ts`, `__tests__/config-tls-pin.test.ts`, `__tests__/deploy-docs.test.ts`, and 25 more
+Tests that import it: `__tests__/action-limit.test.ts`, `__tests__/ai-local-only.test.ts`, `__tests__/ai-notice.test.ts`, `__tests__/ai.test.ts`, `__tests__/api-hygiene.test.ts`, `__tests__/chat.test.ts`, `__tests__/compose-env.test.ts`, `__tests__/config-placeholder-key.test.ts`, and 30 more
 <!-- /gen -->
 
 ### `server/src/core/gate.ts`
@@ -356,18 +360,65 @@ Tests that import it: `__tests__/ai-notice.test.ts`, `__tests__/ai.test.ts`, `__
 Lets only so many heavy jobs run at once and queues the rest. Walked through in [Server: the core and the clients](server-core-and-clients.md).
 
 <!-- gen:card server/src/core/gate.ts -->
-36 lines, 2 exports. Imported by 2 files.
+55 lines, 4 exports. Imported by 5 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `Gate` | interface | 5 | `interface Gate` | Lets at most `limit` jobs run at once, the rest waiting first come first served; a job that throws gives its place back. |
-| `createGate` | function | 11 | `function createGate(limit: number): Gate` |  |
+| `GateRun` | interface | 11 | `interface GateRun` |  |
+| `Cancelled` | class | 17 | `class Cancelled extends Error` | A waiting job was dropped because its reader left, so nothing was read for it. |
+| `createGate` | function | 24 | `function createGate(limit: number): Gate` |  |
 
 Imports: none
 
-Imported by: `services/meters.ts`, `services/reportPolicy.ts`
+Imported by: `core/cache.ts`, `http/errors.ts`, `security/audit.ts`, `services/meters.ts`, `services/reportPolicy.ts`
 
-Tests that import it: `__tests__/gate.test.ts`
+Tests that import it: `__tests__/cache.test.ts`, `__tests__/explain-reader-left.test.ts`, `__tests__/gate.test.ts`, `__tests__/reader-gone.test.ts`, `__tests__/sli-gate.test.ts`, `__tests__/sli-limit.test.ts`
+<!-- /gen -->
+
+### `server/src/core/localHost.ts`
+
+Decides whether a model's address is on this machine or inside its own network, so that the local-model copy can keep its promise that nothing leaves it. A loopback address, `host.docker.internal`, a private or link-local address, a name of one word and a name that ends `.local`, `.internal`, `.lan`, `.home.arpa` or `.localdomain` are local, and anything else is outside (SC-53). It reads only the text of the address and asks no network.
+
+<!-- gen:card server/src/core/localHost.ts -->
+35 lines, 1 export. Imported by 1 file.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `isLocalBaseUrl` | function | 17 | `function isLocalBaseUrl(raw: string): boolean` |  |
+
+Imports: none
+
+Imported by: `core/config.ts`
+
+Tests that import it: `__tests__/compose-env.test.ts`, `__tests__/local-host.test.ts`
+<!-- /gen -->
+
+### `server/src/core/logFile.ts`
+
+Keeps the server's own copy of its log in a file in a volume, so that what was logged outlives a rebuild. A file is closed at a set size and the oldest of a set number is dropped, so the folder has a ceiling. It writes a line at a time, never throws, and starts again by itself when the folder becomes usable.
+
+<!-- gen:card server/src/core/logFile.ts -->
+158 lines, 8 exports. Imported by 2 files.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `RotatingFileOptions` | interface | 10 | `interface RotatingFileOptions` |  |
+| `Problem` | type | 19 | `type Problem = (message: string) => void` | Told when the file cannot be written: once for each run of failures. |
+| `Track` | interface | 24 | `interface Track` | What a file reports about itself: whether its last write failed, and the bytes that reached it since the start. |
+| `LogFileStatus` | interface | 29 | `interface LogFileStatus` |  |
+| `logFileStatus` | function | 39 | `const logFileStatus = (): LogFileStatus =>` |  |
+| `createRotatingFile` | function | 52 | `function createRotatingFile(opts: RotatingFileOptions, onProblem: Problem = toStderr, track: Track = { failing:...` |  |
+| `LogSettings` | interface | 129 | `interface LogSettings` |  |
+| `createLogStream` | function | 137 | `function createLogStream(settings: LogSettings, out: NodeJS.WritableStream = process.stdout, onProblem?: Problem):...` | What Fastify's logger writes to: every line to `out` first, then to the file. |
+
+Imports: none
+
+Packages: `node:fs`, `node:path`, `node:stream`
+
+Imported by: `http/health.ts`, `index.ts`
+
+Tests that import it: `__tests__/health.test.ts`, `__tests__/log-file.test.ts`
 <!-- /gen -->
 
 ### `server/src/core/mailConfig.ts`
@@ -397,6 +448,26 @@ Imports: none
 Imported by: `clients/mail.ts`, `core/config.ts`, `core/recipients.ts`, `core/state.ts`, `routes/sliMail.ts`, `routes/sliSchedule.ts`, `services/reportSchedule.ts`
 
 Tests that import it: `__tests__/email-without-auth.test.ts`, `__tests__/mail-client.test.ts`, `__tests__/mail-config.test.ts`, `__tests__/mail-options.test.ts`, `__tests__/mail-recipients.test.ts`, `__tests__/mail-route.test.ts`, `__tests__/mail-service.test.ts`, `__tests__/portal-state.test.ts`
+<!-- /gen -->
+
+### `server/src/core/readerGone.ts`
+
+Turns the closing of a reader's connection into a signal that a slow report can listen to, so that a read nobody waits for any more leaves the queue. It fires only when the connection closes before the answer is out. Walked through with the gate in [Server: the core and the clients](server-core-and-clients.md).
+
+<!-- gen:card server/src/core/readerGone.ts -->
+11 lines, 1 export. Imported by 6 files.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `readerGone` | function | 4 | `function readerGone(reply: FastifyReply): AbortSignal` | A signal that fires when the reader's connection closes before the answer is out: the page moved on, or the tab closed. |
+
+Imports: none
+
+Packages: `fastify`
+
+Imported by: `routes/analytics.ts`, `routes/explain.ts`, `routes/reports.ts`, `routes/services.ts`, `routes/sli.ts`, `routes/sliExport.ts`
+
+Tests that import it: `__tests__/heavy-reports.test.ts`, `__tests__/reader-gone.test.ts`
 <!-- /gen -->
 
 ### `server/src/core/recipients.ts`
@@ -442,7 +513,7 @@ Imports: none
 
 Imported by: `core/state.ts`, `export/csv.ts`, `export/slaReport.ts`, `services/sliExport.ts`, `services/sliMail.ts`
 
-Tests that import it: `__tests__/export-csv.test.ts`, `__tests__/export-sla-report-style.test.ts`, `__tests__/export-style.test.ts`
+Tests that import it: `__tests__/export-csv.test.ts`, `__tests__/export-sla-report-style.test.ts`, `__tests__/export-sla-report.test.ts`, `__tests__/export-style.test.ts`
 <!-- /gen -->
 
 ### `server/src/core/schemas.ts`
@@ -505,29 +576,30 @@ Tests that import it: `__tests__/light-reads.test.ts`, `__tests__/stale-headers.
 The portal's one small file of its own, on a volume that outlives the container: the saved recipients, the monthly schedule and a record of the last 24 sends. It opens the file at start, repairs what it can and puts aside what it cannot read, and saves each change whole to a temporary file that is renamed over the old one, one change at a time. Without a folder it keeps the same in memory and says so. It keeps 24 records of sends and drops a manual send before one of the schedule's own, and it remembers a save that did not go through until one does. It never holds a report, a figure from Zabbix, an address in a record of a send, or a password.
 
 <!-- gen:card server/src/core/state.ts -->
-298 lines, 11 exports. Imported by 6 files.
+301 lines, 12 exports. Imported by 7 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `MAX_SENDS_KEPT` | constant | 12 | `const MAX_SENDS_KEPT = 24` |  |
-| `Schedule` | interface | 16 | `interface Schedule` |  |
-| `Outcome` | type | 32 | `type Outcome = 'sending' \| 'sent' \| 'failed' \| 'missed'` |  |
-| `SendRecord` | interface | 34 | `interface SendRecord` |  |
-| `PortalState` | interface | 57 | `interface PortalState` |  |
-| `emptyState` | function | 62 | `const emptyState = (): PortalState =>` |  |
-| `StateWriteError` | class | 64 | `class StateWriteError extends Error` |  |
-| `StateStore` | interface | 71 | `interface StateStore` |  |
-| `readState` | function | 138 | `function readState(raw: unknown): { state: PortalState; repairs: string[]; usable: boolean }` | The state `raw` describes, repaired, with a line for each thing that had to go. |
-| `memoryState` | function | 217 | `const memoryState = (): StateStore =>` | A state kept in memory alone: what the portal runs on with no data folder, and what the tests start from. |
-| `openState` | function | 253 | `async function openState(dir: string, warn: (message: string) => void): Promise<StateStore>` | Opens the state in `dir`, or in memory when `dir` is empty or cannot be written. |
+| `MAX_SENDS_KEPT` | constant | 13 | `const MAX_SENDS_KEPT = 24` |  |
+| `Schedule` | interface | 17 | `interface Schedule` |  |
+| `Outcome` | type | 33 | `type Outcome = 'sending' \| 'sent' \| 'failed' \| 'missed'` |  |
+| `SendRecord` | interface | 35 | `interface SendRecord` |  |
+| `PortalState` | interface | 58 | `interface PortalState` |  |
+| `emptyState` | function | 63 | `const emptyState = (): PortalState =>` |  |
+| `StateWriteError` | class | 65 | `class StateWriteError extends Error` |  |
+| `StateStore` | interface | 72 | `interface StateStore` |  |
+| `readState` | function | 139 | `function readState(raw: unknown): { state: PortalState; repairs: string[]; usable: boolean }` | The state `raw` describes, repaired, with a line for each thing that had to go. |
+| `writeJsonAtomic` | function | 194 | `async function writeJsonAtomic(file: string, value: unknown): Promise<void>` | Writes `value` as JSON so that a reader sees the old file or the new one whole: a temp file beside it, synced, then renamed, readable by its owner... |
+| `memoryState` | function | 220 | `const memoryState = (): StateStore =>` | A state kept in memory alone: what the portal runs on with no data folder, and what the tests start from. |
+| `openState` | function | 256 | `async function openState(dir: string, warn: (message: string) => void): Promise<StateStore>` | Opens the state in `dir`, or in memory when `dir` is empty or cannot be written. |
 
 Imports: `core/mailConfig.ts`, `core/reportChoices.ts`
 
 Packages: `node:fs`, `node:path`
 
-Imported by: `http/errors.ts`, `routes/sliSchedule.ts`, `services/mailState.ts`, `services/portalState.ts`, `services/reportSchedule.ts`, `sli/schedule.ts`
+Imported by: `http/errors.ts`, `routes/sliSchedule.ts`, `services/closedWebStore.ts`, `services/mailState.ts`, `services/portalState.ts`, `services/reportSchedule.ts`, `sli/schedule.ts`
 
-Tests that import it: `__tests__/email-without-auth.test.ts`, `__tests__/mail-route.test.ts`, `__tests__/portal-state.test.ts`, `__tests__/report-schedule.test.ts`, `__tests__/schedule-route.test.ts`, `__tests__/sli-schedule.test.ts`
+Tests that import it: `__tests__/closed-web-store.test.ts`, `__tests__/email-without-auth.test.ts`, `__tests__/mail-route.test.ts`, `__tests__/portal-state.test.ts`, `__tests__/report-schedule.test.ts`, `__tests__/schedule-route.test.ts`, `__tests__/sli-schedule.test.ts`
 <!-- /gen -->
 
 ### `server/src/core/validate.ts`
@@ -609,7 +681,7 @@ Imports: `clients/zabbix.ts`, `core/cache.ts`
 
 Imported by: `routes/problems.ts`, `services/aging.ts`, `services/assistantFacts.ts`, `services/assistantFocus.ts`, `services/assistantLines.ts`, `services/assistantSnapshot.ts`, `services/explain.ts`, `services/hosts.ts`, `services/inventory.ts`, `services/maps.ts`, `services/reports.ts`, `services/sites.ts`, `services/stream.ts`, `services/warmUp.ts`, and 1 more
 
-Tests that import it: `__tests__/ai-limits.test.ts`, `__tests__/ai-notice.test.ts`, `__tests__/chat.test.ts`, `__tests__/explain-problem.test.ts`, `__tests__/health.test.ts`, `__tests__/inventory-site-hint.test.ts`, `__tests__/light-reads.test.ts`, `__tests__/shutdown.test.ts`, and 4 more
+Tests that import it: `__tests__/ai-limits.test.ts`, `__tests__/ai-notice.test.ts`, `__tests__/chat.test.ts`, `__tests__/explain-problem.test.ts`, `__tests__/explain-reader-left.test.ts`, `__tests__/health.test.ts`, `__tests__/inventory-site-hint.test.ts`, `__tests__/light-reads.test.ts`, and 5 more
 <!-- /gen -->
 
 ### `server/src/domain/reachability.ts`
@@ -767,16 +839,19 @@ Tests that import it: `__tests__/export-pdf.test.ts`
 Builds the monthly SLA report as a document from the two derived reports of one month. Walked through in [Server: export](server-export.md).
 
 <!-- gen:card server/src/export/slaReport.ts -->
-530 lines, 6 exports. Imported by 4 files.
+541 lines, 9 exports. Imported by 4 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `DERIVED_BANNER` | constant | 18 | `const DERIVED_BANNER` | Copied from web/src/features/sla/Sli.tsx: the browser bundle cannot be imported here. |
-| `METHOD_NOTE` | constant | 19 | `const METHOD_NOTE` |  |
-| `percentText` | function | 58 | `function percentText(value: number \| null, target: number, decimal: ReportStyle['decimal'] = 'dot'): string` | 98.996 rounds to 99.00 beside the word Missed, so more digits are printed until the text is on the real side of the target. |
-| `durationText` | function | 70 | `function durationText(seconds: number): string` | The page's formatDuration rule (two largest units) with the units spelled apart: "2 d 3 h", "1 h 12 min", "45 min", "30 s". |
-| `reportFileBase` | function | 86 | `const reportFileBase = (part: string) =>` | The one place a download name is made. |
-| `buildSlaReportDoc` | function | 493 | `function buildSlaReportDoc(strict: SliReport, hcml: SliReport, now: Date = new Date(), style: ReportStyle =...` |  |
+| `DERIVED_SLA_BANNER` | constant | 18 | `const DERIVED_SLA_BANNER` | Copied from web/src/features/sla/Sli.tsx: the browser bundle cannot be imported here. |
+| `WEB_AGING_NOTE` | constant | 19 | `const WEB_AGING_NOTE` |  |
+| `WEB_KEPT_NOTE_BEFORE` | constant | 22 | `const WEB_KEPT_NOTE_BEFORE` | Around the date the figures of a closed month were taken, when they are kept (ADR 0016): copied from web/src/features/sla/Sli.tsx like the others. |
+| `WEB_KEPT_NOTE_AFTER` | constant | 23 | `const WEB_KEPT_NOTE_AFTER` |  |
+| `METHOD_NOTE` | constant | 24 | `const METHOD_NOTE` |  |
+| `percentText` | function | 63 | `function percentText(value: number \| null, target: number, decimal: ReportStyle['decimal'] = 'dot'): string` | 98.996 rounds to 99.00 beside the word Missed, so more digits are printed until the text is on the real side of the target. |
+| `durationText` | function | 75 | `function durationText(seconds: number): string` | The page's formatDuration rule (two largest units) with the units spelled apart: "2 d 3 h", "1 h 12 min", "45 min", "30 s". |
+| `reportFileBase` | function | 91 | `const reportFileBase = (part: string) =>` | The one place a download name is made. |
+| `buildSlaReportDoc` | function | 504 | `function buildSlaReportDoc(strict: SliReport, hcml: SliReport, now: Date = new Date(), style: ReportStyle =...` |  |
 
 Imports: `core/reportChoices.ts`, `domain/naming.ts`, `export/types.ts`, `sli/engine.ts`
 
@@ -908,20 +983,20 @@ Tests that import it: `__tests__/compress.test.ts`, `__tests__/export-route.test
 Maps every error to a reply and says in plain words when Zabbix cannot be read. Walked through in [Server: security and http](server-security-and-http.md), [Tests and checkers](tests-and-checkers.md).
 
 <!-- gen:card server/src/http/errors.ts -->
-124 lines, 2 exports. Imported by 3 files.
+129 lines, 2 exports. Imported by 3 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `SOURCE_DOWN` | constant | 18 | `const SOURCE_DOWN` | What a screen is told when Zabbix cannot be read. |
-| `registerErrorHandler` | function | 35 | `function registerErrorHandler(app: FastifyInstance): void` | Map the BFF's typed failures onto HTTP, in one response shape. |
+| `SOURCE_DOWN` | constant | 19 | `const SOURCE_DOWN` | What a screen is told when Zabbix cannot be read. |
+| `registerErrorHandler` | function | 36 | `function registerErrorHandler(app: FastifyInstance): void` | Map the BFF's typed failures onto HTTP, in one response shape. |
 
-Imports: `clients/ai.ts`, `clients/mail.ts`, `clients/zabbix.ts`, `core/schemas.ts`, `core/state.ts`, `core/validate.ts`
+Imports: `clients/ai.ts`, `clients/mail.ts`, `clients/zabbix.ts`, `core/gate.ts`, `core/schemas.ts`, `core/state.ts`, `core/validate.ts`
 
 Packages: `fastify`
 
 Imported by: `index.ts`, `services/chat.ts`, `services/stream.ts`
 
-Tests that import it: `__tests__/ai-errors.test.ts`, `__tests__/ai-limits.test.ts`, `__tests__/auth-rules.test.ts`, `__tests__/auth.test.ts`, `__tests__/chat-route.test.ts`, `__tests__/download-log.test.ts`, `__tests__/email-without-auth.test.ts`, `__tests__/export-route.test.ts`, and 17 more
+Tests that import it: `__tests__/ai-errors.test.ts`, `__tests__/ai-limits.test.ts`, `__tests__/auth-rules.test.ts`, `__tests__/auth.test.ts`, `__tests__/chat-route.test.ts`, `__tests__/download-log.test.ts`, `__tests__/email-without-auth.test.ts`, `__tests__/export-route.test.ts`, and 19 more
 <!-- /gen -->
 
 ### `server/src/http/health.ts`
@@ -929,22 +1004,22 @@ Tests that import it: `__tests__/ai-errors.test.ts`, `__tests__/ai-limits.test.t
 The public health and ready routes: whether the server runs, which build it is, and whether Zabbix and the model answer. Walked through in [Server: routes](server-routes.md), [Server: security and http](server-security-and-http.md).
 
 <!-- gen:card server/src/http/health.ts -->
-195 lines, 10 exports. Imported by 1 file.
+217 lines, 10 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `READY_TTL_MS` | constant | 16 | `const READY_TTL_MS = 15_000` | A check this old is fresh. |
-| `READY_STALE_MS` | constant | 18 | `const READY_STALE_MS = 60_000` | Between TTL and this, the old answer goes out at once while a new check runs; past it, the caller waits. |
-| `READY_TIMEOUT_MS` | constant | 20 | `const READY_TIMEOUT_MS = 2_000` | Each check gives up after this, so health never hangs on a stuck Zabbix. |
-| `ZabbixState` | type | 22 | `type ZabbixState = 'ok' \| 'token_rejected' \| 'timeout' \| 'error'` |  |
-| `ModelState` | type | 24 | `type ModelState = 'ok' \| 'down' \| 'off' \| 'not_checked'` | `off` is no model configured; `not_checked` is hosted Anthropic, which a probe would bill. |
-| `Readiness` | interface | 26 | `interface Readiness` |  |
-| `Probes` | interface | 37 | `interface Probes` |  |
-| `ReadinessOptions` | interface | 69 | `interface ReadinessOptions` |  |
-| `createReadiness` | function | 78 | `function createReadiness(opts: ReadinessOptions = {})` | The cached check. |
-| `registerHealth` | function | 151 | `function registerHealth(app: FastifyInstance, readiness = createReadiness())` |  |
+| `READY_TTL_MS` | constant | 17 | `const READY_TTL_MS = 15_000` | A check this old is fresh. |
+| `READY_STALE_MS` | constant | 19 | `const READY_STALE_MS = 60_000` | Between TTL and this, the old answer goes out at once while a new check runs; past it, the caller waits. |
+| `READY_TIMEOUT_MS` | constant | 21 | `const READY_TIMEOUT_MS = 2_000` | Each check gives up after this, so health never hangs on a stuck Zabbix. |
+| `ZabbixState` | type | 23 | `type ZabbixState = 'ok' \| 'token_rejected' \| 'timeout' \| 'error'` |  |
+| `ModelState` | type | 25 | `type ModelState = 'ok' \| 'down' \| 'missing' \| 'off' \| 'not_checked'` | `off` is no model configured; `missing` is a server that answers without `AI_MODEL` in its list; `not_checked` is hosted Anthropic, which a probe... |
+| `Readiness` | interface | 27 | `interface Readiness` |  |
+| `Probes` | interface | 38 | `interface Probes` |  |
+| `ReadinessOptions` | interface | 89 | `interface ReadinessOptions` |  |
+| `createReadiness` | function | 98 | `function createReadiness(opts: ReadinessOptions = {})` | The cached check. |
+| `registerHealth` | function | 171 | `function registerHealth(app: FastifyInstance, readiness = createReadiness())` |  |
 
-Imports: `clients/zabbix.ts`, `core/config.ts`, `security/auth.ts`, `services/stream.ts`
+Imports: `clients/zabbix.ts`, `core/config.ts`, `core/logFile.ts`, `security/auth.ts`, `services/stream.ts`
 
 Packages: `fastify`, `node:fs`
 
@@ -1063,19 +1138,20 @@ Tests that import it: `__tests__/chat-route.test.ts`, `__tests__/plain-wording.t
 Closes the server cleanly on a stop signal, inside the ten seconds Docker allows. Walked through in [Server: security and http](server-security-and-http.md).
 
 <!-- gen:card server/src/http/shutdown.ts -->
-75 lines, 5 exports. Imported by 1 file.
+116 lines, 6 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `SHUTDOWN_TIMEOUT_MS` | constant | 7 | `const SHUTDOWN_TIMEOUT_MS = 8_000` | Under the 10 s Docker waits before it kills the container. |
-| `ShutdownOptions` | interface | 14 | `interface ShutdownOptions` |  |
-| `Closable` | interface | 23 | `interface Closable` | What the monthly schedule gives a close: stop its timers when the close begins, then wait for a send that is running. |
-| `closeWith` | function | 32 | `function closeWith(app: FastifyInstance, schedule: Closable): void` | Fastify drains the requests in flight before it runs the `onClose` hooks, and the limit above counts from the signal. |
-| `installShutdown` | function | 38 | `function installShutdown(app: FastifyInstance, opts: ShutdownOptions = {}): () => void` | Returns the function that takes the handlers off again. |
+| `SHUTDOWN_TIMEOUT_MS` | constant | 8 | `const SHUTDOWN_TIMEOUT_MS = 8_000` | Under the 10 s Docker waits before it kills the container. |
+| `ShutdownOptions` | interface | 15 | `interface ShutdownOptions` |  |
+| `Closable` | interface | 24 | `interface Closable` | What the monthly schedule gives a close: stop its timers when the close begins, then wait for a send that is running. |
+| `closeWith` | function | 33 | `function closeWith(app: FastifyInstance, schedule: Closable): void` | Fastify drains the requests in flight before it runs the `onClose` hooks, and the limit above counts from the signal. |
+| `installShutdown` | function | 39 | `function installShutdown(app: FastifyInstance, opts: ShutdownOptions = {}): () => void` | Returns the function that takes the handlers off again. |
+| `installCrashLog` | function | 93 | `function installCrashLog(app: Pick<FastifyInstance, 'log'>, opts: { source?: CrashSource; exit?: (code: number) =>...` | Write what crashed to the log, and so to the file of SC-42, before the process dies: Node's own report goes to stderr, which a rebuild deletes... |
 
 Imports: none
 
-Packages: `fastify`
+Packages: `fastify`, `node:util`
 
 Imported by: `index.ts`
 
@@ -1089,23 +1165,23 @@ Tests that import it: `__tests__/shutdown.test.ts`
 Acknowledge and close: the portal's only write, for operators and admins. A route module: it checks what the caller sent and calls a service. Walked through in [Server: routes](server-routes.md).
 
 <!-- gen:card server/src/routes/actions.ts -->
-140 lines, 1 export. Imported by 1 file.
+148 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `actionRoutes` | function | 29 | `async function actionRoutes(app: FastifyInstance): Promise<void>` |  |
+| `actionRoutes` | function | 30 | `async function actionRoutes(app: FastifyInstance): Promise<void>` |  |
 
 Endpoints: `POST /api/problems/acknowledge`
 
-Imports: `clients/zabbix.ts`, `core/cache.ts`, `core/config.ts`, `core/schemas.ts`, `core/validate.ts`, `services/actions.ts`, `services/stream.ts`
+Imports: `clients/zabbix.ts`, `core/cache.ts`, `core/config.ts`, `core/schemas.ts`, `core/validate.ts`, `security/actionLimit.ts`, `services/actions.ts`, `services/stream.ts`
 
 Packages: `fastify`
 
 Imported by: `index.ts`
 
-Tests that import it: `__tests__/api-hygiene.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/request-schemas.test.ts`, `__tests__/routes.test.ts`, `__tests__/surface.test.ts`, `__tests__/write-audit.test.ts`, `__tests__/write-gate.test.ts`
+Tests that import it: `__tests__/action-limit.test.ts`, `__tests__/api-hygiene.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/request-schemas.test.ts`, `__tests__/routes.test.ts`, `__tests__/surface.test.ts`, `__tests__/write-audit.test.ts`, `__tests__/write-gate.test.ts`
 
-Tests that call its endpoints: `__tests__/api-hygiene.test.ts`, `__tests__/auth-rules.test.ts`, `__tests__/auth.test.ts`, `__tests__/nginx-conf.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/request-schemas.test.ts`, `__tests__/routes.test.ts`, `__tests__/surface.test.ts`, and 2 more
+Tests that call its endpoints: `__tests__/action-limit.test.ts`, `__tests__/api-hygiene.test.ts`, `__tests__/auth-rules.test.ts`, `__tests__/auth.test.ts`, `__tests__/nginx-conf.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/request-schemas.test.ts`, `__tests__/routes.test.ts`, and 3 more
 <!-- /gen -->
 
 ### `server/src/routes/analytics.ts`
@@ -1113,23 +1189,23 @@ Tests that call its endpoints: `__tests__/api-hygiene.test.ts`, `__tests__/auth-
 The four heavy reports: availability, alert noise, ageing and capacity. A route module: it checks what the caller sent and calls a service. Walked through in [Server: routes](server-routes.md).
 
 <!-- gen:card server/src/routes/analytics.ts -->
-45 lines, 1 export. Imported by 1 file.
+48 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `analyticsRoutes` | function | 14 | `async function analyticsRoutes(app: FastifyInstance): Promise<void>` |  |
+| `analyticsRoutes` | function | 16 | `async function analyticsRoutes(app: FastifyInstance): Promise<void>` |  |
 
 Endpoints: `GET /api/reports/availability`, `GET /api/reports/noise`, `GET /api/reports/aging`, `GET /api/reports/capacity`
 
-Imports: `core/config.ts`, `core/schemas.ts`, `core/validate.ts`, `services/aging.ts`, `services/availability.ts`, `services/capacity.ts`, `services/noise.ts`, `services/sli.ts`, `sli/time.ts`
+Imports: `core/config.ts`, `core/readerGone.ts`, `core/schemas.ts`, `core/validate.ts`, `security/heavyLimit.ts`, `services/aging.ts`, `services/availability.ts`, `services/capacity.ts`, `services/noise.ts`, `services/sli.ts`, `sli/time.ts`
 
 Packages: `fastify`
 
 Imported by: `index.ts`
 
-Tests that import it: `__tests__/heavy-reports.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/routes.test.ts`, `__tests__/sli-routes.test.ts`, `__tests__/surface.test.ts`
+Tests that import it: `__tests__/heavy-limit.test.ts`, `__tests__/heavy-reports.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/routes.test.ts`, `__tests__/sli-limit.test.ts`, `__tests__/sli-routes.test.ts`, `__tests__/stale-headers.test.ts`, `__tests__/surface.test.ts`, and 1 more
 
-Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/heavy-reports.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/routes.test.ts`, `__tests__/sli-routes.test.ts`
+Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/heavy-limit.test.ts`, `__tests__/heavy-reports.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/page-access.test.ts`, `__tests__/routes.test.ts`, `__tests__/sli-limit.test.ts`, `__tests__/sli-routes.test.ts`, and 2 more
 <!-- /gen -->
 
 ### `server/src/routes/chat.ts`
@@ -1185,23 +1261,23 @@ Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/device
 The plain-language explanation of a problem and of an SLA figure. A route module: it checks what the caller sent and calls a service. Walked through in [Server: the core and the clients](server-core-and-clients.md), [Server: live and assistant](server-live-and-assistant.md), [Server: routes](server-routes.md).
 
 <!-- gen:card server/src/routes/explain.ts -->
-60 lines, 1 export. Imported by 1 file.
+63 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `explainRoutes` | function | 16 | `async function explainRoutes(app: FastifyInstance): Promise<void>` |  |
+| `explainRoutes` | function | 17 | `async function explainRoutes(app: FastifyInstance): Promise<void>` |  |
 
 Endpoints: `GET /api/explain/problem`, `GET /api/explain/sla`
 
-Imports: `clients/ai.ts`, `clients/limits.ts`, `core/config.ts`, `core/schemas.ts`, `core/validate.ts`, `security/audit.ts`, `services/explain.ts`, `services/sli.ts`, `sli/time.ts`
+Imports: `clients/ai.ts`, `clients/limits.ts`, `core/config.ts`, `core/readerGone.ts`, `core/schemas.ts`, `core/validate.ts`, `security/audit.ts`, `services/explain.ts`, `services/sli.ts`, `sli/time.ts`
 
 Packages: `fastify`
 
 Imported by: `index.ts`
 
-Tests that import it: `__tests__/ai-limits.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/sli-routes.test.ts`, `__tests__/surface.test.ts`, `__tests__/usage-log-sla.test.ts`, `__tests__/usage-log.test.ts`
+Tests that import it: `__tests__/ai-limits.test.ts`, `__tests__/explain-route-signal.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/sli-routes.test.ts`, `__tests__/surface.test.ts`, `__tests__/usage-log-sla.test.ts`, `__tests__/usage-log.test.ts`
 
-Tests that call its endpoints: `__tests__/ai-limits.test.ts`, `__tests__/auth-rules.test.ts`, `__tests__/nginx-conf.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/sli-routes.test.ts`, `__tests__/usage-log-sla.test.ts`, `__tests__/usage-log.test.ts`
+Tests that call its endpoints: `__tests__/ai-limits.test.ts`, `__tests__/auth-rules.test.ts`, `__tests__/explain-route-signal.test.ts`, `__tests__/nginx-conf.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/sli-routes.test.ts`, `__tests__/usage-log-sla.test.ts`, `__tests__/usage-log.test.ts`
 <!-- /gen -->
 
 ### `server/src/routes/history.ts`
@@ -1393,7 +1469,7 @@ Imported by: `index.ts`
 
 Tests that import it: `__tests__/openapi-contract.test.ts`, `__tests__/routes.test.ts`, `__tests__/surface.test.ts`
 
-Tests that call its endpoints: `__tests__/api-hygiene.test.ts`, `__tests__/auth-rules.test.ts`, `__tests__/auth.test.ts`, `__tests__/logging.test.ts`, `__tests__/nginx-conf.test.ts`, `__tests__/no-store.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/request-schemas.test.ts`, and 4 more
+Tests that call its endpoints: `__tests__/action-limit.test.ts`, `__tests__/api-hygiene.test.ts`, `__tests__/auth-rules.test.ts`, `__tests__/auth.test.ts`, `__tests__/logging.test.ts`, `__tests__/nginx-conf.test.ts`, `__tests__/no-store.test.ts`, `__tests__/openapi-contract.test.ts`, and 5 more
 <!-- /gen -->
 
 ### `server/src/routes/reports.ts`
@@ -1401,23 +1477,23 @@ Tests that call its endpoints: `__tests__/api-hygiene.test.ts`, `__tests__/auth-
 The Dashboard's counts, how fresh the data is, problems by group and the top triggers. A route module: it checks what the caller sent and calls a service. Walked through in [Server: routes](server-routes.md).
 
 <!-- gen:card server/src/routes/reports.ts -->
-13 lines, 1 export. Imported by 1 file.
+15 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `reportRoutes` | function | 6 | `async function reportRoutes(app: FastifyInstance): Promise<void>` |  |
+| `reportRoutes` | function | 8 | `async function reportRoutes(app: FastifyInstance): Promise<void>` |  |
 
 Endpoints: `GET /api/reports/top-triggers`, `GET /api/stats`, `GET /api/freshness`, `GET /api/reports/problems-by-group`
 
-Imports: `core/schemas.ts`, `core/validate.ts`, `services/reports.ts`
+Imports: `core/readerGone.ts`, `core/schemas.ts`, `core/validate.ts`, `security/heavyLimit.ts`, `services/reports.ts`
 
 Packages: `fastify`
 
 Imported by: `index.ts`
 
-Tests that import it: `__tests__/freshness.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/routes.test.ts`, `__tests__/surface.test.ts`
+Tests that import it: `__tests__/freshness.test.ts`, `__tests__/heavy-limit.test.ts`, `__tests__/heavy-reports.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/routes.test.ts`, `__tests__/surface.test.ts`, `__tests__/viewer-reports-load.test.ts`
 
-Tests that call its endpoints: `__tests__/freshness.test.ts`, `__tests__/routes.test.ts`
+Tests that call its endpoints: `__tests__/freshness.test.ts`, `__tests__/heavy-limit.test.ts`, `__tests__/heavy-reports.test.ts`, `__tests__/routes.test.ts`, `__tests__/viewer-reports-load.test.ts`
 <!-- /gen -->
 
 ### `server/src/routes/services.ts`
@@ -1425,23 +1501,23 @@ Tests that call its endpoints: `__tests__/freshness.test.ts`, `__tests__/routes.
 The service tree, from Zabbix and derived from the estate. A route module: it checks what the caller sent and calls a service. Walked through in [Server: routes](server-routes.md).
 
 <!-- gen:card server/src/routes/services.ts -->
-19 lines, 1 export. Imported by 1 file.
+21 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `serviceRoutes` | function | 9 | `async function serviceRoutes(app: FastifyInstance): Promise<void>` |  |
+| `serviceRoutes` | function | 11 | `async function serviceRoutes(app: FastifyInstance): Promise<void>` |  |
 
 Endpoints: `GET /api/services`, `GET /api/services/derived`
 
-Imports: `core/config.ts`, `core/schemas.ts`, `services/services.ts`, `services/sli.ts`, `sli/time.ts`, `sli/tree.ts`
+Imports: `core/config.ts`, `core/readerGone.ts`, `core/schemas.ts`, `security/heavyLimit.ts`, `services/services.ts`, `services/sli.ts`, `sli/time.ts`, `sli/tree.ts`
 
 Packages: `fastify`
 
 Imported by: `index.ts`
 
-Tests that import it: `__tests__/openapi-contract.test.ts`, `__tests__/routes.test.ts`, `__tests__/sli-routes.test.ts`, `__tests__/surface.test.ts`
+Tests that import it: `__tests__/openapi-contract.test.ts`, `__tests__/routes.test.ts`, `__tests__/sli-limit.test.ts`, `__tests__/sli-routes.test.ts`, `__tests__/surface.test.ts`
 
-Tests that call its endpoints: `__tests__/openapi-contract.test.ts`, `__tests__/routes.test.ts`, `__tests__/sli-routes.test.ts`
+Tests that call its endpoints: `__tests__/openapi-contract.test.ts`, `__tests__/routes.test.ts`, `__tests__/sli-limit.test.ts`, `__tests__/sli-routes.test.ts`
 <!-- /gen -->
 
 ### `server/src/routes/sites.ts`
@@ -1497,23 +1573,23 @@ Tests that call its endpoints: `__tests__/api-hygiene.test.ts`, `__tests__/auth-
 The derived monthly SLA. A route module: it checks what the caller sent and calls a service. Walked through in [Server: routes](server-routes.md).
 
 <!-- gen:card server/src/routes/sli.ts -->
-13 lines, 1 export. Imported by 1 file.
+15 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `sliRoutes` | function | 7 | `async function sliRoutes(app: FastifyInstance): Promise<void>` |  |
+| `sliRoutes` | function | 9 | `async function sliRoutes(app: FastifyInstance): Promise<void>` |  |
 
 Endpoints: `GET /api/sli`
 
-Imports: `core/config.ts`, `core/schemas.ts`, `services/sli.ts`, `sli/time.ts`
+Imports: `core/config.ts`, `core/readerGone.ts`, `core/schemas.ts`, `security/heavyLimit.ts`, `services/sli.ts`, `sli/time.ts`
 
 Packages: `fastify`
 
 Imported by: `index.ts`
 
-Tests that import it: `__tests__/openapi-contract.test.ts`, `__tests__/sli-routes.test.ts`, `__tests__/stale-headers.test.ts`, `__tests__/surface.test.ts`
+Tests that import it: `__tests__/heavy-reports.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/sli-limit.test.ts`, `__tests__/sli-routes.test.ts`, `__tests__/stale-headers.test.ts`, `__tests__/surface.test.ts`
 
-Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/download-log.test.ts`, `__tests__/email-without-auth.test.ts`, `__tests__/export-route.test.ts`, `__tests__/mail-route.test.ts`, `__tests__/no-store.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/schedule-route.test.ts`, and 3 more
+Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/download-log.test.ts`, `__tests__/email-without-auth.test.ts`, `__tests__/export-route.test.ts`, `__tests__/heavy-reports.test.ts`, `__tests__/live-tools-months.test.ts`, `__tests__/mail-route.test.ts`, `__tests__/no-store.test.ts`, and 8 more
 <!-- /gen -->
 
 ### `server/src/routes/sliExport.ts`
@@ -1521,23 +1597,23 @@ Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/downlo
 The derived monthly SLA as a PDF, an Excel file or a zip of CSV files. A route module: it checks what the caller sent and calls a service. Walked through in [Server: routes](server-routes.md).
 
 <!-- gen:card server/src/routes/sliExport.ts -->
-41 lines, 1 export. Imported by 1 file.
+45 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `sliExportRoutes` | function | 13 | `async function sliExportRoutes(app: FastifyInstance): Promise<void>` |  |
+| `sliExportRoutes` | function | 15 | `async function sliExportRoutes(app: FastifyInstance): Promise<void>` |  |
 
 Endpoints: `GET /api/sli/export`
 
-Imports: `core/config.ts`, `core/schemas.ts`, `core/validate.ts`, `security/audit.ts`, `services/sli.ts`, `services/sliExport.ts`, `sli/time.ts`
+Imports: `core/config.ts`, `core/readerGone.ts`, `core/schemas.ts`, `core/validate.ts`, `security/audit.ts`, `security/heavyLimit.ts`, `services/sli.ts`, `services/sliExport.ts`, `sli/time.ts`
 
 Packages: `fastify`
 
 Imported by: `index.ts`
 
-Tests that import it: `__tests__/auth-rules.test.ts`, `__tests__/download-log.test.ts`, `__tests__/export-route.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/surface.test.ts`
+Tests that import it: `__tests__/auth-rules.test.ts`, `__tests__/download-log.test.ts`, `__tests__/export-route.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/sli-limit.test.ts`, `__tests__/surface.test.ts`
 
-Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/download-log.test.ts`, `__tests__/export-route.test.ts`, `__tests__/no-store.test.ts`, `__tests__/openapi-contract.test.ts`
+Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/download-log.test.ts`, `__tests__/export-route.test.ts`, `__tests__/no-store.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/sli-limit.test.ts`
 <!-- /gen -->
 
 ### `server/src/routes/sliMail.ts`
@@ -1559,9 +1635,9 @@ Packages: `fastify`
 
 Imported by: `index.ts`
 
-Tests that import it: `__tests__/email-without-auth.test.ts`, `__tests__/mail-route.test.ts`, `__tests__/openapi-contract.test.ts`
+Tests that import it: `__tests__/email-without-auth.test.ts`, `__tests__/mail-route.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/surface.test.ts`
 
-Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/email-without-auth.test.ts`, `__tests__/mail-route.test.ts`, `__tests__/openapi-contract.test.ts`
+Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/email-without-auth.test.ts`, `__tests__/mail-route.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/surface.test.ts`
 <!-- /gen -->
 
 ### `server/src/routes/sliSchedule.ts`
@@ -1583,9 +1659,9 @@ Packages: `fastify`
 
 Imported by: `index.ts`
 
-Tests that import it: `__tests__/email-without-auth.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/schedule-route.test.ts`
+Tests that import it: `__tests__/email-without-auth.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/schedule-route.test.ts`, `__tests__/surface.test.ts`
 
-Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/email-without-auth.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/schedule-route.test.ts`
+Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/email-without-auth.test.ts`, `__tests__/openapi-contract.test.ts`, `__tests__/schedule-route.test.ts`, `__tests__/surface.test.ts`
 <!-- /gen -->
 
 ### `server/src/routes/stream.ts`
@@ -1631,9 +1707,9 @@ Packages: `fastify`
 
 Imported by: `index.ts`
 
-Tests that import it: `__tests__/openapi-contract.test.ts`, `__tests__/surface.test.ts`, `__tests__/top-hosts-route.test.ts`
+Tests that import it: `__tests__/openapi-contract.test.ts`, `__tests__/surface.test.ts`, `__tests__/top-hosts-route.test.ts`, `__tests__/viewer-reports-load.test.ts`
 
-Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/top-hosts-route.test.ts`
+Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/top-hosts-route.test.ts`, `__tests__/viewer-reports-load.test.ts`
 <!-- /gen -->
 
 ### `server/src/routes/webMonitoring.ts`
@@ -1655,38 +1731,59 @@ Packages: `fastify`
 
 Imported by: `index.ts`
 
-Tests that import it: `__tests__/openapi-contract.test.ts`, `__tests__/surface.test.ts`, `__tests__/web-monitoring-route.test.ts`
+Tests that import it: `__tests__/openapi-contract.test.ts`, `__tests__/surface.test.ts`, `__tests__/viewer-reports-load.test.ts`, `__tests__/web-monitoring-route.test.ts`
 
-Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/web-monitoring-route.test.ts`
+Tests that call its endpoints: `__tests__/auth-rules.test.ts`, `__tests__/viewer-reports-load.test.ts`, `__tests__/web-monitoring-route.test.ts`
 <!-- /gen -->
 
 ## `server/src/security`
+
+### `server/src/security/actionLimit.ts`
+
+Holds one person to a number of acknowledged or closed problems a minute, counted by event id and not by request, so a script that sends fifty at a time is held as much as one that sends one at a time. It is asked last, once a request will be written, so a refusal costs no allowance, and it keeps its counts in memory (SC-51).
+
+<!-- gen:card server/src/security/actionLimit.ts -->
+23 lines, 2 exports. Imported by 1 file.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `takeEvents` | function | 13 | `function takeEvents(req: FastifyRequest, events: number): number \| null` | Count `events` for the person who asked: null when they may go ahead, else the seconds until their minute is over. |
+| `limitMessage` | function | 22 | `const limitMessage = (wait: number): string =>` |  |
+
+Imports: `clients/limits.ts`, `core/config.ts`
+
+Packages: `fastify`
+
+Imported by: `routes/actions.ts`
+
+Tests that import it: none
+<!-- /gen -->
 
 ### `server/src/security/audit.ts`
 
 Who used what: one log line for each use of the AI and each report downloaded, and the name of whoever is acting. Walked through in [Server: security and http](server-security-and-http.md).
 
 <!-- gen:card server/src/security/audit.ts -->
-100 lines, 8 exports. Imported by 7 files.
+102 lines, 8 exports. Imported by 7 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `actor` | function | 12 | `function actor(req: FastifyRequest): string` | Who is acting, for the log and the message tag. |
-| `AiOutcome` | type | 18 | `type AiOutcome = 'answered' \| 'not_found' \| 'failed' \| 'aborted'` |  |
-| `aiUse` | function | 24 | `function aiUse(req: FastifyRequest, kind: AiKind)` | One use of the AI, charged to the daily budget as it finishes and logged once when it ends. |
-| `auditDownload` | function | 58 | `function auditDownload(req: FastifyRequest, report: { report: string; month: string; format: string; bytes: number...` | One report taken: who, what and how large. |
-| `EmailAudit` | interface | 62 | `interface EmailAudit` |  |
-| `logEmail` | function | 85 | `function logEmail(log: LineLog, user: string, report: EmailAudit, ip?: string): void` | One report mailed, by the schedule or by someone: what, to how many people and how it ended. |
-| `logSkipped` | function | 94 | `function logSkipped(log: LineLog, user: string, report: Omit<EmailAudit, 'outcome'>): void` | A month the monthly schedule passed by with no send tried, usually because the portal was not running: it is not a failed send (BK-55). |
-| `auditEmail` | function | 98 | `function auditEmail(req: FastifyRequest, report: EmailAudit): void` |  |
+| `actor` | function | 13 | `function actor(req: FastifyRequest): string` | Who is acting, for the log and the message tag. |
+| `AiOutcome` | type | 19 | `type AiOutcome = 'answered' \| 'not_found' \| 'failed' \| 'aborted'` |  |
+| `aiUse` | function | 25 | `function aiUse(req: FastifyRequest, kind: AiKind)` | One use of the AI, charged to the daily budget as it finishes and logged once when it ends. |
+| `auditDownload` | function | 60 | `function auditDownload(req: FastifyRequest, report: { report: string; month: string; format: string; bytes: number...` | One report taken: who, what and how large. |
+| `EmailAudit` | interface | 64 | `interface EmailAudit` |  |
+| `logEmail` | function | 87 | `function logEmail(log: LineLog, user: string, report: EmailAudit, ip?: string): void` | One report mailed, by the schedule or by someone: what, to how many people and how it ended. |
+| `logSkipped` | function | 96 | `function logSkipped(log: LineLog, user: string, report: Omit<EmailAudit, 'outcome'>): void` | A month the monthly schedule passed by with no send tried, usually because the portal was not running: it is not a failed send (BK-55). |
+| `auditEmail` | function | 100 | `function auditEmail(req: FastifyRequest, report: EmailAudit): void` |  |
 
-Imports: `clients/ai.ts`, `clients/limits.ts`, `core/config.ts`
+Imports: `clients/ai.ts`, `clients/limits.ts`, `core/config.ts`, `core/gate.ts`
 
 Packages: `fastify`
 
 Imported by: `routes/chat.ts`, `routes/explain.ts`, `routes/sliExport.ts`, `routes/sliMail.ts`, `routes/sliSchedule.ts`, `services/actions.ts`, `services/reportSchedule.ts`
 
-Tests that import it: `__tests__/usage-log.test.ts`
+Tests that import it: `__tests__/ai-outside-usage.test.ts`, `__tests__/explain-reader-left.test.ts`, `__tests__/usage-log.test.ts`
 <!-- /gen -->
 
 ### `server/src/security/auth.ts`
@@ -1694,7 +1791,7 @@ Tests that import it: `__tests__/usage-log.test.ts`
 Sign-in and sign-out, the session cookie, the cross-site check, the role guard on every route, and the sign-in limits. Walked through in [One request, from start to finish](one-request.md), [Server: routes](server-routes.md), [Server: security and http](server-security-and-http.md).
 
 <!-- gen:card server/src/security/auth.ts -->
-562 lines, 22 exports. Imported by 5 files.
+578 lines, 22 exports. Imported by 5 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -1714,12 +1811,12 @@ Sign-in and sign-out, the session cookie, the cross-site check, the role guard o
 | `LOGIN_WARN_AFTER` | constant | 109 | `const LOGIN_WARN_AFTER = 5` |  |
 | `csrfRefusal` | function | 137 | `function csrfRefusal(req: FastifyRequest, cookieName: string): string \| null` | Why an unsafe request is refused as a possible cross-site forgery, or null when it may go on. |
 | `routeOf` | function | 155 | `function routeOf(req: FastifyRequest): string` | The route to judge a request by. |
-| `assertUsers` | function | 243 | `function assertUsers(warn: (message: string) => void = () => undefined): void` | Refuse to start with a password anyone can guess: empty (what copying .env.example gave) or the built-in "admin". |
-| `roleOf` | function | 275 | `function roleOf(req: FastifyRequest): Role` | The role attached to a request. |
-| `sessionIdOf` | function | 285 | `function sessionIdOf(claims: unknown): string \| undefined` | The session a token belongs to: its sid, else its jti (tokens from before sessions had one), else a hash of what it says. |
-| `onSignOut` | function | 295 | `function onSignOut(listener: (session: string) => void): () => void` | Call `listener` with the id of each session that signs out. |
-| `isSignedIn` | function | 308 | `const isSignedIn = (req: FastifyRequest): boolean =>` | Whether the caller of a public route is signed in, for GET /api/health to show more to them. |
-| `setupAuth` | function | 310 | `async function setupAuth(app: FastifyInstance): Promise<void>` |  |
+| `assertUsers` | function | 243 | `function assertUsers(warn: (message: string) => void = () => undefined): void` | Refuse to start with a password anyone can guess: empty (what copying .env.example gave) or the built-in "admin", and a plain password under... |
+| `roleOf` | function | 284 | `function roleOf(req: FastifyRequest): Role` | The role attached to a request. |
+| `sessionIdOf` | function | 294 | `function sessionIdOf(claims: unknown): string \| undefined` | The session a token belongs to: its sid, else its jti (tokens from before sessions had one), else a hash of what it says. |
+| `onSignOut` | function | 304 | `function onSignOut(listener: (session: string) => void): () => void` | Call `listener` with the id of each session that signs out. |
+| `isSignedIn` | function | 317 | `const isSignedIn = (req: FastifyRequest): boolean =>` | Whether the caller of a public route is signed in, for GET /api/health to show more to them. |
+| `setupAuth` | function | 319 | `async function setupAuth(app: FastifyInstance): Promise<void>` |  |
 
 Imports: `core/config.ts`, `core/schemas.ts`, `security/pageAccess.ts`, `security/passwords.ts`
 
@@ -1727,7 +1824,31 @@ Packages: `@fastify/cookie`, `@fastify/jwt`, `@fastify/rate-limit`, `fastify`, `
 
 Imported by: `http/health.ts`, `index.ts`, `routes/stream.ts`, `security/pageAccess.ts`, `security/viewerPolicy.ts`
 
-Tests that import it: `__tests__/ai-limits.test.ts`, `__tests__/auth-rules.test.ts`, `__tests__/auth.test.ts`, `__tests__/compose-auth.test.ts`, `__tests__/download-log.test.ts`, `__tests__/email-without-auth.test.ts`, `__tests__/health-log.test.ts`, `__tests__/health.test.ts`, and 17 more
+Tests that import it: `__tests__/ai-limits.test.ts`, `__tests__/auth-rules.test.ts`, `__tests__/auth.test.ts`, `__tests__/compose-auth.test.ts`, `__tests__/download-log.test.ts`, `__tests__/email-without-auth.test.ts`, `__tests__/health-log.test.ts`, `__tests__/health.test.ts`, and 19 more
+<!-- /gen -->
+
+### `server/src/security/heavyLimit.ts`
+
+How many heavy reports, and how many monthly SLA reads, one person may have waiting or running at once. Walked through in [Server: security and http](server-security-and-http.md).
+
+<!-- gen:card server/src/security/heavyLimit.ts -->
+44 lines, 5 exports. Imported by 5 files.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `HEAVY_REPORTS_PER_PERSON` | constant | 5 | `const HEAVY_REPORTS_PER_PERSON = 4` | Heavy reports (availability, noise, capacity, top triggers) one person may have waiting or running: a page asks for two at most, so four is two... |
+| `SLI_READS_PER_PERSON` | constant | 8 | `const SLI_READS_PER_PERSON = 4` | Places one person may hold in the line of the derived SLA reads: the month page asks for two (both methods) and a report file takes two, so four... |
+| `heavyReportGuard` | constant | 38 | `const heavyReportGuard = heavyLine()` | A fifth heavy report of one person is refused, so a script cannot fill the line of the gate. |
+| `sliReadGuard` | constant | 41 | `const sliReadGuard = sliLine()` | One month in one method (/api/sli, the service tree): one place in the line of the derived SLA reads. |
+| `sliExportGuard` | constant | 44 | `const sliExportGuard = sliLine(2)` | The month's report file reads both methods, so it takes two places. |
+
+Imports: `clients/limits.ts`
+
+Packages: `fastify`
+
+Imported by: `routes/analytics.ts`, `routes/reports.ts`, `routes/services.ts`, `routes/sli.ts`, `routes/sliExport.ts`
+
+Tests that import it: `__tests__/heavy-limit.test.ts`, `__tests__/sli-limit.test.ts`
 <!-- /gen -->
 
 ### `server/src/security/mailLimit.ts`
@@ -1757,12 +1878,12 @@ Tests that import it: `__tests__/mail-limit.test.ts`, `__tests__/mail-route.test
 Every page of the menu with the API route that fills it, and the role each needs. Walked through in [Server: security and http](server-security-and-http.md).
 
 <!-- gen:card server/src/security/pageAccess.ts -->
-35 lines, 2 exports. Imported by 1 file.
+34 lines, 2 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `PAGE_API` | constant | 11 | `const PAGE_API: Readonly<Record<string, string>>` | Every page in the portal's menu, with the API route that fills it. |
-| `pageRoles` | function | 33 | `function pageRoles(roleFor: (url: string) => Role): Record<string, Role>` | The minimum role for each page, judged by the same rules that guard its route. |
+| `pageRoles` | function | 32 | `function pageRoles(roleFor: (url: string) => Role): Record<string, Role>` | The minimum role for each page, judged by the same rules that guard its route. |
 
 Imports: `security/auth.ts`
 
@@ -1776,7 +1897,7 @@ Tests that import it: `__tests__/page-access.test.ts`
 How a portal password is stored (a salted scrypt hash) and checked, with a decoy check so an unknown name costs the same time. Walked through in [Server: security and http](server-security-and-http.md).
 
 <!-- gen:card server/src/security/passwords.ts -->
-113 lines, 9 exports. Imported by 2 files.
+119 lines, 11 exports. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -1787,8 +1908,10 @@ How a portal password is stored (a salted scrypt hash) and checked, with a decoy
 | `verifyPassword` | function | 65 | `async function verifyPassword(stored: StoredPassword, candidate: string): Promise<boolean>` | Whether `candidate` is the stored password. |
 | `decoyVerify` | function | 74 | `async function decoyVerify(candidate: string): Promise<void>` | The cost of one hash check with nothing to compare, so an unknown name is not quicker to refuse than a known one. |
 | `hashPassword` | function | 79 | `async function hashPassword(password: string, params: ScryptParams = SCRYPT_DEFAULTS): Promise<string>` | A hash entry for `password`, with a fresh salt. |
-| `isCommon` | function | 92 | `function isCommon(stored: string): boolean` | Whether a stored password is on that list, or is still a placeholder such as `<a long password>` pasted from the documents. |
-| `isGuessable` | function | 106 | `function isGuessable(stored: string): boolean` | Whether a stored password is one anyone can guess: empty, or the built-in "admin". |
+| `MIN_PASSWORD_LENGTH` | constant | 86 | `const MIN_PASSWORD_LENGTH = 8` | The fewest characters a plain password may have. |
+| `isTooShort` | function | 89 | `const isTooShort = (stored: string): boolean =>` | Whether a stored plain password is under the minimum, counted in characters. |
+| `isCommon` | function | 98 | `function isCommon(stored: string): boolean` | Whether a stored password is on that list, or is still a placeholder such as `<a long password>` pasted from the documents. |
+| `isGuessable` | function | 112 | `function isGuessable(stored: string): boolean` | Whether a stored password is one anyone can guess: empty, or the built-in "admin". |
 
 Imports: none
 
@@ -1796,7 +1919,7 @@ Packages: `node:crypto`
 
 Imported by: `server/scripts/hash-password.ts`, `security/auth.ts`
 
-Tests that import it: `__tests__/auth-users.test.ts`, `__tests__/passwords.test.ts`, `__tests__/startup-guards.test.ts`
+Tests that import it: `__tests__/auth-users.test.ts`, `__tests__/env-templates.test.ts`, `__tests__/passwords.test.ts`, `__tests__/startup-guards.test.ts`
 <!-- /gen -->
 
 ### `server/src/security/searchLimit.ts`
@@ -1858,7 +1981,7 @@ The acknowledge and close write-back: validation, the write itself, and the audi
 | `ACTION_ACKNOWLEDGE` | constant | 30 | `const ACTION_ACKNOWLEDGE = 2` |  |
 | `ACTION_MESSAGE` | constant | 31 | `const ACTION_MESSAGE = 4` |  |
 | `MAX_MESSAGE` | constant | 34 | `const MAX_MESSAGE = 2048` | Zabbix caps acknowledge messages at 2048 characters. |
-| `MAX_EVENTIDS` | constant | 37 | `const MAX_EVENTIDS = 50` | Most event ids one request may act on: a slip or a script cannot close a whole estate. |
+| `MAX_EVENTIDS` | constant | 37 | `const MAX_EVENTIDS = 50` | Most event ids one request may act on: a slip cannot close a whole estate. |
 | `trailOf` | function | 49 | `function trailOf(req: FastifyRequest)` | Who, from where, which events and what for, read loosely: even a malformed body leaves a line that says what it was after. |
 | `logAttempt` | function | 61 | `async function logAttempt(req: FastifyRequest): Promise<void>` | Every attempt is on record with who and from where, before any check can turn it away. |
 | `WRITE_REFUSED` | constant | 65 | `const WRITE_REFUSED` |  |
@@ -1876,7 +1999,7 @@ Packages: `fastify`
 
 Imported by: `routes/actions.ts`
 
-Tests that import it: `__tests__/devices-route.test.ts`, `__tests__/statsItemCount.test.ts`, `__tests__/write-audit.test.ts`
+Tests that import it: `__tests__/action-limit.test.ts`, `__tests__/devices-route.test.ts`, `__tests__/statsItemCount.test.ts`, `__tests__/write-audit.test.ts`
 <!-- /gen -->
 
 ### `server/src/services/aging.ts`
@@ -1938,7 +2061,7 @@ Imports: `services/assistantAnswer.ts`, `services/assistantFocus.ts`, `services/
 
 Imported by: `routes/chat.ts`, `services/chat.ts`
 
-Tests that import it: `__tests__/ai-errors.test.ts`, `__tests__/ai-hosted-limits.test.ts`, `__tests__/ai-limits.test.ts`, `__tests__/ai.test.ts`, `__tests__/chat-route.test.ts`, `__tests__/chat.test.ts`, `__tests__/usage-log.test.ts`
+Tests that import it: `__tests__/ai-errors.test.ts`, `__tests__/ai-hosted-limits.test.ts`, `__tests__/ai-limits.test.ts`, `__tests__/ai-outside-usage.test.ts`, `__tests__/ai.test.ts`, `__tests__/chat-route.test.ts`, `__tests__/chat.test.ts`, `__tests__/usage-log.test.ts`
 <!-- /gen -->
 
 ### `server/src/services/assistantAnswer.ts`
@@ -1946,15 +2069,15 @@ Tests that import it: `__tests__/ai-errors.test.ts`, `__tests__/ai-hosted-limits
 Asks the model with a conversation and returns the answer as it is written, from the hosted API or a local server. Walked through in [Server: live and assistant](server-live-and-assistant.md).
 
 <!-- gen:card server/src/services/assistantAnswer.ts -->
-212 lines, 5 exports. Imported by 1 file.
+245 lines, 5 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `ChatTurn` | interface | 12 | `interface ChatTurn` |  |
 | `cleanAnswer` | function | 29 | `function cleanAnswer(raw: string): string` |  |
-| `readOpenAiStream` | function | 52 | `async function* readOpenAiStream(body: ReadableStream<Uint8Array>): AsyncGenerator<string>` | Turn an OpenAI-style `text/event-stream` body into text pieces. |
-| `AnswerOptions` | interface | 152 | `interface AnswerOptions` |  |
-| `streamAnswer` | function | 170 | `async function* streamAnswer(turns: ChatTurn[], snapshot: string, signal?: AbortSignal, { focus, onStats, onUsage }:...` | Answer the latest turn, streaming text as the model produces it. |
+| `readOpenAiStream` | function | 52 | `async function* readOpenAiStream(body: ReadableStream<Uint8Array>, onCounts?: (counts: ModelCounts) => void):...` | Turn an OpenAI-style `text/event-stream` body into text pieces. |
+| `AnswerOptions` | interface | 185 | `interface AnswerOptions` |  |
+| `streamAnswer` | function | 203 | `async function* streamAnswer(turns: ChatTurn[], snapshot: string, signal?: AbortSignal, { focus, onStats, onUsage }:...` | Answer the latest turn, streaming text as the model produces it. |
 
 Imports: `clients/ai.ts`, `clients/limits.ts`, `core/config.ts`, `services/assistantPrompt.ts`
 
@@ -2090,7 +2213,7 @@ Tests that import it: none
 The availability report: how much of a window each host spent in a problem state. Walked through in [Server: routes](server-routes.md), [Server: SLA and reports](server-sla-and-reports.md).
 
 <!-- gen:card server/src/services/availability.ts -->
-175 lines, 7 exports. Imported by 1 file.
+185 lines, 7 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2098,15 +2221,15 @@ The availability report: how much of a window each host spent in a problem state
 | `AvailabilityBasis` | type | 34 | `type AvailabilityBasis = 'availability' \| 'all-problems'` | `availability` (the default) measures what availability means: a device unreachable or losing pings: through the SLA engine, and leaves out hours... |
 | `AvailabilityReport` | interface | 36 | `interface AvailabilityReport` |  |
 | `getDerivedAvailability` | function | 61 | `async function getDerivedAvailability(opts: { days: number; month?: string; profile: SliProfile; minSeverity:...` | Availability through the SLA engine: a device counts as down while its ICMP availability triggers are in problem, and hours with no collected data... |
-| `getAvailability` | function | 106 | `async function getAvailability(days: number, minSeverity: number, month?: string): Promise<AvailabilityReport>` | The original report: any open problem at or above the floor counts as downtime. |
-| `getAllProblemsAvailabilityReport` | function | 147 | `function getAllProblemsAvailabilityReport(days: number, minSeverity: number, month?: string)` | The original any-problem availability report, for the last `days` or for one `month`. |
-| `getDerivedAvailabilityReport` | function | 166 | `function getDerivedAvailabilityReport(opts: { days: number; month?: string; profile: SliProfile; minSeverity: number })` | The availability report derived from ICMP ping triggers: a month is cached by the engine itself, a rolling window moves with now. |
+| `getAvailability` | function | 108 | `async function getAvailability(days: number, minSeverity: number, month?: string): Promise<AvailabilityReport>` | The original report: any open problem at or above the floor counts as downtime. |
+| `getAllProblemsAvailabilityReport` | function | 149 | `function getAllProblemsAvailabilityReport(days: number, minSeverity: number, month?: string, signal?: AbortSignal)` | The original any-problem availability report, for the last `days` or for one `month`. |
+| `getDerivedAvailabilityReport` | function | 168 | `async function getDerivedAvailabilityReport(opts: { days: number; month?: string; profile: SliProfile; minSeverity:...` | The availability report derived from ICMP ping triggers: a month is cached by the engine itself, a rolling window moves with now. |
 
 Imports: `core/cache.ts`, `core/config.ts`, `domain/naming.ts`, `services/incidents.ts`, `services/reportPolicy.ts`, `services/sli.ts`, `sli/engine.ts`, `sli/intervals.ts`
 
 Imported by: `routes/analytics.ts`
 
-Tests that import it: `__tests__/availability.test.ts`, `__tests__/incidents-before-window.test.ts`
+Tests that import it: `__tests__/availability-window.test.ts`, `__tests__/availability.test.ts`, `__tests__/incidents-before-window.test.ts`
 <!-- /gen -->
 
 ### `server/src/services/capacity.ts`
@@ -2114,7 +2237,7 @@ Tests that import it: `__tests__/availability.test.ts`, `__tests__/incidents-bef
 The capacity report: processor, memory, disk and interface use per host over a number of days, from trends. Walked through in [Server: network and capacity](server-network-and-capacity.md), [Server: routes](server-routes.md).
 
 <!-- gen:card server/src/services/capacity.ts -->
-341 lines, 7 exports. Imported by 3 files.
+349 lines, 8 exports. Imported by 3 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2124,13 +2247,14 @@ The capacity report: processor, memory, disk and interface use per host over a n
 | `getCapacity` | function | 106 | `async function getCapacity(days: number, top: number): Promise<CapacityReport>` |  |
 | `CAPACITY_DAYS` | constant | 331 | `const CAPACITY_DAYS = 7` | What the report covers when the page does not say: the days, and the hosts listed for each metric. |
 | `CAPACITY_TOP` | constant | 332 | `const CAPACITY_TOP = 10` |  |
-| `getCapacityReport` | function | 335 | `function getCapacityReport(days: number, top: number)` | The busiest hosts by CPU, memory and so on over `days`. |
+| `CAPACITY_PERIODS` | constant | 334 | `const CAPACITY_PERIODS: readonly number[]` | The periods the Capacity page offers (web/src/features/reports/Capacity.tsx); a test holds the two lists equal. |
+| `getCapacityReport` | function | 340 | `function getCapacityReport(days: number, top: number, signal?: AbortSignal)` | The busiest hosts by CPU, memory and so on over `days`. |
 
 Imports: `clients/zabbix.ts`, `core/cache.ts`, `core/config.ts`, `services/reportPolicy.ts`, `sli/events.ts`
 
 Imported by: `routes/analytics.ts`, `services/topHosts.ts`, `services/warmUp.ts`
 
-Tests that import it: `__tests__/light-reads.test.ts`, `__tests__/sli-routes.test.ts`
+Tests that import it: `__tests__/light-reads.test.ts`, `__tests__/sli-routes.test.ts`, `__tests__/viewer-reports-typed.test.ts`
 <!-- /gen -->
 
 ### `server/src/services/chat.ts`
@@ -2158,6 +2282,56 @@ Imported by: `routes/chat.ts`
 Tests that import it: `__tests__/chat.test.ts`, `__tests__/plain-wording.test.ts`
 <!-- /gen -->
 
+### `server/src/services/closedWeb.ts`
+
+Keeps the web check figures of a closed month as first read, and reads the month that has just closed once an hour. Walked through in [Server: SLA and reports](server-sla-and-reports.md).
+
+<!-- gen:card server/src/services/closedWeb.ts -->
+113 lines, 5 exports. Imported by 2 files.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `setClosedWebLogger` | function | 19 | `function setClosedWebLogger(next: LineLog \| null): void` | Where the failures of this module are written (index.ts); until then they are not. |
+| `freezeWeb` | function | 28 | `async function freezeWeb(report: SliReport): Promise<SliReport>` | The report of a closed month with its web check figures as kept: the first read keeps them, a later one gives them back. |
+| `CaptureDeps` | interface | 51 | `interface CaptureDeps` |  |
+| `ClosedMonthCapture` | interface | 61 | `interface ClosedMonthCapture` |  |
+| `createClosedMonthCapture` | function | 71 | `function createClosedMonthCapture(deps: CaptureDeps): ClosedMonthCapture` | Reads the month that has just closed once it has settled, so that the figures kept are those of that day and not of whoever opens the page first. |
+
+Imports: `services/closedWebStore.ts`, `sli/engine.ts`, `sli/schedule.ts`, `sli/time.ts`
+
+Imported by: `index.ts`, `services/sli.ts`
+
+Tests that import it: `__tests__/closed-web-freeze.test.ts`
+<!-- /gen -->
+
+### `server/src/services/closedWebStore.ts`
+
+The file `closed-months.json` that holds those figures. Walked through in [Server: SLA and reports](server-sla-and-reports.md).
+
+<!-- gen:card server/src/services/closedWebStore.ts -->
+151 lines, 9 exports. Imported by 2 files.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `KeptWeb` | interface | 12 | `interface KeptWeb` |  |
+| `ClosedWebStore` | interface | 18 | `interface ClosedWebStore` |  |
+| `MAX_MONTHS_KEPT` | constant | 28 | `const MAX_MONTHS_KEPT = 36` | Three years: far more than the year of events Zabbix holds, and a few kilobytes of file. |
+| `readClosedWeb` | function | 52 | `function readClosedWeb(raw: unknown): { months: Record<string, KeptWeb>; repairs: string[]; usable: boolean }` | What a file holds: the months that read well, a line for each that did not, and whether the file is of a kind this build reads at all. |
+| `memoryClosedWeb` | function | 72 | `const memoryClosedWeb = (): ClosedWebStore =>` | What a portal with no data folder runs on, and what the tests start from: it keeps nothing, and says it is not durable. |
+| `openClosedWeb` | function | 100 | `async function openClosedWeb(dir: string, warn: (message: string) => void): Promise<ClosedWebStore>` | Opens the file in `dir`, or a store in memory alone when `dir` is empty or cannot be used. |
+| `closedWeb` | function | 141 | `const closedWeb = (): ClosedWebStore =>` | The one store, opened at start-up (index.ts) from PORTAL_STATE_DIR. |
+| `initClosedWeb` | function | 143 | `async function initClosedWeb(warn: (message: string) => void): Promise<ClosedWebStore>` |  |
+| `useClosedWeb` | hook | 149 | `function useClosedWeb(store: ClosedWebStore): void` | For the tests: put a store of their own in place. |
+
+Imports: `core/config.ts`, `core/state.ts`, `sli/engine.ts`
+
+Packages: `node:fs`, `node:path`
+
+Imported by: `index.ts`, `services/closedWeb.ts`
+
+Tests that import it: `__tests__/closed-web-freeze.test.ts`, `__tests__/closed-web-store.test.ts`
+<!-- /gen -->
+
 ### `server/src/services/devices.ts`
 
 Every host as a device of one kind, for the Devices page. Walked through in [Server: routes](server-routes.md).
@@ -2183,7 +2357,7 @@ Tests that import it: `__tests__/devices-route.test.ts`
 The plain-language layer: reads one problem or one SLA figure and asks the model to explain it. Walked through in [Server: domain and hosts](server-domain-and-hosts.md), [Server: live and assistant](server-live-and-assistant.md), [Server: routes](server-routes.md).
 
 <!-- gen:card server/src/services/explain.ts -->
-218 lines, 10 exports. Imported by 1 file.
+221 lines, 10 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2194,15 +2368,15 @@ The plain-language layer: reads one problem or one SLA figure and asks the model
 | `minutes` | function | 75 | `const minutes = (seconds: number \| null) =>` |  |
 | `SLA_PERIODS` | constant | 77 | `const SLA_PERIODS: Record<string, string>` |  |
 | `NotFound` | interface | 86 | `interface NotFound` | The thing asked about is not there: the route answers 404 with this wording. |
-| `explainProblem` | function | 97 | `async function explainProblem(eventid: string, onUsage: OnUsage): Promise<ProblemExplanation \| NotFound>` | Tags and notification wording for one problem. |
-| `explainDerivedSla` | function | 125 | `async function explainDerivedSla({ month, profile, scope }: { month: string; profile: SliProfile; scope: string }...` | The derived monthly SLA of one scope (overall \| site:N \| category:NAME), in plain language. |
-| `explainZabbixSla` | function | 186 | `async function explainZabbixSla(slaid: string, serviceid: string \| undefined, onUsage: OnUsage): Promise<SlaAnswer \|...` | One Zabbix SLA's standing in the current period, in plain language. |
+| `explainProblem` | function | 97 | `async function explainProblem(eventid: string, onUsage: OnUsage, signal?: AbortSignal): Promise<ProblemExplanation \|...` | Tags and notification wording for one problem. |
+| `explainDerivedSla` | function | 127 | `async function explainDerivedSla({ month, profile, scope }: { month: string; profile: SliProfile; scope: string }...` | The derived monthly SLA of one scope (overall \| site:N \| category:NAME), in plain language. |
+| `explainZabbixSla` | function | 189 | `async function explainZabbixSla(slaid: string, serviceid: string \| undefined, onUsage: OnUsage, signal?:...` | One Zabbix SLA's standing in the current period, in plain language. |
 
 Imports: `clients/ai.ts`, `core/cache.ts`, `core/config.ts`, `domain/queries.ts`, `services/assistantSnapshot.ts`, `services/sla.ts`, `services/sli.ts`, `sli/engine.ts`
 
 Imported by: `routes/explain.ts`
 
-Tests that import it: `__tests__/explain-figure.test.ts`, `__tests__/explain-problem.test.ts`, `__tests__/sli-routes.test.ts`, `__tests__/usage-log-sla.test.ts`
+Tests that import it: `__tests__/explain-figure.test.ts`, `__tests__/explain-problem.test.ts`, `__tests__/explain-reader-left.test.ts`, `__tests__/explain-route-signal.test.ts`, `__tests__/sli-routes.test.ts`, `__tests__/usage-log-sla.test.ts`
 <!-- /gen -->
 
 ### `server/src/services/history.ts`
@@ -2295,7 +2469,7 @@ Imports: `clients/zabbix.ts`, `core/config.ts`, `sli/events.ts`, `sli/time.ts`
 
 Imported by: `services/availability.ts`, `services/noise.ts`
 
-Tests that import it: `__tests__/availability.test.ts`, `__tests__/incidents-before-window.test.ts`, `__tests__/noise-large.test.ts`, `__tests__/period-window.test.ts`, `__tests__/routes.test.ts`
+Tests that import it: `__tests__/availability.test.ts`, `__tests__/heavy-reports.test.ts`, `__tests__/incidents-before-window.test.ts`, `__tests__/noise-large.test.ts`, `__tests__/period-window.test.ts`, `__tests__/routes.test.ts`
 <!-- /gen -->
 
 ### `server/src/services/inventory.ts`
@@ -2477,7 +2651,7 @@ The alert-noise report: triggers that flap or fire too often to be useful. Walke
 | `NoiseReport` | interface | 37 | `interface NoiseReport` |  |
 | `getNoise` | function | 64 | `async function getNoise(days: number, minSeverity: number): Promise<NoiseReport>` |  |
 | `topNoise` | function | 144 | `function topNoise(report: NoiseReport, top: number): NoiseReport` | The loudest `top` triggers of a full report, in its order; every other figure still covers all of them. |
-| `getNoiseReport` | function | 149 | `async function getNoiseReport(days: number, minSeverity: number, top: number)` | The noisiest triggers. |
+| `getNoiseReport` | function | 149 | `async function getNoiseReport(days: number, minSeverity: number, top: number, signal?: AbortSignal)` | The noisiest triggers. |
 
 Imports: `core/cache.ts`, `core/config.ts`, `services/incidents.ts`, `services/reportPolicy.ts`
 
@@ -2511,7 +2685,7 @@ Tests that import it: `__tests__/email-without-auth.test.ts`, `__tests__/mail-ro
 What the slow reports share: how long an answer is kept and how many run at once. Walked through in [Server: network and capacity](server-network-and-capacity.md).
 
 <!-- gen:card server/src/services/reportPolicy.ts -->
-36 lines, 8 exports. Imported by 4 files.
+36 lines, 8 exports. Imported by 5 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2526,9 +2700,9 @@ What the slow reports share: how long an answer is kept and how many run at once
 
 Imports: `core/gate.ts`
 
-Imported by: `services/availability.ts`, `services/capacity.ts`, `services/noise.ts`, `services/sli.ts`
+Imported by: `services/availability.ts`, `services/capacity.ts`, `services/noise.ts`, `services/reports.ts`, `services/sli.ts`
 
-Tests that import it: `__tests__/heavy-reports.test.ts`, `__tests__/light-reads.test.ts`, `__tests__/sli-gate.test.ts`
+Tests that import it: `__tests__/heavy-reports.test.ts`, `__tests__/light-reads.test.ts`, `__tests__/sli-gate.test.ts`, `__tests__/viewer-reports-load.test.ts`
 <!-- /gen -->
 
 ### `server/src/services/reportSchedule.ts`
@@ -2556,19 +2730,19 @@ Tests that import it: `__tests__/email-without-auth.test.ts`, `__tests__/report-
 The Dashboard's counts, the data clock, problems by group and the top triggers. Walked through in [Server: domain and hosts](server-domain-and-hosts.md), [Server: routes](server-routes.md).
 
 <!-- gen:card server/src/services/reports.ts -->
-183 lines, 7 exports. Imported by 2 files.
+185 lines, 7 exports. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `getTopTriggers` | function | 14 | `function getTopTriggers(days: number)` | Reports → Top 100 triggers: count problem events per trigger over a window. |
-| `COUNT_TIMEOUT_MS` | constant | 67 | `const COUNT_TIMEOUT_MS = 120_000` |  |
-| `COUNT_WAIT_MS` | constant | 69 | `const COUNT_WAIT_MS = 2_000` | How long /api/stats waits for a count it does not hold yet; past this the count is null and carries on. |
-| `COUNT_RETRY_MS` | constant | 71 | `const COUNT_RETRY_MS = 10 * 60_000` | After a count fails with none cached, Zabbix is not asked again for this long. |
-| `getStats` | function | 115 | `function getStats()` | Reports → System information: high-level counts for the dashboard. |
-| `getFreshness` | function | 144 | `async function getFreshness()` | When Zabbix last collected a value, so the Dashboard can say it has stopped (reachability.ts). |
-| `getProblemsByGroup` | function | 150 | `function getProblemsByGroup()` | Dashboard widget: problem severity breakdown per host group. |
+| `getTopTriggers` | function | 15 | `function getTopTriggers(days: number, signal?: AbortSignal)` | Reports → Top 100 triggers: count problem events per trigger over a window. |
+| `COUNT_TIMEOUT_MS` | constant | 69 | `const COUNT_TIMEOUT_MS = 120_000` |  |
+| `COUNT_WAIT_MS` | constant | 71 | `const COUNT_WAIT_MS = 2_000` | How long /api/stats waits for a count it does not hold yet; past this the count is null and carries on. |
+| `COUNT_RETRY_MS` | constant | 73 | `const COUNT_RETRY_MS = 10 * 60_000` | After a count fails with none cached, Zabbix is not asked again for this long. |
+| `getStats` | function | 117 | `function getStats()` | Reports → System information: high-level counts for the dashboard. |
+| `getFreshness` | function | 146 | `async function getFreshness()` | When Zabbix last collected a value, so the Dashboard can say it has stopped (reachability.ts). |
+| `getProblemsByGroup` | function | 152 | `function getProblemsByGroup()` | Dashboard widget: problem severity breakdown per host group. |
 
-Imports: `clients/zabbix.ts`, `core/cache.ts`, `domain/queries.ts`, `domain/reachability.ts`
+Imports: `clients/zabbix.ts`, `core/cache.ts`, `domain/queries.ts`, `domain/reachability.ts`, `services/reportPolicy.ts`
 
 Imported by: `routes/reports.ts`, `services/warmUp.ts`
 
@@ -2651,19 +2825,19 @@ Tests that import it: `__tests__/chat.test.ts`
 The derived monthly SLA, cached, for the routes. Walked through in [Server: routes](server-routes.md), [Server: SLA and reports](server-sla-and-reports.md).
 
 <!-- gen:card server/src/services/sli.ts -->
-49 lines, 3 exports. Imported by 10 files.
+55 lines, 3 exports. Imported by 11 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `parseProfile` | function | 20 | `function parseProfile(raw: unknown): SliProfile` |  |
-| `forgetMonthlySli` | function | 30 | `function forgetMonthlySli(month: string): void` | Drops what is kept for a month, in both methods and every phase: a report that came back empty must not be the answer to the next try (BK-51). |
-| `getMonthlySli` | function | 35 | `function getMonthlySli(month: string, profile: SliProfile): Promise<SliReport>` | The report for one calendar month, shared by every caller under one cache key. |
+| `parseProfile` | function | 21 | `function parseProfile(raw: unknown): SliProfile` |  |
+| `forgetMonthlySli` | function | 31 | `function forgetMonthlySli(month: string): void` | Drops what is kept for a month, in both methods and every phase: a report that came back empty must not be the answer to the next try (BK-51). |
+| `getMonthlySli` | function | 36 | `function getMonthlySli(month: string, profile: SliProfile, signal?: AbortSignal): Promise<SliReport>` | The report for one calendar month, shared by every caller under one cache key. |
 
-Imports: `core/cache.ts`, `core/config.ts`, `core/validate.ts`, `services/reportPolicy.ts`, `sli/engine.ts`, `sli/schedule.ts`, `sli/time.ts`
+Imports: `core/cache.ts`, `core/config.ts`, `core/validate.ts`, `services/closedWeb.ts`, `services/reportPolicy.ts`, `sli/engine.ts`, `sli/schedule.ts`, `sli/time.ts`
 
-Imported by: `routes/analytics.ts`, `routes/explain.ts`, `routes/services.ts`, `routes/sli.ts`, `routes/sliExport.ts`, `services/availability.ts`, `services/explain.ts`, `services/sliMail.ts`, `sli/summary.ts`, `sli/tree.ts`
+Imported by: `index.ts`, `routes/analytics.ts`, `routes/explain.ts`, `routes/services.ts`, `routes/sli.ts`, `routes/sliExport.ts`, `services/availability.ts`, `services/explain.ts`, `services/sliMail.ts`, `sli/summary.ts`, `sli/tree.ts`
 
-Tests that import it: `__tests__/auth-rules.test.ts`, `__tests__/download-log.test.ts`, `__tests__/export-route.test.ts`, `__tests__/mail-route.test.ts`, `__tests__/mail-service.test.ts`, `__tests__/sla-summary.test.ts`, `__tests__/sli-cache.test.ts`, `__tests__/sli-gate.test.ts`
+Tests that import it: `__tests__/auth-rules.test.ts`, `__tests__/availability-window.test.ts`, `__tests__/closed-web-freeze.test.ts`, `__tests__/download-log.test.ts`, `__tests__/export-route.test.ts`, `__tests__/mail-route.test.ts`, `__tests__/mail-service.test.ts`, `__tests__/sla-summary.test.ts`, and 3 more
 <!-- /gen -->
 
 ### `server/src/services/sliExport.ts`
@@ -2754,7 +2928,7 @@ Tests that import it: `__tests__/health.test.ts`, `__tests__/light-reads.test.ts
 The busiest hosts right now by processor and memory. Walked through in [Server: routes](server-routes.md).
 
 <!-- gen:card server/src/services/topHosts.ts -->
-87 lines, 6 exports. Imported by 2 files.
+92 lines, 7 exports. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2762,8 +2936,9 @@ The busiest hosts right now by processor and memory. Walked through in [Server: 
 | `TopHostsMetric` | interface | 21 | `interface TopHostsMetric` |  |
 | `TopHostsResponse` | interface | 31 | `interface TopHostsResponse` |  |
 | `TOP_HOSTS_ROWS` | constant | 47 | `const TOP_HOSTS_ROWS = 10` | Rows for each metric when the request does not say: the Zabbix "Top hosts" widget lists ten. |
-| `getTopHosts` | function | 54 | `async function getTopHosts(limit: number): Promise<TopHostsResponse>` |  |
-| `topHostsView` | function | 87 | `const topHostsView = (limit = TOP_HOSTS_ROWS) =>` | The busiest hosts as the route and the warm-up read it. |
+| `TOP_HOSTS_MAX_ROWS` | constant | 49 | `const TOP_HOSTS_MAX_ROWS = 20` | The most a request may ask for. |
+| `getTopHosts` | function | 56 | `async function getTopHosts(limit: number): Promise<TopHostsResponse>` |  |
+| `topHostsView` | function | 89 | `async function topHostsView(limit = TOP_HOSTS_ROWS): Promise<TopHostsResponse>` | The busiest hosts as the route and the warm-up read it: read once whatever `limit` is asked, and cut after. |
 
 Imports: `clients/zabbix.ts`, `core/cache.ts`, `domain/reachability.ts`, `services/capacity.ts`
 
@@ -2798,16 +2973,17 @@ Tests that import it: `__tests__/light-reads.test.ts`
 Web scenarios counted as OK, failed or unknown, as the Zabbix widget counts them. Walked through in [Server: routes](server-routes.md).
 
 <!-- gen:card server/src/services/webMonitoring.ts -->
-86 lines, 6 exports. Imported by 2 files.
+91 lines, 7 exports. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `WebFailure` | interface | 10 | `interface WebFailure` |  |
 | `WebMonitoringResponse` | interface | 22 | `interface WebMonitoringResponse` |  |
 | `WEB_FAILURES_ROWS` | constant | 47 | `const WEB_FAILURES_ROWS = 10` | Rows of failures when the request does not say. |
-| `scenarioName` | function | 50 | `function scenarioName(key: string): string` | The scenario's name out of its item key, which Zabbix quotes when the name has a comma, a bracket or a quote in it. |
-| `getWebMonitoring` | function | 55 | `async function getWebMonitoring(limit: number): Promise<WebMonitoringResponse>` |  |
-| `webMonitoringView` | function | 86 | `const webMonitoringView = (limit = WEB_FAILURES_ROWS) =>` | Web monitoring as the route and the warm-up read it. |
+| `WEB_FAILURES_MAX_ROWS` | constant | 49 | `const WEB_FAILURES_MAX_ROWS = 50` | The most a request may ask for. |
+| `scenarioName` | function | 52 | `function scenarioName(key: string): string` | The scenario's name out of its item key, which Zabbix quotes when the name has a comma, a bracket or a quote in it. |
+| `getWebMonitoring` | function | 57 | `async function getWebMonitoring(limit: number): Promise<WebMonitoringResponse>` |  |
+| `webMonitoringView` | function | 88 | `async function webMonitoringView(limit = WEB_FAILURES_ROWS): Promise<WebMonitoringResponse>` | Web monitoring as the route and the warm-up read it: read once whatever `limit` is asked, and cut after. |
 
 Imports: `clients/zabbix.ts`, `core/cache.ts`, `domain/reachability.ts`
 
@@ -2823,7 +2999,7 @@ Tests that import it: `__tests__/web-monitoring-route.test.ts`
 The derived SLA: monthly availability per host, computed from the ICMP triggers, with maintenance, gaps and coverage. Walked through in [Server: domain and hosts](server-domain-and-hosts.md), [Server: SLA and reports](server-sla-and-reports.md).
 
 <!-- gen:card server/src/sli/engine.ts -->
-874 lines, 17 exports. Imported by 9 files.
+876 lines, 17 exports. Imported by 11 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2833,23 +3009,23 @@ The derived SLA: monthly availability per host, computed from the ICMP triggers,
 | `SliPath` | interface | 99 | `interface SliPath` |  |
 | `SliWeb` | interface | 111 | `interface SliWeb` |  |
 | `SliReport` | interface | 120 | `interface SliReport` |  |
-| `DERIVED_LABEL` | constant | 154 | `const DERIVED_LABEL` |  |
-| `TriggerEvent` | interface | 158 | `interface TriggerEvent` |  |
-| `intervalsFor` | function | 170 | `function intervalsFor(events: TriggerEvent[], initialProblem: boolean, from: number, endClip: number): { intervals:...` | Replay one trigger's events across `[from, endClip)`. |
-| `initialState` | function | 206 | `function initialState(eventsInWindow: TriggerEvent[], trigger: { value: string; lastchange: string }, end: number...` | The state a trigger was in when the window opened. |
-| `aggregate` | function | 221 | `function aggregate(key: string, name: string, hosts: SliHost[], target: number): SliGroup` | A group's figures from its hosts: the plain mean of those with data. |
-| `parseDelay` | function | 237 | `function parseDelay(delay: string \| undefined): number` | Parse a Zabbix update interval ('60', '1m', '5m', '1h', '30s'); macros → 60. |
-| `wasMeasured` | function | 251 | `function wasMeasured(items: { state?: string; lastclock?: string }[], hostDisabled: boolean): boolean` | Whether a host's ICMP was ever collected, from its ICMP items as they are now: not when every one has no value (`lastclock` 0) and is not being... |
-| `coveredFromTrends` | function | 260 | `function coveredFromTrends(rows: { clock: number; num: number }[], delaySeconds: number, from: number, end: number):...` | Hours in which an item actually collected data, from its trend rows: an hour counts when at least half of the expected samples arrived. |
-| `SliRequest` | interface | 546 | `interface SliRequest` |  |
-| `computeSli` | function | 553 | `async function computeSli(req: SliRequest): Promise<SliReport>` |  |
-| `categoryFor` | function | 822 | `function categoryFor(parentTemplates: string[]): string` | The report category is the monitoring template: a device template when the host has one, "ICMP Ping" for hosts that are only pinged. |
+| `DERIVED_LABEL` | constant | 156 | `const DERIVED_LABEL` |  |
+| `TriggerEvent` | interface | 160 | `interface TriggerEvent` |  |
+| `intervalsFor` | function | 172 | `function intervalsFor(events: TriggerEvent[], initialProblem: boolean, from: number, endClip: number): { intervals:...` | Replay one trigger's events across `[from, endClip)`. |
+| `initialState` | function | 208 | `function initialState(eventsInWindow: TriggerEvent[], trigger: { value: string; lastchange: string }, end: number...` | The state a trigger was in when the window opened. |
+| `aggregate` | function | 223 | `function aggregate(key: string, name: string, hosts: SliHost[], target: number): SliGroup` | A group's figures from its hosts: the plain mean of those with data. |
+| `parseDelay` | function | 239 | `function parseDelay(delay: string \| undefined): number` | Parse a Zabbix update interval ('60', '1m', '5m', '1h', '30s'); macros → 60. |
+| `wasMeasured` | function | 253 | `function wasMeasured(items: { state?: string; lastclock?: string }[], hostDisabled: boolean): boolean` | Whether a host's ICMP was ever collected, from its ICMP items as they are now: not when every one has no value (`lastclock` 0) and is not being... |
+| `coveredFromTrends` | function | 262 | `function coveredFromTrends(rows: { clock: number; num: number }[], delaySeconds: number, from: number, end: number):...` | Hours in which an item actually collected data, from its trend rows: an hour counts when at least half of the expected samples arrived. |
+| `SliRequest` | interface | 548 | `interface SliRequest` |  |
+| `computeSli` | function | 555 | `async function computeSli(req: SliRequest): Promise<SliReport>` |  |
+| `categoryFor` | function | 824 | `function categoryFor(parentTemplates: string[]): string` | The report category is the monitoring template: a device template when the host has one, "ICMP Ping" for hosts that are only pinged. |
 
 Imports: `clients/zabbix.ts`, `core/config.ts`, `core/validate.ts`, `domain/naming.ts`, `sli/events.ts`, `sli/intervals.ts`, `sli/maintenance.ts`, `sli/time.ts`
 
-Imported by: `domain/reachability.ts`, `export/slaReport.ts`, `services/availability.ts`, `services/devices.ts`, `services/explain.ts`, `services/sli.ts`, `services/sliExport.ts`, `sli/summary.ts`, `sli/tree.ts`
+Imported by: `domain/reachability.ts`, `export/slaReport.ts`, `services/availability.ts`, `services/closedWeb.ts`, `services/closedWebStore.ts`, `services/devices.ts`, `services/explain.ts`, `services/sli.ts`, `services/sliExport.ts`, `sli/summary.ts`, `sli/tree.ts`
 
-Tests that import it: `__tests__/empty-report-retry.test.ts`, `__tests__/export-sla-report-style.test.ts`, `__tests__/export-sla-report.test.ts`, `__tests__/sli-cache.test.ts`, `__tests__/sli-engine.test.ts`, `__tests__/sli-gate.test.ts`, `__tests__/stale-headers.test.ts`
+Tests that import it: `__tests__/availability-window.test.ts`, `__tests__/closed-web-freeze.test.ts`, `__tests__/empty-report-retry.test.ts`, `__tests__/export-sla-report-style.test.ts`, `__tests__/export-sla-report.test.ts`, `__tests__/sli-cache.test.ts`, `__tests__/sli-engine.test.ts`, `__tests__/sli-gate.test.ts`, and 2 more
 <!-- /gen -->
 
 ### `server/src/sli/events.ts`
@@ -2857,7 +3033,7 @@ Tests that import it: `__tests__/empty-report-retry.test.ts`, `__tests__/export-
 Reads event history in slices so nothing is silently cut off. Walked through in [Server: network and capacity](server-network-and-capacity.md), [Server: SLA and reports](server-sla-and-reports.md).
 
 <!-- gen:card server/src/sli/events.ts -->
-171 lines, 9 exports. Imported by 4 files.
+177 lines, 9 exports. Imported by 4 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2869,13 +3045,13 @@ Reads event history in slices so nothing is silently cut off. Walked through in 
 | `trendSlices` | function | 93 | `function trendSlices(itemids: string[], from: number, to: number, maxRows = TREND_MAX_ROWS): { itemids: string[]...` | The requests `fetchTrendsSliced` makes: item chunks × time windows. |
 | `fetchTrendsSliced` | function | 129 | `async function fetchTrendsSliced<T extends { itemid: string }>(itemids: string[], from: number, to: number, output:...` | `trend.get` over `[from, to]` (both inclusive, as Zabbix treats them) for any number of items, split across item chunks and hour-aligned windows... |
 | `mapLimit` | function | 153 | `async function mapLimit<I, O>(items: I[], limit: number, fn: (item: I, index: number) => Promise<O>): Promise<O[]>` | `fn` over `items` with at most `limit` running at once, results in input order. |
-| `chunk` | function | 167 | `function chunk<T>(items: T[], size: number): T[][]` | `items` in consecutive chunks of `size`. |
+| `chunk` | function | 173 | `function chunk<T>(items: T[], size: number): T[][]` | `items` in consecutive chunks of `size`. |
 
 Imports: `clients/zabbix.ts`
 
 Imported by: `services/capacity.ts`, `services/history.ts`, `services/incidents.ts`, `sli/engine.ts`
 
-Tests that import it: `__tests__/graphs.test.ts`, `__tests__/sli-engine.test.ts`
+Tests that import it: `__tests__/graphs.test.ts`, `__tests__/map-limit.test.ts`, `__tests__/sli-engine.test.ts`
 <!-- /gen -->
 
 ### `server/src/sli/intervals.ts`
@@ -2928,7 +3104,7 @@ Tests that import it: `__tests__/sli-maintenance-groups.test.ts`, `__tests__/sli
 When the monthly report is due and what to do about it now. The report of a month is due on a day of the month after it, at a time in the report's zone, with ten minutes for Zabbix to hold the last values and a week to try again. Pure: the clock is an argument, so every case, early, late, retried, expired, already sent or switched off, is a plain call. The next send it names passes over a month that has gone.
 
 <!-- gen:card server/src/sli/schedule.ts -->
-108 lines, 12 exports. Imported by 3 files.
+108 lines, 12 exports. Imported by 4 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2947,7 +3123,7 @@ When the monthly report is due and what to do about it now. The report of a mont
 
 Imports: `core/state.ts`, `sli/time.ts`
 
-Imported by: `routes/sliMail.ts`, `services/reportSchedule.ts`, `services/sli.ts`
+Imported by: `routes/sliMail.ts`, `services/closedWeb.ts`, `services/reportSchedule.ts`, `services/sli.ts`
 
 Tests that import it: `__tests__/report-schedule.test.ts`, `__tests__/sli-schedule.test.ts`
 <!-- /gen -->
@@ -2976,7 +3152,7 @@ Tests that import it: `__tests__/chat.test.ts`, `__tests__/sla-summary.test.ts`
 Calendar months in a named time zone, as Unix seconds. Walked through in [Server: SLA and reports](server-sla-and-reports.md), [Web app: the shell and the shared code](web-shell-and-shared.md).
 
 <!-- gen:card server/src/sli/time.ts -->
-111 lines, 11 exports. Imported by 14 files.
+111 lines, 11 exports. Imported by 15 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2994,7 +3170,7 @@ Calendar months in a named time zone, as Unix seconds. Walked through in [Server
 
 Imports: `core/validate.ts`
 
-Imported by: `clients/limits.ts`, `routes/analytics.ts`, `routes/explain.ts`, `routes/services.ts`, `routes/sli.ts`, `routes/sliExport.ts`, `routes/sliMail.ts`, `services/history.ts`, `services/incidents.ts`, `services/sli.ts`, `sli/engine.ts`, `sli/maintenance.ts`, `sli/schedule.ts`, `sli/summary.ts`
+Imported by: `clients/limits.ts`, `routes/analytics.ts`, `routes/explain.ts`, `routes/services.ts`, `routes/sli.ts`, `routes/sliExport.ts`, `routes/sliMail.ts`, `services/closedWeb.ts`, `services/history.ts`, `services/incidents.ts`, `services/sli.ts`, `sli/engine.ts`, `sli/maintenance.ts`, `sli/schedule.ts`, and 1 more
 
 Tests that import it: `__tests__/period-window.test.ts`, `__tests__/sli-schedule.test.ts`, `__tests__/sli-time.test.ts`, `__tests__/startup-guards.test.ts`, `__tests__/copiedHelpers.test.ts`
 <!-- /gen -->
@@ -3004,7 +3180,7 @@ Tests that import it: `__tests__/period-window.test.ts`, `__tests__/sli-schedule
 A service tree built from the estate itself, for a Zabbix that has no services configured. Walked through in [Server: routes](server-routes.md), [Server: SLA and reports](server-sla-and-reports.md).
 
 <!-- gen:card server/src/sli/tree.ts -->
-277 lines, 5 exports. Imported by 2 files.
+278 lines, 5 exports. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -3012,11 +3188,11 @@ A service tree built from the estate itself, for a Zabbix that has no services c
 | `DerivedServiceNode` | interface | 28 | `interface DerivedServiceNode extends ServiceNode` |  |
 | `DerivedServicesResponse` | interface | 36 | `interface DerivedServicesResponse extends ServicesResponse` |  |
 | `buildDerivedTree` | function | 72 | `function buildDerivedTree(report: SliReport, problems: ZbxProblem[], month: string): DerivedServicesResponse` |  |
-| `getDerivedServices` | function | 268 | `async function getDerivedServices(month: string, profile: SliProfile): Promise<DerivedServicesResponse>` |  |
+| `getDerivedServices` | function | 269 | `async function getDerivedServices(month: string, profile: SliProfile, signal?: AbortSignal):...` | `signal` fires when this reader has left. |
 
 Imports: `core/cache.ts`, `core/config.ts`, `domain/naming.ts`, `domain/queries.ts`, `services/services.ts`, `services/sli.ts`, `sli/engine.ts`
 
 Imported by: `routes/services.ts`, `sli/summary.ts`
 
-Tests that import it: `__tests__/api-hygiene.test.ts`, `__tests__/sla-summary.test.ts`
+Tests that import it: `__tests__/api-hygiene.test.ts`, `__tests__/sla-summary.test.ts`, `__tests__/sli-limit.test.ts`
 <!-- /gen -->

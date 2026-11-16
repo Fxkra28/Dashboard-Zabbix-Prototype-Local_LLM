@@ -14,7 +14,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 const CHROME = process.env.CHROME || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const arg = (n) => { const i = process.argv.indexOf(`--${n}`); return i > -1 ? process.argv[i + 1] : undefined; };
 const BASE = (arg('base') || 'http://localhost:5173').replace(/\/$/, '');
-const ROUTES = (arg('routes') || '/,/problems,/sites,/hosts,/devices,/latest,/maps,/network,/links,/services,/sla,/reports/availability,/reports/capacity,/reports/noise,/reports/top-triggers,/reports/inventory,/assistant,/graphs').split(',');
+const ROUTES = (arg('routes') || '/,/problems,/sites,/hosts,/devices,/latest,/maps,/network,/links,/services,/sla,/reports/capacity,/reports/noise,/reports/top-triggers,/reports/inventory,/assistant,/graphs').split(',');
 const VIEWS = (arg('views') || '1440x900,720x900,390x844,320x640').split(',').map((v) => v.split('x').map(Number));
 const SHOTS = arg('shots');
 const EXTRA = arg('eval');

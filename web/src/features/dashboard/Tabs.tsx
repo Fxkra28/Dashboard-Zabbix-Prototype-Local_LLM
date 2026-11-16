@@ -26,6 +26,8 @@ export function Tabs<K extends string>({
 }) {
   const buttons = useRef<Record<string, HTMLButtonElement | null>>({});
   const onKeys = (e: React.KeyboardEvent) => {
+    // Alt, Ctrl or Cmd with an arrow is the browser's Back and Forward (UX-50).
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
     const at = Math.max(0, tabs.findIndex((t) => t.key === value));
     const to =
       e.key === 'ArrowRight' ? (at + 1) % tabs.length

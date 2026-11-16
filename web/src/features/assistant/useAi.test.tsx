@@ -52,7 +52,9 @@ describe('useCapabilities', () => {
     expect(result.current).toMatchObject({ known: false, failed: false, ai: false });
 
     await act(async () => pending.resolve(answer()));
-    expect(result.current).toMatchObject({ known: true, failed: false, ai: true, writeBack: false, availabilityMinSeverity: 3 });
+    expect(result.current).toMatchObject({ known: true, failed: false, ai: true, writeBack: false });
+    // The severity floor of the old Availability page had no reader left, so the state no longer carries it.
+    expect(result.current).not.toHaveProperty('availabilityMinSeverity');
   });
 
   it('says a configured-but-off model is off only once it knows', async () => {

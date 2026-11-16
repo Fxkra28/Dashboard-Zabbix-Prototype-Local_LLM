@@ -2,9 +2,9 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Developers | about 30 min | [Server files, one card each](files-server.md) | [Tools files, one card each](files-tools.md) |
+| Developers | about 35 min | [Server files, one card each](files-server.md) | [Tools files, one card each](files-tools.md) |
 
-Every code file of the web app, its stylesheet parts and its checks has one card on this page, 179 in all, grouped by folder and in alphabetical order. A card is the file in a few lines. The sentence under its heading says what the file is for and where the handbook walks through it, and a person wrote it. The block below that sentence is written by `npm run handover:build` from the code, so it cannot drift: the file's size, its exports with the first sentence of each comment, what it imports, who imports it, and which tests import it.
+Every code file of the web app, its stylesheet parts and its checks has one card on this page, 185 in all, grouped by folder and in alphabetical order. A card is the file in a few lines. The sentence under its heading says what the file is for and where the handbook walks through it, and a person wrote it. The block below that sentence is written by `npm run handover:build` from the code, so it cannot drift: the file's size, its exports with the first sentence of each comment, what it imports, who imports it, and which tests import it.
 
 Use the page when you know a file name and want to know what it is for and what would be hit if you changed it. The A to Z index of every name is [the symbols page](symbols.md). The same cards for the server and for the tools are [Server files](files-server.md) and [Tools files](files-tools.md).
 
@@ -55,7 +55,7 @@ Tests that import it: none
 The test settings: jsdom, the set-up file, and the stylesheet kept readable for the tests. Walked through in [Tests and checkers](tests-and-checkers.md).
 
 <!-- gen:card web/vitest.config.ts -->
-20 lines, 1 export. Imported by 0 files.
+31 lines, 1 export. Imported by 0 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -145,7 +145,7 @@ Tests that import it: none
 Re-derives the contrast of every token pair and fails on an illegible one. Walked through in [Tests and checkers](tests-and-checkers.md), [Web app: the stylesheet](web-styles.md).
 
 <!-- gen:card web/scripts/tokens.check.mjs -->
-705 lines, 16 exports. Imported by 1 file.
+766 lines, 17 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -165,6 +165,7 @@ Re-derives the contrast of every token pair and fails on an illegible one. Walke
 | `TSX_EXCEPTIONS` | constant | 406 | `const TSX_EXCEPTIONS` | Off-scale sizes in the TSX files that are known and accepted, by file under src/ and the declaration, with how many: `'features/x/X.tsx':... |
 | `scanTsx` | function | 419 | `function scanTsx(source, tokens)` | What a TSX file does that the tokens exist to prevent. |
 | `checkTsx` | function | 468 | `function checkTsx(source, file, tokens, exceptions = TSX_EXCEPTIONS)` | The problems in one TSX file, after the known exceptions are allowed for. |
+| `checkUndefinedVars` | function | 490 | `function checkUndefinedVars(css, files = [])` | Every var(--x) the stylesheet and the code use names something that is defined: a declaration `--x:` anywhere in the stylesheet, an `@property`, a... |
 
 Imports: `web/scripts/tokens.export.mjs`
 
@@ -222,12 +223,12 @@ Tests that import it: none
 The route table: every page is loaded on demand, and the sign-in page sits outside the shell. Walked through in [Web app: the shell and the shared code](web-shell-and-shared.md).
 
 <!-- gen:card web/src/App.tsx -->
-82 lines, 2 exports. Imported by 1 file.
+83 lines, 2 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `AppRoutes` | component | 38 | `function AppRoutes()` | The route table on its own, so a test can mount it in a MemoryRouter. |
-| `default` | component | 76 | `function App()` |  |
+| `AppRoutes` | component | 39 | `function AppRoutes()` | The route table on its own, so a test can mount it in a MemoryRouter. |
+| `default` | component | 77 | `function App()` |  |
 
 Imports: `features/assistant/Assistant.tsx`, `features/auth/Login.tsx`, `features/dashboard/Overview.tsx`, `features/graphs/HostDetail.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/hosts/LatestData.tsx`, `features/network/Links.tsx`, `features/network/Maps.tsx`, `features/network/Network.tsx`, `features/network/Sites.tsx`, `features/problems/Problems.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/Capacity.tsx`, `features/reports/Inventory.tsx`, `features/reports/TopTriggers.tsx`, and 6 more
 
@@ -259,7 +260,7 @@ Tests that import it: `__tests__/mainZone.test.tsx`
 The severity names and colours the canvas charts fall back to, because a canvas cannot read a stylesheet variable. Walked through in [Server: export](server-export.md), [Web app: the pages](web-features.md), [Web app: the stylesheet](web-styles.md).
 
 <!-- gen:card web/src/theme.ts -->
-32 lines, 2 exports. Imported by 9 files.
+32 lines, 2 exports. Imported by 8 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -268,7 +269,7 @@ The severity names and colours the canvas charts fall back to, because a canvas 
 
 Imports: none
 
-Imported by: `features/dashboard/Overview.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/network/Sites.tsx`, `features/problems/Problems.tsx`, `features/reports/AlertNoise.tsx`, `features/sla/Availability.tsx`, `features/sla/Services.tsx`, `shared/components/StatusBadge.tsx`, `shared/lib/severity.ts`
+Imported by: `features/dashboard/Overview.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/network/Sites.tsx`, `features/problems/Problems.tsx`, `features/reports/AlertNoise.tsx`, `features/sla/Services.tsx`, `shared/components/StatusBadge.tsx`, `shared/lib/severity.ts`
 
 Tests that import it: none
 <!-- /gen -->
@@ -397,7 +398,7 @@ Tests that import it: none
 Joins the per-feature calls into the one api object the pages import. Walked through in [Web app: the API client, the types and the guards](web-api-types-guards.md).
 
 <!-- gen:card web/src/api/index.ts -->
-61 lines, 1 export, 19 re-exports. Imported by 37 files.
+61 lines, 1 export, 19 re-exports. Imported by 38 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -424,9 +425,9 @@ Joins the per-feature calls into the one api object the pages import. Walked thr
 
 Imports: `api/assistant.ts`, `api/client.ts`, `api/dashboard.ts`, `api/graphs.ts`, `api/hosts.ts`, `api/meters.ts`, `api/network.ts`, `api/problems.ts`, `api/reports.ts`, `api/session.ts`, `api/shell.ts`, `api/sla.ts`
 
-Imported by: `features/assistant/Assistant.tsx`, `features/assistant/ExplainPanel.tsx`, `features/assistant/useAi.ts`, `features/assistant/useModel.ts`, `features/auth/Login.tsx`, `features/dashboard/Overview.tsx`, `features/dashboard/useHostsView.ts`, `features/graphs/HostDetail.tsx`, `features/graphs/ItemPicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/hosts/LatestData.tsx`, `features/meters/useMeters.ts`, and 23 more
+Imported by: `features/assistant/Assistant.tsx`, `features/assistant/ExplainPanel.tsx`, `features/assistant/useAi.ts`, `features/assistant/useModel.ts`, `features/auth/Login.tsx`, `features/dashboard/Overview.tsx`, `features/dashboard/useHostsView.ts`, `features/graphs/HostDetail.tsx`, `features/graphs/ItemPicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/hosts/LatestData.tsx`, `features/meters/useMeters.ts`, and 24 more
 
-Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/aiLimitMessage.test.ts`, `__tests__/backForward.test.ts`, `__tests__/backForwardUser.test.ts`, `__tests__/chatStreamEnd.test.ts`, `__tests__/chatStreamRefusal.test.ts`, `__tests__/countPills.test.tsx`, `__tests__/dialogOverlays.test.tsx`, and 52 more
+Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/aiLimitMessage.test.ts`, `__tests__/backForward.test.ts`, `__tests__/backForwardUser.test.ts`, `__tests__/chatStreamEnd.test.ts`, `__tests__/chatStreamRefusal.test.ts`, `__tests__/countPills.test.tsx`, `__tests__/dialogOverlays.test.tsx`, and 71 more
 <!-- /gen -->
 
 ### `web/src/api/meters.ts`
@@ -555,7 +556,7 @@ Tests that import it: none
 The calls behind availability and SLA, and the SLA report downloads. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/api/sla.ts -->
-123 lines, 5 exports. Imported by 1 file.
+118 lines, 5 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -618,13 +619,13 @@ Tests that import it: `__tests__/OperatorWording.test.tsx`, `features/assistant/
 The slide-over that explains one problem or one SLA figure in plain words. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/features/assistant/ExplainPanel.tsx -->
-258 lines, 3 exports. Imported by 3 files.
+260 lines, 3 exports. Imported by 3 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `ProblemExplainPanel` | component | 99 | `function ProblemExplainPanel({ problem, onClose, }: { problem: Problem; onClose: () => void; })` | Tags + notification wording for one problem. |
-| `DerivedSlaScope` | interface | 175 | `interface DerivedSlaScope` | One scope of the portal-derived monthly SLA (source=derived on the BFF). |
-| `SlaExplainPanel` | component | 187 | `function SlaExplainPanel(props: \| { sla: Pick<Sla, 'slaid' \| 'name'> & { slo: Sla['slo'] \| number }; serviceid?:...` |  |
+| `DerivedSlaScope` | interface | 176 | `interface DerivedSlaScope` | One scope of the portal-derived monthly SLA (source=derived on the BFF). |
+| `SlaExplainPanel` | component | 188 | `function SlaExplainPanel(props: \| { sla: Pick<Sla, 'slaid' \| 'name'> & { slo: Sla['slo'] \| number }; serviceid?:...` |  |
 
 Imports: `api/index.ts`, `features/assistant/AiDataNotice.tsx`, `features/assistant/ModelOfflineNotice.tsx`, `shared/components/NoData.tsx`, `shared/components/StatusBadge.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useDialogFocus.ts`, `shared/lib/severity.ts`, `types/index.ts`
 
@@ -632,7 +633,7 @@ Packages: `react`, `react-dom`
 
 Imported by: `features/problems/Problems.tsx`, `features/sla/Services.tsx`, `features/sla/Sla.tsx`
 
-Tests that import it: `__tests__/dialogOverlays.test.tsx`, `features/assistant/aiNotice.test.tsx`, `features/assistant/modelNotice.test.tsx`
+Tests that import it: `__tests__/dialogOverlays.test.tsx`, `features/assistant/aiNotice.test.tsx`, `features/assistant/explainRetry.test.tsx`, `features/assistant/modelNotice.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/assistant/Markdown.tsx`
@@ -660,11 +661,11 @@ Tests that import it: none
 Says so when the AI model is not answering, before a click that would only fail. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/features/assistant/ModelOfflineNotice.tsx -->
-15 lines, 1 export. Imported by 2 files.
+17 lines, 1 export. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `default` | component | 7 | `function ModelOfflineNotice()` | Says so when the AI model is not answering, before a click that would only fail. |
+| `default` | component | 7 | `function ModelOfflineNotice()` | Says so when the AI model is not answering, or is not installed on the model server, before a click that would only fail. |
 
 Imports: `features/assistant/useModel.ts`
 
@@ -699,21 +700,21 @@ Tests that import it: `features/assistant/parseMarkdown.test.ts`
 Asks the server once what it can do (AI on or off, its time zone) and shares the answer. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/assistant/useAi.ts -->
-98 lines, 3 exports. Imported by 8 files.
+90 lines, 3 exports. Imported by 7 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `loadCapabilities` | function | 47 | `function loadCapabilities(): Promise<Capabilities>` | Ask /api/health once and share the answer; also where the server's time zone is taken (main.tsx starts this). |
-| `useCapabilities` | hook | 72 | `function useCapabilities(): Capabilities & { retry: () => void }` |  |
-| `useAiEnabled` | hook | 96 | `function useAiEnabled(): boolean` | Convenience for the pages that only care about the plain-language layer. |
+| `loadCapabilities` | function | 40 | `function loadCapabilities(): Promise<Capabilities>` | Ask /api/health once and share the answer; also where the server's time zone is taken (main.tsx starts this). |
+| `useCapabilities` | hook | 64 | `function useCapabilities(): Capabilities & { retry: () => void }` |  |
+| `useAiEnabled` | hook | 88 | `function useAiEnabled(): boolean` | Convenience for the pages that only care about the plain-language layer. |
 
 Imports: `api/index.ts`, `shared/lib/time.ts`
 
 Packages: `react`
 
-Imported by: `features/assistant/AiDataNotice.tsx`, `features/assistant/Assistant.tsx`, `features/problems/Problems.tsx`, `features/shell/Sidebar.tsx`, `features/sla/Availability.tsx`, `features/sla/Services.tsx`, `features/sla/Sla.tsx`, `main.tsx`
+Imported by: `features/assistant/AiDataNotice.tsx`, `features/assistant/Assistant.tsx`, `features/problems/Problems.tsx`, `features/shell/Sidebar.tsx`, `features/sla/Services.tsx`, `features/sla/Sla.tsx`, `main.tsx`
 
-Tests that import it: `__tests__/OperatorWording.test.tsx`, `features/assistant/aiNotice.test.tsx`, `features/assistant/useAi.test.tsx`, `features/problems/ProblemsPage.test.tsx`, `features/shell/LayoutSignOut.test.tsx`, `features/shell/Sidebar.test.tsx`
+Tests that import it: `__tests__/OperatorWording.test.tsx`, `features/assistant/aiNotice.test.tsx`, `features/assistant/useAi.test.tsx`, `features/problems/ProblemsPage.test.tsx`, `features/shell/LayoutSignOut.test.tsx`, `features/shell/LayoutTopBar.test.tsx`, `features/shell/Sidebar.test.tsx`, `features/sla/rollingWindow.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/assistant/useModel.ts`
@@ -721,11 +722,12 @@ Tests that import it: `__tests__/OperatorWording.test.tsx`, `features/assistant/
 Whether the AI model is known not to answer. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/features/assistant/useModel.ts -->
-27 lines, 1 export. Imported by 1 file.
+31 lines, 2 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `useModelDown` | hook | 12 | `function useModelDown(): boolean` | Whether the AI model is known not to answer, from the `ready.model` a signed-in /api/health carries (the BFF checks it at most every 15 s). |
+| `ModelProblem` | type | 5 | `type ModelProblem = 'down' \| 'missing'` | What is wrong with the AI model, when the BFF knows: it does not answer, or the model server does not have the model installed (BK-66). |
+| `useModelProblem` | hook | 15 | `function useModelProblem(): ModelProblem \| null` | What is known to be wrong with the AI model, from the `ready.model` a signed-in /api/health carries (the BFF checks it at most every 15 s). |
 
 Imports: `api/index.ts`
 
@@ -786,13 +788,13 @@ Tests that import it: `features/dashboard/HostsView.test.tsx`
 The Dashboard: the counts and live problem list, with tabs for the internet meters and the Hosts view, in normal or wall mode. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/dashboard/Overview.tsx -->
-441 lines, 1 export. Imported by 1 file.
+442 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `default` | component | 121 | `function Overview()` |  |
+| `default` | component | 122 | `function Overview()` |  |
 
-Imports: `api/index.ts`, `features/dashboard/HostsView.tsx`, `features/dashboard/Tabs.tsx`, `features/dashboard/liveList.ts`, `features/dashboard/useFitHeight.ts`, `features/dashboard/useHostsView.ts`, `features/dashboard/useWallRotation.ts`, `features/meters/InternetMeters.tsx`, `features/meters/useMeters.ts`, `features/problems/ProblemsTable.tsx`, `features/problems/useChangeHighlight.ts`, `features/shell/Layout.tsx`, `guards/index.ts`, `shared/components/BrandMark.tsx`, `shared/components/CollectorNotice.tsx`, `shared/components/KpiCard.tsx`, and 14 more
+Imports: `api/index.ts`, `features/dashboard/HostsView.tsx`, `features/dashboard/Tabs.tsx`, `features/dashboard/liveList.ts`, `features/dashboard/useFitHeight.ts`, `features/dashboard/useHostsView.ts`, `features/dashboard/useWallRotation.ts`, `features/meters/InternetMeters.tsx`, `features/meters/useMeters.ts`, `features/problems/ProblemsTable.tsx`, `features/problems/useChangeHighlight.ts`, `features/shell/Layout.tsx`, `guards/index.ts`, `shared/components/BrandMark.tsx`, `shared/components/CollectorNotice.tsx`, `shared/components/KpiCard.tsx`, and 15 more
 
 Packages: `react`, `react-router-dom`
 
@@ -806,7 +808,7 @@ Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/guardedRe
 The accessible tabs pattern used by the Dashboard and the SLA page. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/features/dashboard/Tabs.tsx -->
-65 lines, 3 exports. Imported by 1 file.
+67 lines, 3 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -972,7 +974,7 @@ Packages: `react`, `react-router-dom`
 
 Imported by: `App.tsx`
 
-Tests that import it: `__tests__/hostListFailure.test.tsx`, `features/graphs/HostDetail.test.tsx`
+Tests that import it: `__tests__/hostListFailure.test.tsx`, `features/graphs/HostDetail.test.tsx`, `features/graphs/graphRetry.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/graphs/ItemPicker.tsx`
@@ -980,7 +982,7 @@ Tests that import it: `__tests__/hostListFailure.test.tsx`, `features/graphs/Hos
 A searchable, grouped picker for the items of one host. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/features/graphs/ItemPicker.tsx -->
-266 lines, 1 export. Imported by 1 file.
+267 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -992,7 +994,7 @@ Packages: `react`
 
 Imported by: `features/graphs/HostDetail.tsx`
 
-Tests that import it: `features/graphs/ItemPickerPressed.test.tsx`, `features/graphs/ItemPickerSession.test.tsx`, `features/graphs/unitScales.test.tsx`
+Tests that import it: `features/graphs/ItemPickerPressed.test.tsx`, `features/graphs/ItemPickerSession.test.tsx`, `features/graphs/graphRetry.test.tsx`, `features/graphs/itemPickerStale.test.tsx`, `features/graphs/unitScales.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/graphs/RangePicker.tsx`
@@ -1042,7 +1044,7 @@ Tests that import it: none
 The chart: draws the series with ECharts, with its tooltip and the Show data table. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/graphs/TimeSeriesChart.tsx -->
-516 lines, 3 exports. Imported by 2 files.
+518 lines, 3 exports. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -1056,7 +1058,7 @@ Packages: `echarts`, `echarts-for-react`, `react`
 
 Imported by: `features/graphs/HostDetail.tsx`, `features/network/Network.tsx`
 
-Tests that import it: `features/graphs/GraphView.test.tsx`, `features/graphs/TimeSeriesChart.test.tsx`, `features/graphs/TimeSeriesChartSeries.test.tsx`, `features/graphs/TimeSeriesChartTooltip.test.tsx`, `features/graphs/chartZone.test.tsx`, `features/graphs/graphZone.test.tsx`, `features/graphs/unitScales.test.tsx`, `features/graphs/useThemeChange.test.tsx`, and 1 more
+Tests that import it: `features/graphs/GraphView.test.tsx`, `features/graphs/TimeSeriesChart.test.tsx`, `features/graphs/TimeSeriesChartSeries.test.tsx`, `features/graphs/TimeSeriesChartTooltip.test.tsx`, `features/graphs/chartZone.test.tsx`, `features/graphs/graphRetry.test.tsx`, `features/graphs/graphZone.test.tsx`, `features/graphs/unitScales.test.tsx`, and 5 more
 <!-- /gen -->
 
 ### `web/src/features/graphs/chartCsv.ts`
@@ -1206,7 +1208,7 @@ Tests that import it: `__tests__/countPills.test.tsx`, `__tests__/guardedReads.t
 The Latest data page: pick a host and see every item's latest value. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/hosts/LatestData.tsx -->
-262 lines, 1 export. Imported by 1 file.
+268 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -1218,7 +1220,7 @@ Packages: `react`, `react-router-dom`
 
 Imported by: `App.tsx`
 
-Tests that import it: `__tests__/hostListFailure.test.tsx`, `__tests__/pagePastEnd.test.tsx`, `__tests__/sharedPages.test.tsx`, `features/hosts/LatestDataAny.test.tsx`
+Tests that import it: `__tests__/hostListFailure.test.tsx`, `__tests__/pagePastEnd.test.tsx`, `__tests__/sharedPages.test.tsx`, `features/hosts/LatestDataAny.test.tsx`, `features/hosts/latestPager.test.tsx`, `features/hosts/latestRetry.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/hosts/deviceTally.ts`
@@ -1268,13 +1270,13 @@ Tests that import it: `features/meters/Gauge.test.tsx`
 The meters: one gauge for each gauge widget of the Zabbix dashboard. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/features/meters/InternetMeters.tsx -->
-55 lines, 1 export. Imported by 1 file.
+60 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `default` | component | 15 | `function InternetMeters({ q, page }: { q: MetersQuery; page?: { index: number; pages: number } })` | The internet traffic meters: one gauge per gauge widget of the Zabbix dashboard HCML keeps (INTERNET_METERS_DASHBOARD). |
+| `default` | component | 16 | `function InternetMeters({ q, page }: { q: MetersQuery; page?: { index: number; pages: number } })` | The internet traffic meters: one gauge per gauge widget of the Zabbix dashboard HCML keeps (INTERNET_METERS_DASHBOARD). |
 
-Imports: `features/meters/Gauge.tsx`, `features/meters/gaugeDial.ts`, `features/meters/useMeters.ts`, `shared/components/states.tsx`, `shared/hooks/useNow.ts`, `shared/hooks/useReportTimeZone.ts`, `shared/lib/time.ts`, `shared/lib/wall.ts`
+Imports: `features/meters/Gauge.tsx`, `features/meters/gaugeDial.ts`, `features/meters/useMeters.ts`, `shared/components/states.tsx`, `shared/hooks/useAuth.ts`, `shared/hooks/useNow.ts`, `shared/hooks/useReportTimeZone.ts`, `shared/lib/time.ts`, `shared/lib/wall.ts`
 
 Packages: `react`
 
@@ -1363,7 +1365,7 @@ Tests that import it: `features/network/Links.test.tsx`
 The Maps page: the list of Zabbix maps and the topology of the chosen one. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/network/Maps.tsx -->
-285 lines, 1 export. Imported by 1 file.
+286 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -1375,7 +1377,7 @@ Packages: `react`
 
 Imported by: `App.tsx`
 
-Tests that import it: `features/network/MapsPage.test.tsx`
+Tests that import it: `features/network/MapsPage.test.tsx`, `features/network/mapsRetry.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/network/Network.tsx`
@@ -1383,19 +1385,19 @@ Tests that import it: `features/network/MapsPage.test.tsx`
 The Network page: devices grouped by site, with their interfaces. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/network/Network.tsx -->
-370 lines, 1 export. Imported by 1 file.
+384 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `default` | component | 56 | `function Network()` |  |
+| `default` | component | 58 | `function Network()` |  |
 
-Imports: `api/index.ts`, `features/graphs/RangePicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `shared/components/Field.tsx`, `shared/components/NoData.tsx`, `shared/components/Pager.tsx`, `shared/components/StatusBadge.tsx`, `shared/components/TableWrap.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useAuth.ts`, `shared/hooks/useDebounced.ts`, `shared/hooks/useUrlState.ts`, `shared/lib/sites.ts`, `shared/lib/units.ts`, `types/index.ts`
+Imports: `api/index.ts`, `features/graphs/RangePicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `shared/components/Field.tsx`, `shared/components/NoData.tsx`, `shared/components/Pager.tsx`, `shared/components/StatusBadge.tsx`, `shared/components/TableWrap.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useAuth.ts`, `shared/hooks/useDebounced.ts`, `shared/hooks/useReducedMotion.ts`, `shared/hooks/useReveal.ts`, `shared/hooks/useUrlState.ts`, `shared/lib/sites.ts`, and 2 more
 
 Packages: `react`
 
 Imported by: `App.tsx`
 
-Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/pagePastEnd.test.tsx`, `__tests__/sharedPages.test.tsx`, `features/network/networkPorts.test.tsx`
+Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/pagePastEnd.test.tsx`, `__tests__/sharedPages.test.tsx`, `features/network/networkPorts.test.tsx`, `features/network/networkScroll.test.tsx`, `features/network/panelReveal.test.tsx`, `features/network/portsPager.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/network/Sites.tsx`
@@ -1403,19 +1405,19 @@ Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/pagePastE
 The Sites page: a card for each site with its worst problem. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/network/Sites.tsx -->
-220 lines, 1 export. Imported by 1 file.
+229 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `default` | component | 129 | `function Sites()` |  |
+| `default` | component | 132 | `function Sites()` |  |
 
-Imports: `api/index.ts`, `features/hosts/HostTable.tsx`, `shared/components/Field.tsx`, `shared/components/StatusBadge.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useUrlState.ts`, `shared/lib/plural.ts`, `theme.ts`, `types/index.ts`
+Imports: `api/index.ts`, `features/hosts/HostTable.tsx`, `shared/components/Field.tsx`, `shared/components/StatusBadge.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useReveal.ts`, `shared/hooks/useUrlState.ts`, `shared/lib/plural.ts`, `theme.ts`, `types/index.ts`
 
 Packages: `react`
 
 Imported by: `App.tsx`
 
-Tests that import it: `__tests__/countPills.test.tsx`, `__tests__/sharedPages.test.tsx`, `__tests__/tooltipFacts.test.tsx`, `__tests__/urlFilters.test.tsx`
+Tests that import it: `__tests__/countPills.test.tsx`, `__tests__/sharedPages.test.tsx`, `__tests__/tooltipFacts.test.tsx`, `__tests__/urlFilters.test.tsx`, `features/network/panelReveal.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/network/mapLabels.ts`
@@ -1548,14 +1550,13 @@ Tests that import it: `features/problems/liveChange.test.ts`
 How long a new problem stays marked and a cleared one stays on screen. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/features/problems/useChangeHighlight.ts -->
-109 lines, 4 exports. Imported by 2 files.
+94 lines, 3 exports. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `ChangeMark` | type | 4 | `type ChangeMark = 'new' \| 'cleared'` |  |
 | `HIGHLIGHT_MS` | constant | 7 | `const HIGHLIGHT_MS = 10_000` | How long a problem that appeared stays marked, and one that cleared stays on screen. |
-| `useReducedMotion` | hook | 12 | `function useReducedMotion(): boolean` | Whether the user has asked the system for less motion, following changes to the setting. |
-| `useChangeHighlight` | hook | 43 | `function useChangeHighlight(open: Problem[] \| null, held: ReadonlySet<string>, on: boolean, shownOf: (open:...` | Problems that appeared in or cleared from the open list, for the wall screen's short highlight (DESIGN.md section 9). |
+| `useChangeHighlight` | hook | 28 | `function useChangeHighlight(open: Problem[] \| null, held: ReadonlySet<string>, on: boolean, shownOf: (open:...` | Problems that appeared in or cleared from the open list, for the wall screen's short highlight (DESIGN.md section 9). |
 
 Imports: `types/index.ts`
 
@@ -1573,7 +1574,7 @@ Tests that import it: `features/problems/useChangeHighlight.test.ts`
 The alert-noise report page. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/reports/AlertNoise.tsx -->
-276 lines, 1 export. Imported by 1 file.
+278 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -1585,7 +1586,7 @@ Packages: `react`
 
 Imported by: `App.tsx`
 
-Tests that import it: `__tests__/urlFilters.test.tsx`, `features/reports/csvPages.test.tsx`
+Tests that import it: `__tests__/urlFilters.test.tsx`, `features/reports/csvPages.test.tsx`, `features/reports/retryOnFailure.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/reports/Capacity.tsx`
@@ -1593,19 +1594,19 @@ Tests that import it: `__tests__/urlFilters.test.tsx`, `features/reports/csvPage
 The capacity trends page. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/reports/Capacity.tsx -->
-190 lines, 1 export. Imported by 1 file.
+197 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `default` | component | 126 | `function Capacity()` |  |
+| `default` | component | 132 | `function Capacity()` |  |
 
-Imports: `api/index.ts`, `shared/components/Field.tsx`, `shared/components/NoData.tsx`, `shared/components/TableWrap.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useUrlState.ts`, `types/index.ts`
+Imports: `api/index.ts`, `shared/components/Field.tsx`, `shared/components/NoData.tsx`, `shared/components/TableWrap.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useAuth.ts`, `shared/hooks/useUrlState.ts`, `types/index.ts`
 
 Packages: `react-router-dom`
 
 Imported by: `App.tsx`
 
-Tests that import it: `features/reports/Capacity.test.tsx`, `shared/lib/freshness.test.tsx`
+Tests that import it: `features/reports/Capacity.test.tsx`, `features/reports/retryOnFailure.test.tsx`, `shared/lib/freshness.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/reports/Inventory.tsx`
@@ -1613,11 +1614,11 @@ Tests that import it: `features/reports/Capacity.test.tsx`, `shared/lib/freshnes
 The inventory and ownership scorecard page, for admins. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/reports/Inventory.tsx -->
-235 lines, 1 export. Imported by 1 file.
+269 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `default` | component | 63 | `function Inventory()` |  |
+| `default` | component | 68 | `function Inventory()` |  |
 
 Imports: `api/index.ts`, `shared/components/NoData.tsx`, `shared/components/TableWrap.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useUrlState.ts`, `shared/lib/csv.ts`, `shared/lib/plural.ts`, `shared/lib/time.ts`, `types/index.ts`
 
@@ -1625,7 +1626,7 @@ Packages: `react`
 
 Imported by: `App.tsx`
 
-Tests that import it: `__tests__/urlFilters.test.tsx`, `features/reports/csvPages.test.tsx`
+Tests that import it: `__tests__/urlFilters.test.tsx`, `features/reports/csvPages.test.tsx`, `features/reports/inventoryDefaults.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/reports/TopTriggers.tsx`
@@ -1633,7 +1634,7 @@ Tests that import it: `__tests__/urlFilters.test.tsx`, `features/reports/csvPage
 The top 100 triggers page. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/reports/TopTriggers.tsx -->
-95 lines, 1 export. Imported by 1 file.
+96 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -1645,7 +1646,7 @@ Packages: `react`
 
 Imported by: `App.tsx`
 
-Tests that import it: `__tests__/urlFilters.test.tsx`
+Tests that import it: `__tests__/urlFilters.test.tsx`, `features/reports/retryOnFailure.test.tsx`
 <!-- /gen -->
 
 ## `web/src/features/shell`
@@ -1655,12 +1656,12 @@ Tests that import it: `__tests__/urlFilters.test.tsx`
 Catches a page that throws and reloads once when an old page asks for a chunk that is gone. Walked through in [Web app: the shell and the shared code](web-shell-and-shared.md).
 
 <!-- gen:card web/src/features/shell/ErrorBoundary.tsx -->
-75 lines, 2 exports. Imported by 2 files.
+80 lines, 2 exports. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `ErrorBoundary` | class | 8 | `class ErrorBoundary extends Component<` | Catches a page that throws while rendering, so one broken view shows an error card inside the layout instead of blanking the whole portal, sidebar... |
-| `reloadOnStaleChunks` | function | 45 | `function reloadOnStaleChunks(): void` | After a deploy, a tab opened earlier asks for page chunks that no longer exist, and Vite reports `vite:preloadError`. |
+| `reloadOnStaleChunks` | function | 50 | `function reloadOnStaleChunks(): void` | After a deploy, a tab opened earlier asks for page chunks that no longer exist, and Vite reports `vite:preloadError`. |
 
 Imports: none
 
@@ -1676,21 +1677,21 @@ Tests that import it: `__tests__/mainZone.test.tsx`, `features/shell/ErrorBounda
 The shell around every page: sidebar, top bar, the page title and the Outlet. Walked through in [Web app: the pages](web-features.md), [Web app: the shell and the shared code](web-shell-and-shared.md).
 
 <!-- gen:card web/src/features/shell/Layout.tsx -->
-140 lines, 3 exports. Imported by 2 files.
+144 lines, 3 exports. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `LayoutContext` | type | 16 | `type LayoutContext = { wall: boolean; exitWall: () => void }` | What a page learns from the shell, via useOutletContext. |
-| `titleFor` | function | 19 | `function titleFor(pathname: string): string \| null` | A page's menu name, or null for an address that is not a page. |
-| `default` | component | 24 | `function Layout()` |  |
+| `LayoutContext` | type | 17 | `type LayoutContext = { wall: boolean; exitWall: () => void }` | What a page learns from the shell, via useOutletContext. |
+| `titleFor` | function | 20 | `function titleFor(pathname: string): string \| null` | A page's menu name, or null for an address that is not a page. |
+| `default` | component | 25 | `function Layout()` |  |
 
-Imports: `api/index.ts`, `features/shell/ErrorBoundary.tsx`, `features/shell/Sidebar.tsx`, `features/shell/TodayDate.tsx`, `features/shell/usePageTitle.ts`, `features/shell/useSessionRenewal.ts`, `features/shell/useUiPrefs.ts`, `features/shell/useWallMode.ts`, `shared/components/states.tsx`, `shared/hooks/useAuth.ts`, `shared/hooks/useDialogFocus.ts`
+Imports: `api/index.ts`, `features/shell/ErrorBoundary.tsx`, `features/shell/Sidebar.tsx`, `features/shell/TodayDate.tsx`, `features/shell/usePageTitle.ts`, `features/shell/useSessionRenewal.ts`, `features/shell/useTopBarHeight.ts`, `features/shell/useUiPrefs.ts`, `features/shell/useWallMode.ts`, `shared/components/states.tsx`, `shared/hooks/useAuth.ts`, `shared/hooks/useDialogFocus.ts`
 
 Packages: `react`, `react-router-dom`
 
 Imported by: `App.tsx`, `features/dashboard/Overview.tsx`
 
-Tests that import it: `__tests__/narrowScreen.test.tsx`, `__tests__/routes.test.tsx`, `features/shell/LayoutSignOut.test.tsx`
+Tests that import it: `__tests__/narrowScreen.test.tsx`, `__tests__/routes.test.tsx`, `features/shell/LayoutSignOut.test.tsx`, `features/shell/LayoutTopBar.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/shell/NotFound.tsx`
@@ -1718,12 +1719,12 @@ Tests that import it: none
 The grouped menu, filtered by the role, with the build in its footer. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/shell/Sidebar.tsx -->
-197 lines, 2 exports. Imported by 1 file.
+196 lines, 2 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `PAGE_TITLES` | constant | 77 | `const PAGE_TITLES: Record<string, string>` | The top bar's page title for each route: the menu label that opens it. |
-| `default` | component | 135 | `function Sidebar({ collapsed, locked = false, onToggle, }: { collapsed: boolean; /** The screen is too narrow to...` |  |
+| `PAGE_TITLES` | constant | 76 | `const PAGE_TITLES: Record<string, string>` | The top bar's page title for each route: the menu label that opens it. |
+| `default` | component | 134 | `function Sidebar({ collapsed, locked = false, onToggle, }: { collapsed: boolean; /** The screen is too narrow to...` |  |
 
 Imports: `features/assistant/useAi.ts`, `features/shell/build.ts`, `features/shell/useBuild.ts`, `shared/components/BrandMark.tsx`, `shared/components/icons.tsx`, `shared/hooks/useAuth.ts`, `types/index.ts`
 
@@ -1832,6 +1833,26 @@ Imported by: `features/shell/Layout.tsx`
 Tests that import it: none
 <!-- /gen -->
 
+### `web/src/features/shell/useTopBarHeight.ts`
+
+Writes the measured height of the sticky top bar into the custom property `--topbar-h` and keeps it current as the bar changes, so that the room the page keeps under the bar when a control is focused is the bar's own, on a narrow window and at high zoom, where its controls wrap (UX-51). It takes the property away when the bar goes, as it does in wall mode.
+
+<!-- gen:card web/src/features/shell/useTopBarHeight.ts -->
+19 lines, 1 export. Imported by 1 file.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `useTopBarHeight` | hook | 4 | `function useTopBarHeight(ref: RefObject<HTMLElement \| null>, active: boolean): void` | Keeps `--topbar-h` at the sticky bar's measured height, which `scroll-padding-top` reads, so that a bar that wraps never covers a focused control... |
+
+Imports: none
+
+Packages: `react`
+
+Imported by: `features/shell/Layout.tsx`
+
+Tests that import it: `features/shell/useTopBarHeight.test.tsx`
+<!-- /gen -->
+
 ### `web/src/features/shell/useUiPrefs.ts`
 
 The theme, the narrow-screen rule and the collapsed sidebar, kept in the browser. Walked through in [Web app: the stylesheet](web-styles.md).
@@ -1879,24 +1900,24 @@ Tests that import it: none
 
 ## `web/src/features/sla`
 
-### `web/src/features/sla/Availability.tsx`
+### `web/src/features/sla/AvailabilityRedirect.tsx`
 
-The availability and response report page. Walked through in [Web app: the pages](web-features.md).
+Sends the old address of the Availability and response page to the SLA page, with the period and the method it asked for. Walked through in [Web app: the pages](web-features.md).
 
-<!-- gen:card web/src/features/sla/Availability.tsx -->
-432 lines, 1 export. Imported by 1 file.
+<!-- gen:card web/src/features/sla/AvailabilityRedirect.tsx -->
+23 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `default` | component | 148 | `function Availability()` |  |
+| `default` | component | 12 | `function AvailabilityRedirect()` |  |
 
-Imports: `api/index.ts`, `features/assistant/useAi.ts`, `features/sla/EmailReport.tsx`, `features/sla/ReportDownload.tsx`, `features/sla/Sli.tsx`, `shared/components/Field.tsx`, `shared/components/KpiCard.tsx`, `shared/components/NoData.tsx`, `shared/components/StatusBadge.tsx`, `shared/components/TableWrap.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useReportTimeZone.ts`, `shared/hooks/useUrlState.ts`, `shared/lib/plural.ts`, `shared/lib/time.ts`, and 3 more
+Imports: `features/sla/Sli.tsx`
 
-Packages: `react`, `react-router-dom`
+Packages: `react-router-dom`
 
 Imported by: `App.tsx`
 
-Tests that import it: `__tests__/reportZoneUi.test.tsx`, `features/sla/ReportDownload.test.tsx`, `features/sla/slaKpiCards.test.tsx`, `shared/lib/freshness.test.tsx`
+Tests that import it: `features/sla/AvailabilityRedirect.test.tsx`
 <!-- /gen -->
 
 ### `web/src/features/sla/EmailReport.tsx`
@@ -1904,7 +1925,7 @@ Tests that import it: `__tests__/reportZoneUi.test.tsx`, `features/sla/ReportDow
 The Email report and Schedule buttons and the dialog for emailing a month's report by hand. It asks the server whether email is on and shows itself only to administrators. In the dialog the person ticks the files (PDF, Excel, a zip of CSV files), types the addresses and may keep the list for next time, and afterwards it says in words which files went to how many people, or why they did not. When a send or a schedule has kept a list it asks the server again, so the next dialog starts from that list.
 
 <!-- gen:card web/src/features/sla/EmailReport.tsx -->
-307 lines, 2 exports. Imported by 2 files.
+307 lines, 2 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -1915,7 +1936,7 @@ Imports: `api/index.ts`, `features/sla/FileChoices.tsx`, `features/sla/ReportDia
 
 Packages: `react`
 
-Imported by: `features/sla/Availability.tsx`, `features/sla/Sla.tsx`
+Imported by: `features/sla/Sla.tsx`
 
 Tests that import it: `features/sla/EmailReport.test.tsx`
 <!-- /gen -->
@@ -1967,7 +1988,7 @@ Tests that import it: `__tests__/dialogOverlays.test.tsx`, `features/sla/ReportD
 The buttons that download a month's SLA report as a PDF, an Excel file or a zip of CSV files. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/sla/ReportDownload.tsx -->
-162 lines, 4 exports, 1 re-export. Imported by 4 files.
+162 lines, 4 exports, 1 re-export. Imported by 3 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -1981,7 +2002,7 @@ Imports: `api/index.ts`, `features/sla/ReportStyleButton.tsx`, `features/sla/rep
 
 Packages: `react`
 
-Imported by: `features/sla/Availability.tsx`, `features/sla/EmailReport.tsx`, `features/sla/ReportSchedule.tsx`, `features/sla/Sla.tsx`
+Imported by: `features/sla/EmailReport.tsx`, `features/sla/ReportSchedule.tsx`, `features/sla/Sla.tsx`
 
 Tests that import it: `features/sla/ReportDownload.test.tsx`
 <!-- /gen -->
@@ -2027,6 +2048,44 @@ Imported by: `features/sla/ReportDownload.tsx`
 Tests that import it: `features/sla/ReportStyleButton.test.tsx`
 <!-- /gen -->
 
+### `web/src/features/sla/Response.tsx`
+
+The Response tab of the SLA page: the problems nobody has acknowledged, by age. Walked through in [Web app: the pages](web-features.md).
+
+<!-- gen:card web/src/features/sla/Response.tsx -->
+86 lines, 1 export. Imported by 1 file.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `default` | component | 15 | `function ResponseTab()` | Response (HCML Goal 6): how long problems have waited without anyone acknowledging them. |
+
+Imports: `api/index.ts`, `shared/components/NoData.tsx`, `shared/components/StatusBadge.tsx`, `shared/components/TableWrap.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/lib/plural.ts`, `shared/lib/units.ts`, `types/index.ts`
+
+Imported by: `features/sla/Sla.tsx`
+
+Tests that import it: none
+<!-- /gen -->
+
+### `web/src/features/sla/Rolling.tsx`
+
+The last 7 or 30 days on the SLA page: the availability of each device over a window that ends now. Walked through in [Web app: the pages](web-features.md).
+
+<!-- gen:card web/src/features/sla/Rolling.tsx -->
+205 lines, 1 export. Imported by 1 file.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `default` | component | 154 | `function RollingSla({ days, period, setPeriod, method, setMethod, }: { days: number; period: string; setPeriod: (p:...` |  |
+
+Imports: `api/index.ts`, `features/sla/Sli.tsx`, `features/sla/sitesBelow.ts`, `shared/components/KpiCard.tsx`, `shared/components/NoData.tsx`, `shared/components/TableWrap.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useReportTimeZone.ts`, `shared/lib/plural.ts`, `shared/lib/time.ts`, `shared/lib/units.ts`, `types/index.ts`
+
+Packages: `react-router-dom`
+
+Imported by: `features/sla/Sla.tsx`
+
+Tests that import it: none
+<!-- /gen -->
+
 ### `web/src/features/sla/SavedList.tsx`
 
 The view of the saved list of people a report goes to, shown inside the Email and Schedule dialogs for administrators. It lists each address with a button to remove it, has a box to add one and a button to delete the whole list, and saves each change at once through `api.sliRecipientsSave` and `api.sliRecipientsDelete`. It says what applies afterwards, either the list the portal started with (`MAIL_TO`) or nobody, and it gives a failure in the portal's own words, or says that the list may or may not have changed when the answer never came (FR-31). One change goes at a time, and a late answer after the dialog has gone changes nothing on the page.
@@ -2052,11 +2111,11 @@ Tests that import it: `features/sla/SavedList.test.tsx`
 The service tree page. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/sla/Services.tsx -->
-449 lines, 1 export. Imported by 1 file.
+446 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `default` | component | 402 | `function Services()` |  |
+| `default` | component | 399 | `function Services()` |  |
 
 Imports: `api/index.ts`, `features/assistant/ExplainPanel.tsx`, `features/assistant/useAi.ts`, `features/sla/Sli.tsx`, `features/sla/percent.ts`, `shared/components/Field.tsx`, `shared/components/StatusBadge.tsx`, `shared/components/icons.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useReportTimeZone.ts`, `shared/hooks/useUrlState.ts`, `shared/lib/plural.ts`, `shared/lib/time.ts`, `theme.ts`, `types/index.ts`
 
@@ -2069,55 +2128,62 @@ Tests that import it: `__tests__/urlFilters.test.tsx`, `features/sla/Services.te
 
 ### `web/src/features/sla/Sla.tsx`
 
-The SLA page: Zabbix's SLA objects and the derived monthly figure, in tabs. Walked through in [Web app: the pages](web-features.md).
+The SLA page: Zabbix's SLA objects, the derived monthly figure and the Response tab, in tabs. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/sla/Sla.tsx -->
-846 lines, 1 export. Imported by 1 file.
+905 lines, 1 export. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `default` | component | 770 | `function SlaPage()` |  |
+| `default` | component | 830 | `function SlaPage()` |  |
 
-Imports: `api/index.ts`, `features/assistant/ExplainPanel.tsx`, `features/assistant/useAi.ts`, `features/sla/EmailReport.tsx`, `features/sla/ReportDownload.tsx`, `features/sla/Sli.tsx`, `shared/components/Field.tsx`, `shared/components/KpiCard.tsx`, `shared/components/NoData.tsx`, `shared/components/TableWrap.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useReportTimeZone.ts`, `shared/hooks/useUrlState.ts`, `shared/lib/freshness.ts`, `shared/lib/plural.ts`, and 4 more
+Imports: `api/index.ts`, `features/assistant/ExplainPanel.tsx`, `features/assistant/useAi.ts`, `features/sla/EmailReport.tsx`, `features/sla/ReportDownload.tsx`, `features/sla/Response.tsx`, `features/sla/Rolling.tsx`, `features/sla/Sli.tsx`, `features/sla/sitesBelow.ts`, `shared/components/Field.tsx`, `shared/components/KpiCard.tsx`, `shared/components/NoData.tsx`, `shared/components/TableWrap.tsx`, `shared/components/states.tsx`, `shared/hooks/useAsync.ts`, `shared/hooks/useReportTimeZone.ts`, and 7 more
 
 Packages: `react`, `react-router-dom`
 
 Imported by: `App.tsx`
 
-Tests that import it: `__tests__/reportZoneUi.test.tsx`, `features/sla/ReportDownload.test.tsx`, `features/sla/SlaTabs.test.tsx`, `features/sla/slaKpiCards.test.tsx`, `shared/lib/freshness.test.tsx`
+Tests that import it: `__tests__/reportZoneUi.test.tsx`, `features/sla/ReportDownload.test.tsx`, `features/sla/SlaTabs.test.tsx`, `features/sla/derivedBanner.test.tsx`, `features/sla/deviceTable.test.tsx`, `features/sla/monthRows.test.tsx`, `features/sla/responseTab.test.tsx`, `features/sla/rollingWindow.test.tsx`, and 3 more
 <!-- /gen -->
 
 ### `web/src/features/sla/Sli.tsx`
 
-Small shared pieces of the derived SLA views: the month picker, pills and notes. Walked through in [Web app: the pages](web-features.md).
+Small shared pieces of the derived SLA views: the period picker, pills and notes. Walked through in [Web app: the pages](web-features.md).
 
 <!-- gen:card web/src/features/sla/Sli.tsx -->
-203 lines, 14 exports. Imported by 3 files.
+250 lines, 21 exports. Imported by 4 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `DERIVED_BANNER` | constant | 16 | `const DERIVED_BANNER` |  |
-| `METHOD_LABEL` | constant | 19 | `const METHOD_LABEL: Record<SliProfile, string>` |  |
-| `METHOD_NOTE` | constant | 25 | `const METHOD_NOTE` | One short sentence on why the two figures differ. |
-| `fmtPct` | function | 30 | `const fmtPct = (v: number \| null \| undefined, digits: number = PERCENT_DP.availability, target?: number) =>` | Pass `target` whenever the figure is shown beside Met or Missed, so rounding cannot print it as the target. |
-| `fmtDur` | function | 35 | `const fmtDur = (seconds: number \| null \| undefined) =>` |  |
-| `NoDataPill` | component | 38 | `function NoDataPill({ title }: { title?: string })` |  |
-| `SliPill` | component | 47 | `function SliPill({ sli, target, dataStatus, digits = PERCENT_DP.availability, }: { sli: number \| null; target:...` | A percentage against the target: green met, red missed, grey "No data", never 0%. |
-| `CoverageText` | component | 78 | `function CoverageText({ coverage }: { coverage: number \| null \| undefined })` |  |
-| `MonthSelect` | component | 85 | `function MonthSelect({ value, onChange, label = 'Month', }: { value: string; onChange: (m: string) => void; label?:...` | The current month (marked "so far") and the 11 before it, in the report zone. |
-| `lastClosedMonth` | function | 112 | `const lastClosedMonth = () =>` | The last closed month: a full month is the natural default for an SLA. |
-| `MethodToggle` | component | 114 | `function MethodToggle({ value, onChange, label = 'Method', }: { value: SliProfile; onChange: (p: SliProfile) =>...` |  |
-| `gapsSummary` | function | 179 | `const gapsSummary = (gaps: SliGap[]) =>` | "Excluded 6.9 days with no collected data: 1 - 2 Aug, 8 - 11 Aug …" |
-| `declaredSummary` | function | 182 | `const declaredSummary = (windows: SliGap[]) =>` | The spans the setting SLA_NO_DATA_WINDOWS declares not measured, such as a collector that ran off HCML's network. |
-| `GapsNote` | component | 190 | `function GapsNote({ gaps, windows, profile, }: { gaps: SliGap[] \| undefined; windows: SliGap[] \| undefined; /**...` |  |
+| `DERIVED_BANNER` | constant | 17 | `const DERIVED_BANNER` | The Services page's banner. |
+| `DERIVED_SLA_BANNER` | constant | 21 | `const DERIVED_SLA_BANNER` | The banner of the SLA page and the report files. |
+| `WEB_AGING_NOTE` | constant | 24 | `const WEB_AGING_NOTE` | Over the Web checks of a month that has closed, and in the report files: the readings behind these figures age out (BK-60). |
+| `WEB_KEPT_NOTE_BEFORE` | constant | 28 | `const WEB_KEPT_NOTE_BEFORE` | Around the date the figures of a closed month were taken, when they are kept (ADR 0016); the report files carry a copy that a test keeps equal. |
+| `WEB_KEPT_NOTE_AFTER` | constant | 29 | `const WEB_KEPT_NOTE_AFTER` |  |
+| `webNote` | function | 32 | `function webNote(report: Pick<SliReport, 'closed' \| 'profile' \| 'webTakenAt' \| 'timezone'>): string \| null` | What to say over the Web checks of a month: when the figures were taken and that they are kept, else that a closed month's can still change. |
+| `METHOD_LABEL` | constant | 38 | `const METHOD_LABEL: Record<SliProfile, string>` |  |
+| `METHOD_NOTE` | constant | 44 | `const METHOD_NOTE` | One short sentence on why the two figures differ. |
+| `fmtPct` | function | 49 | `const fmtPct = (v: number \| null \| undefined, digits: number = PERCENT_DP.availability, target?: number) =>` | Pass `target` whenever the figure is shown beside Met or Missed, so rounding cannot print it as the target. |
+| `fmtDur` | function | 54 | `const fmtDur = (seconds: number \| null \| undefined) =>` |  |
+| `NoDataPill` | component | 57 | `function NoDataPill({ title }: { title?: string })` |  |
+| `SliPill` | component | 66 | `function SliPill({ sli, target, dataStatus, digits = PERCENT_DP.availability, }: { sli: number \| null; target:...` | A percentage against the target: green met, red missed, grey "No data", never 0%. |
+| `CoverageText` | component | 97 | `function CoverageText({ coverage }: { coverage: number \| null \| undefined })` |  |
+| `ROLLING_WINDOWS` | constant | 104 | `const ROLLING_WINDOWS` | The windows the SLA page offers beside the months. |
+| `rollingDays` | function | 110 | `const rollingDays = (period: string): number \| null =>` | The days of a window key such as `d7`; null for anything else, a month included. |
+| `MonthSelect` | component | 113 | `function MonthSelect({ value, onChange, label = 'Month', rolling = false, }: { value: string; onChange: (m: string)...` | The current month (marked "so far") and the 11 before it, in the report zone, with the windows first when `rolling`. |
+| `lastClosedMonth` | function | 156 | `const lastClosedMonth = () =>` | The last closed month: a full month is the natural default for an SLA. |
+| `MethodToggle` | component | 158 | `function MethodToggle({ value, onChange, label = 'Method', }: { value: SliProfile; onChange: (p: SliProfile) =>...` |  |
+| `gapsSummary` | function | 228 | `const gapsSummary = (gaps: SliGap[]) =>` | "Excluded 6.9 days with no collected data: 1 - 2 Aug, 8 - 11 Aug …" |
+| `declaredSummary` | function | 231 | `const declaredSummary = (windows: SliGap[]) =>` | The spans the setting SLA_NO_DATA_WINDOWS declares not measured, such as a collector that ran off HCML's network. |
+| `GapsNote` | component | 238 | `function GapsNote({ gaps, windows, profile, }: { gaps: SliGap[] \| undefined; windows: SliGap[] \| undefined; profile:...` |  |
 
-Imports: `features/sla/percent.ts`, `shared/components/Field.tsx`, `shared/components/NoData.tsx`, `shared/hooks/useReportTimeZone.ts`, `shared/lib/time.ts`, `shared/lib/units.ts`, `types/index.ts`
+Imports: `features/sla/percent.ts`, `shared/components/Field.tsx`, `shared/components/NoData.tsx`, `shared/hooks/useReportTimeZone.ts`, `shared/lib/plural.ts`, `shared/lib/time.ts`, `shared/lib/units.ts`, `types/index.ts`
 
 Packages: `react`
 
-Imported by: `features/sla/Availability.tsx`, `features/sla/Services.tsx`, `features/sla/Sla.tsx`
+Imported by: `features/sla/AvailabilityRedirect.tsx`, `features/sla/Rolling.tsx`, `features/sla/Services.tsx`, `features/sla/Sla.tsx`
 
-Tests that import it: `__tests__/markup.test.tsx`, `__tests__/reportZoneUi.test.tsx`, `__tests__/tooltipFacts.test.tsx`, `__tests__/urlFilters.test.tsx`, `features/sla/SliPill.test.tsx`, `features/sla/percent.test.ts`
+Tests that import it: `__tests__/markup.test.tsx`, `__tests__/reportZoneUi.test.tsx`, `__tests__/tooltipFacts.test.tsx`, `__tests__/urlFilters.test.tsx`, `features/sla/SlaTabs.test.tsx`, `features/sla/SliPill.test.tsx`, `features/sla/monthRows.test.tsx`, `features/sla/percent.test.ts`, and 1 more
 <!-- /gen -->
 
 ### `web/src/features/sla/StyleFields.tsx`
@@ -2212,21 +2278,39 @@ Tests that import it: `features/sla/EmailReport.test.tsx`, `features/sla/ReportD
 Types made from the API description by a tool; never edited by hand. Walked through in [Web app: the API client, the types and the guards](web-api-types-guards.md).
 
 <!-- gen:card web/src/generated/openapi.ts -->
-4566 lines, generated, never edited by hand. Imported by 0 files.
+4694 lines, generated, never edited by hand. Imported by 0 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `paths` | interface | 6 | `interface paths` |  |
-| `webhooks` | type | 1390 | `type webhooks = Record<string, never>` |  |
-| `components` | interface | 1391 | `interface components` |  |
-| `$defs` | type | 2579 | `type $defs = Record<string, never>` |  |
-| `operations` | interface | 2580 | `interface operations` |  |
+| `webhooks` | type | 1396 | `type webhooks = Record<string, never>` |  |
+| `components` | interface | 1397 | `interface components` |  |
+| `$defs` | type | 2616 | `type $defs = Record<string, never>` |  |
+| `operations` | interface | 2617 | `interface operations` |  |
 
 Imports: none
 
 Imported by: none
 
 Tests that import it: `__tests__/openapiTypes.test.ts`
+<!-- /gen -->
+
+### `web/src/features/sla/sitesBelow.ts`
+
+The words of the Sites below target card, for a month and for a window: how many sites fall short of the target, the names of the first three, and how many have no figure to judge, so that "all sites at or above the target" is not said over sites nobody measured (FR-50).
+
+<!-- gen:card web/src/features/sla/sitesBelow.ts -->
+17 lines, 1 export. Imported by 2 files.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `sitesBelowCard` | function | 4 | `function sitesBelowCard(sites: readonly Pick<SliGroup, 'name' \| 'sli' \| 'meeting'>[], target: number): { value:...` | The "Sites below target" card, from the sites of one report: how many fall short, which, and how many have no figure to judge (FR-50). |
+
+Imports: `types/index.ts`
+
+Imported by: `features/sla/Rolling.tsx`, `features/sla/Sla.tsx`
+
+Tests that import it: `features/sla/sitesBelow.test.ts`
 <!-- /gen -->
 
 ## `web/src/guards`
@@ -2537,22 +2621,22 @@ Tests that import it: none
 The checks for availability and SLA. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/guards/sla.ts -->
-248 lines, 12 exports. Imported by 1 file.
+249 lines, 12 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `availabilityGuard` | constant | 162 | `const availabilityGuard = guard<AvailabilityReport>('the availability report', availability)` | GET /api/reports/availability, either basis. |
-| `servicesGuard` | constant | 165 | `const servicesGuard = guard<ServicesResponse>('the service tree', services)` | GET /api/services. |
-| `derivedServicesGuard` | constant | 168 | `const derivedServicesGuard = guard<DerivedServicesResponse>('the service tree', derivedServices)` | GET /api/services/derived. |
-| `sliGuard` | constant | 171 | `const sliGuard = guard<SliReport>('the SLA report', sli)` | GET /api/sli. |
-| `slaSourceGuard` | constant | 174 | `const slaSourceGuard = guard<SlaSource>('the SLA source', slaSource)` | GET /api/sla/source. |
-| `slaListGuard` | constant | 177 | `const slaListGuard = guard<Sla[]>('the SLA list', listOf(sla))` | GET /api/sla. |
-| `slaSliGuard` | constant | 180 | `const slaSliGuard = guard<SlaSli[]>('the SLA figures', listOf(slaSli))` | GET /api/sla/sli. |
-| `emailInfoGuard` | constant | 183 | `const emailInfoGuard = guard<EmailInfo>('the email settings', shape<EmailInfo>({ enabled: flag, from: text...` | GET /api/sli/email. |
-| `savedRecipientsGuard` | constant | 189 | `const savedRecipientsGuard = guard<SavedRecipients>('the saved list', shape<SavedRecipients>({ recipients:...` | PUT /api/sli/recipients. |
-| `deletedRecipientsGuard` | constant | 192 | `const deletedRecipientsGuard = guard<DeletedRecipients>('the saved list', shape<DeletedRecipients>({ recipients:...` | DELETE /api/sli/recipients. |
-| `emailSentGuard` | constant | 195 | `const emailSentGuard = guard<EmailSent>('the email answer', shape<EmailSent>({ sent: num, refused: num, month: text...` | POST /api/sli/email: the mail has gone by the time this is read, so a page must not crash on it. |
-| `scheduleInfoGuard` | constant | 234 | `const scheduleInfoGuard = guard<ScheduleInfo>('the schedule', shape<ScheduleInfo>({ available: flag, why: text...` | GET and PUT /api/sli/schedule. |
+| `availabilityGuard` | constant | 163 | `const availabilityGuard = guard<AvailabilityReport>('the availability report', availability)` | GET /api/reports/availability, either basis. |
+| `servicesGuard` | constant | 166 | `const servicesGuard = guard<ServicesResponse>('the service tree', services)` | GET /api/services. |
+| `derivedServicesGuard` | constant | 169 | `const derivedServicesGuard = guard<DerivedServicesResponse>('the service tree', derivedServices)` | GET /api/services/derived. |
+| `sliGuard` | constant | 172 | `const sliGuard = guard<SliReport>('the SLA report', sli)` | GET /api/sli. |
+| `slaSourceGuard` | constant | 175 | `const slaSourceGuard = guard<SlaSource>('the SLA source', slaSource)` | GET /api/sla/source. |
+| `slaListGuard` | constant | 178 | `const slaListGuard = guard<Sla[]>('the SLA list', listOf(sla))` | GET /api/sla. |
+| `slaSliGuard` | constant | 181 | `const slaSliGuard = guard<SlaSli[]>('the SLA figures', listOf(slaSli))` | GET /api/sla/sli. |
+| `emailInfoGuard` | constant | 184 | `const emailInfoGuard = guard<EmailInfo>('the email settings', shape<EmailInfo>({ enabled: flag, from: text...` | GET /api/sli/email. |
+| `savedRecipientsGuard` | constant | 190 | `const savedRecipientsGuard = guard<SavedRecipients>('the saved list', shape<SavedRecipients>({ recipients:...` | PUT /api/sli/recipients. |
+| `deletedRecipientsGuard` | constant | 193 | `const deletedRecipientsGuard = guard<DeletedRecipients>('the saved list', shape<DeletedRecipients>({ recipients:...` | DELETE /api/sli/recipients. |
+| `emailSentGuard` | constant | 196 | `const emailSentGuard = guard<EmailSent>('the email answer', shape<EmailSent>({ sent: num, refused: num, month: text...` | POST /api/sli/email: the mail has gone by the time this is read, so a page must not crash on it. |
+| `scheduleInfoGuard` | constant | 235 | `const scheduleInfoGuard = guard<ScheduleInfo>('the schedule', shape<ScheduleInfo>({ available: flag, why: text...` | GET and PUT /api/sli/schedule. |
 
 Imports: `guards/hosts.ts`, `guards/shape.ts`, `types/index.ts`
 
@@ -2607,7 +2691,7 @@ Tests that import it: none
 One cell of a controls row: a label above its control. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/shared/components/Field.tsx -->
-31 lines, 3 exports. Imported by 16 files.
+31 lines, 3 exports. Imported by 15 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2619,7 +2703,7 @@ Imports: none
 
 Packages: `react`
 
-Imported by: `features/graphs/HostDetail.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/hosts/LatestData.tsx`, `features/network/Links.tsx`, `features/network/Maps.tsx`, `features/network/Network.tsx`, `features/network/Sites.tsx`, `features/problems/Problems.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/Capacity.tsx`, `features/reports/TopTriggers.tsx`, `features/sla/Availability.tsx`, `features/sla/Services.tsx`, and 2 more
+Imported by: `features/graphs/HostDetail.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/hosts/LatestData.tsx`, `features/network/Links.tsx`, `features/network/Maps.tsx`, `features/network/Network.tsx`, `features/network/Sites.tsx`, `features/problems/Problems.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/Capacity.tsx`, `features/reports/TopTriggers.tsx`, `features/sla/Services.tsx`, `features/sla/Sla.tsx`, and 1 more
 
 Tests that import it: `__tests__/sharedPieces.test.tsx`
 <!-- /gen -->
@@ -2637,7 +2721,7 @@ A figure card, with a stripe only when a state sets one. No chapter walks throug
 
 Imports: `shared/components/NoData.tsx`
 
-Imported by: `features/dashboard/HostsView.tsx`, `features/dashboard/Overview.tsx`, `features/network/Links.tsx`, `features/reports/AlertNoise.tsx`, `features/sla/Availability.tsx`, `features/sla/Sla.tsx`
+Imported by: `features/dashboard/HostsView.tsx`, `features/dashboard/Overview.tsx`, `features/network/Links.tsx`, `features/reports/AlertNoise.tsx`, `features/sla/Rolling.tsx`, `features/sla/Sla.tsx`
 
 Tests that import it: none
 <!-- /gen -->
@@ -2647,7 +2731,7 @@ Tests that import it: none
 The placeholder for no value, spoken as words by a screen reader. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/shared/components/NoData.tsx -->
-18 lines, 2 exports. Imported by 17 files.
+18 lines, 2 exports. Imported by 18 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2658,7 +2742,7 @@ Imports: none
 
 Packages: `react`
 
-Imported by: `features/assistant/ExplainPanel.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/hosts/HostTable.tsx`, `features/hosts/LatestData.tsx`, `features/network/Links.tsx`, `features/network/Network.tsx`, `features/problems/Problems.tsx`, `features/problems/ProblemsTable.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/Capacity.tsx`, `features/reports/Inventory.tsx`, `features/reports/TopTriggers.tsx`, `features/sla/Availability.tsx`, `features/sla/Sla.tsx`, and 3 more
+Imported by: `features/assistant/ExplainPanel.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/hosts/HostTable.tsx`, `features/hosts/LatestData.tsx`, `features/network/Links.tsx`, `features/network/Network.tsx`, `features/problems/Problems.tsx`, `features/problems/ProblemsTable.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/Capacity.tsx`, `features/reports/Inventory.tsx`, `features/reports/TopTriggers.tsx`, `features/sla/Response.tsx`, `features/sla/Rolling.tsx`, and 4 more
 
 Tests that import it: `shared/components/NoData.test.tsx`
 <!-- /gen -->
@@ -2668,7 +2752,7 @@ Tests that import it: `shared/components/NoData.test.tsx`
 Previous and Next around a line saying where the list stands. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/shared/components/Pager.tsx -->
-26 lines, 1 export. Imported by 2 files.
+29 lines, 1 export. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2700,7 +2784,7 @@ The severity, up/down, availability and host-state pills. No chapter walks throu
 
 Imports: `shared/components/NoData.tsx`, `shared/lib/severity.ts`, `theme.ts`
 
-Imported by: `features/assistant/ExplainPanel.tsx`, `features/dashboard/Overview.tsx`, `features/hosts/HostTable.tsx`, `features/network/Network.tsx`, `features/network/Sites.tsx`, `features/problems/AckDialog.tsx`, `features/problems/Problems.tsx`, `features/problems/ProblemsTable.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/TopTriggers.tsx`, `features/sla/Availability.tsx`, `features/sla/Services.tsx`
+Imported by: `features/assistant/ExplainPanel.tsx`, `features/dashboard/Overview.tsx`, `features/hosts/HostTable.tsx`, `features/network/Network.tsx`, `features/network/Sites.tsx`, `features/problems/AckDialog.tsx`, `features/problems/Problems.tsx`, `features/problems/ProblemsTable.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/TopTriggers.tsx`, `features/sla/Response.tsx`, `features/sla/Services.tsx`
 
 Tests that import it: none
 <!-- /gen -->
@@ -2710,7 +2794,7 @@ Tests that import it: none
 The box that lets a wide table scroll, with a tab stop and a name. Walked through in [Web app: the shell and the shared code](web-shell-and-shared.md).
 
 <!-- gen:card web/src/shared/components/TableWrap.tsx -->
-51 lines, 1 export. Imported by 13 files.
+51 lines, 1 export. Imported by 14 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2720,7 +2804,7 @@ Imports: none
 
 Packages: `react`
 
-Imported by: `features/dashboard/Overview.tsx`, `features/hosts/HostTable.tsx`, `features/hosts/LatestData.tsx`, `features/network/Links.tsx`, `features/network/Network.tsx`, `features/problems/Problems.tsx`, `features/problems/ProblemsTable.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/Capacity.tsx`, `features/reports/Inventory.tsx`, `features/reports/TopTriggers.tsx`, `features/sla/Availability.tsx`, `features/sla/Sla.tsx`
+Imported by: `features/dashboard/Overview.tsx`, `features/hosts/HostTable.tsx`, `features/hosts/LatestData.tsx`, `features/network/Links.tsx`, `features/network/Network.tsx`, `features/problems/Problems.tsx`, `features/problems/ProblemsTable.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/Capacity.tsx`, `features/reports/Inventory.tsx`, `features/reports/TopTriggers.tsx`, `features/sla/Response.tsx`, `features/sla/Rolling.tsx`, `features/sla/Sla.tsx`
 
 Tests that import it: `shared/components/TableWrap.test.tsx`
 <!-- /gen -->
@@ -2763,25 +2847,26 @@ Tests that import it: `__tests__/markup.test.tsx`
 Loading, error, empty and stale-copy states, and the Async wrapper that shows them. Walked through in [Web app: the shell and the shared code](web-shell-and-shared.md).
 
 <!-- gen:card web/src/shared/components/states.tsx -->
-169 lines, 7 exports. Imported by 25 files.
+188 lines, 8 exports. Imported by 26 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `Loading` | component | 7 | `function Loading({ label = 'Loading…' }: { label?: string })` |  |
-| `ErrorState` | component | 48 | `function ErrorState({ message }: { message: string })` |  |
-| `Empty` | component | 71 | `function Empty({ children }: { children: ReactNode })` |  |
-| `RefreshFailed` | component | 76 | `function RefreshFailed({ error, updatedAt }: { error: string; updatedAt?: number \| null })` | A refresh failed; the last good data stays on screen, and says how old it is. |
-| `StaleCopy` | component | 92 | `function StaleCopy({ asOf, what = 'this', refreshing = false }: { asOf: number \| null; what?: string; refreshing?:...` | The BFF could not reach Zabbix and answered with the last copy it kept (X-Data-Stale, see shared/lib/freshness.ts). |
-| `Loaded` | component | 114 | `function Loaded({ stale = false, error, updatedAt, children, }: { stale?: boolean; error?: string \| null...` | Loaded content. |
-| `Async` | component | 140 | `function Async<T>({ loading, error, data, stale = false, updatedAt, children, loadingLabel, }: { loading: boolean...` | Renders loading / error / empty around loaded data. |
+| `ErrorState` | component | 48 | `function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void })` |  |
+| `Empty` | component | 77 | `function Empty({ children }: { children: ReactNode })` |  |
+| `RefreshFailed` | component | 82 | `function RefreshFailed({ error, updatedAt }: { error: string; updatedAt?: number \| null })` | A refresh failed; the last good data stays on screen, and says how old it is. |
+| `StaleCopy` | component | 98 | `function StaleCopy({ asOf, what = 'this', refreshing = false }: { asOf: number \| null; what?: string; refreshing?:...` | The BFF could not reach Zabbix and answered with the last copy it kept (X-Data-Stale, see shared/lib/freshness.ts). |
+| `inertWhen` | function | 116 | `const inertWhen = (on: boolean): Record<string, string> =>` | The attribute that puts content out of reach of the mouse and the keyboard while `on`. |
+| `Loaded` | component | 123 | `function Loaded({ stale = false, error, updatedAt, children, }: { stale?: boolean; error?: string \| null...` | Loaded content. |
+| `Async` | component | 150 | `function Async<T>({ loading, error, data, stale = false, updatedAt, children, loadingLabel, onRetry, footer, }:...` | Renders loading / error / empty around loaded data. |
 
 Imports: `shared/hooks/useAuth.ts`, `shared/hooks/useReportTimeZone.ts`, `shared/lib/freshness.ts`, `shared/lib/time.ts`
 
 Packages: `react`
 
-Imported by: `App.tsx`, `features/assistant/Assistant.tsx`, `features/assistant/ExplainPanel.tsx`, `features/dashboard/HostsView.tsx`, `features/dashboard/Overview.tsx`, `features/graphs/HostDetail.tsx`, `features/graphs/ItemPicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/hosts/LatestData.tsx`, `features/meters/InternetMeters.tsx`, `features/network/Links.tsx`, `features/network/Maps.tsx`, and 11 more
+Imported by: `App.tsx`, `features/assistant/Assistant.tsx`, `features/assistant/ExplainPanel.tsx`, `features/dashboard/HostsView.tsx`, `features/dashboard/Overview.tsx`, `features/graphs/HostDetail.tsx`, `features/graphs/ItemPicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/hosts/LatestData.tsx`, `features/meters/InternetMeters.tsx`, `features/network/Links.tsx`, `features/network/Maps.tsx`, and 12 more
 
-Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/hostListFailure.test.tsx`, `__tests__/tooltipFacts.test.tsx`, `__tests__/zoneClocks.test.tsx`, `shared/lib/freshness.test.tsx`
+Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/hostListFailure.test.tsx`, `__tests__/tooltipFacts.test.tsx`, `__tests__/zoneClocks.test.tsx`, `shared/components/statesRetry.test.tsx`, `shared/lib/freshness.test.tsx`
 <!-- /gen -->
 
 ## `web/src/shared/hooks`
@@ -2809,7 +2894,7 @@ Tests that import it: `shared/hooks/scrollLock.test.ts`
 Fetch with loading and error state, an abort on leave, and optional polling. Walked through in [Web app: the shell and the shared code](web-shell-and-shared.md).
 
 <!-- gen:card web/src/shared/hooks/useAsync.ts -->
-162 lines, 1 export. Imported by 22 files.
+168 lines, 1 export. Imported by 23 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2819,7 +2904,7 @@ Imports: `api/index.ts`
 
 Packages: `react`
 
-Imported by: `features/assistant/ExplainPanel.tsx`, `features/dashboard/Overview.tsx`, `features/dashboard/useHostsView.ts`, `features/graphs/HostDetail.tsx`, `features/graphs/ItemPicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/hosts/LatestData.tsx`, `features/meters/useMeters.ts`, `features/network/Links.tsx`, `features/network/Maps.tsx`, `features/network/Network.tsx`, `features/network/Sites.tsx`, and 8 more
+Imported by: `features/assistant/ExplainPanel.tsx`, `features/dashboard/Overview.tsx`, `features/dashboard/useHostsView.ts`, `features/graphs/HostDetail.tsx`, `features/graphs/ItemPicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/hosts/LatestData.tsx`, `features/meters/useMeters.ts`, `features/network/Links.tsx`, `features/network/Maps.tsx`, `features/network/Network.tsx`, `features/network/Sites.tsx`, and 9 more
 
 Tests that import it: `shared/hooks/useAsync.test.ts`
 <!-- /gen -->
@@ -2829,7 +2914,7 @@ Tests that import it: `shared/hooks/useAsync.test.ts`
 Who is signed in and what they may see, from one shared probe. Walked through in [Web app: the shell and the shared code](web-shell-and-shared.md).
 
 <!-- gen:card web/src/shared/hooks/useAuth.ts -->
-79 lines, 3 exports. Imported by 10 files.
+79 lines, 3 exports. Imported by 12 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -2841,9 +2926,9 @@ Imports: `api/index.ts`, `types/index.ts`
 
 Packages: `react`
 
-Imported by: `features/assistant/Assistant.tsx`, `features/auth/Login.tsx`, `features/dashboard/Overview.tsx`, `features/hosts/Devices.tsx`, `features/network/Network.tsx`, `features/problems/Problems.tsx`, `features/shell/Layout.tsx`, `features/shell/Sidebar.tsx`, `features/sla/EmailReport.tsx`, `shared/components/states.tsx`
+Imported by: `features/assistant/Assistant.tsx`, `features/auth/Login.tsx`, `features/dashboard/Overview.tsx`, `features/hosts/Devices.tsx`, `features/meters/InternetMeters.tsx`, `features/network/Network.tsx`, `features/problems/Problems.tsx`, `features/reports/Capacity.tsx`, `features/shell/Layout.tsx`, `features/shell/Sidebar.tsx`, `features/sla/EmailReport.tsx`, `shared/components/states.tsx`
 
-Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/countPills.test.tsx`, `__tests__/guardedReads.test.tsx`, `__tests__/hostListFailure.test.tsx`, `__tests__/pagePastEnd.test.tsx`, `__tests__/sharedPages.test.tsx`, `__tests__/tooltipFacts.test.tsx`, `features/assistant/Assistant.test.tsx`, and 14 more
+Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/countPills.test.tsx`, `__tests__/guardedReads.test.tsx`, `__tests__/hostListFailure.test.tsx`, `__tests__/pagePastEnd.test.tsx`, `__tests__/sharedPages.test.tsx`, `__tests__/tooltipFacts.test.tsx`, `features/assistant/Assistant.test.tsx`, and 27 more
 <!-- /gen -->
 
 ### `web/src/shared/hooks/useDebounced.ts`
@@ -2907,6 +2992,46 @@ Imported by: `features/assistant/Assistant.tsx`, `features/dashboard/Overview.ts
 Tests that import it: none
 <!-- /gen -->
 
+### `web/src/shared/hooks/useReducedMotion.ts`
+
+Whether the person has asked the system for less motion, following the setting as it changes. Code that scrolls smoothly asks it first, because the stylesheet's reduced-motion block cannot stop a smooth scroll that is written in code (UX-52).
+
+<!-- gen:card web/src/shared/hooks/useReducedMotion.ts -->
+16 lines, 1 export. Imported by 3 files.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `useReducedMotion` | hook | 6 | `function useReducedMotion(): boolean` | Whether the user has asked the system for less motion, following changes to the setting. |
+
+Imports: none
+
+Packages: `react`
+
+Imported by: `features/dashboard/Overview.tsx`, `features/network/Network.tsx`, `shared/hooks/useReveal.ts`
+
+Tests that import it: none
+<!-- /gen -->
+
+### `web/src/shared/hooks/useReveal.ts`
+
+Brings a panel that opened below a long list into view and puts the focus on its heading, so that a keyboard or screen reader user is told that something opened. The Sites page uses it for the hosts of a chosen site, and Network for the traffic of a chosen port (UX-62). It asks `useReducedMotion` first, since a smooth scroll written in code beats the stylesheet's rule that stops animation.
+
+<!-- gen:card web/src/shared/hooks/useReveal.ts -->
+18 lines, 1 export. Imported by 2 files.
+
+| Name | Kind | Line | Signature | What its comment says |
+|---|---|---|---|---|
+| `useReveal` | hook | 9 | `function useReveal()` | For a panel that opens below a long list: `reveal()` brings it into view and puts the focus on the element in it marked `data-reveal-focus` (give... |
+
+Imports: `shared/hooks/useReducedMotion.ts`
+
+Packages: `react`
+
+Imported by: `features/network/Network.tsx`, `features/network/Sites.tsx`
+
+Tests that import it: none
+<!-- /gen -->
+
 ### `web/src/shared/hooks/useReportTimeZone.ts`
 
 The reporting time zone, re-rendering when the server's answer changes it. No chapter walks through it, so this card and the comment at the top of the file are its account.
@@ -2922,7 +3047,7 @@ Imports: `shared/lib/time.ts`
 
 Packages: `react`
 
-Imported by: `features/dashboard/HostsView.tsx`, `features/dashboard/Overview.tsx`, `features/graphs/RangePicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/meters/InternetMeters.tsx`, `features/shell/TodayDate.tsx`, `features/sla/Availability.tsx`, `features/sla/Services.tsx`, `features/sla/Sla.tsx`, `features/sla/Sli.tsx`, `shared/components/states.tsx`
+Imported by: `features/dashboard/HostsView.tsx`, `features/dashboard/Overview.tsx`, `features/graphs/RangePicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/meters/InternetMeters.tsx`, `features/shell/TodayDate.tsx`, `features/sla/Rolling.tsx`, `features/sla/Services.tsx`, `features/sla/Sla.tsx`, `features/sla/Sli.tsx`, `shared/components/states.tsx`
 
 Tests that import it: none
 <!-- /gen -->
@@ -2953,18 +3078,18 @@ Tests that import it: `__tests__/OperatorWording.test.tsx`, `features/dashboard/
 Reads and changes query-string parameters in place. Walked through in [Web app: the shell and the shared code](web-shell-and-shared.md).
 
 <!-- gen:card web/src/shared/hooks/useUrlState.ts -->
-98 lines, 2 exports. Imported by 19 files.
+104 lines, 2 exports. Imported by 18 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `useSearchPatch` | hook | 12 | `function useSearchPatch(): (patch: Record<string, string \| null>) => void` | Change query-string parameters in place: `null` or `''` removes one. |
-| `useUrlState` | hook | 62 | `function useUrlState<T extends UrlValue>(key: string, fallback: T, { options, debounceMs }: { options?: readonly...` | One piece of page state, a filter, a sort, a selection, kept in the query string, so Back to the page (and a shared link) restores it. |
+| `useUrlState` | hook | 64 | `function useUrlState<T extends UrlValue>(key: string, fallback: T, { options, debounceMs, keepDefault }: { options?:...` | One piece of page state, a filter, a sort, a selection, kept in the query string, so Back to the page (and a shared link) restores it. |
 
 Imports: none
 
 Packages: `react`, `react-router-dom`
 
-Imported by: `features/dashboard/Overview.tsx`, `features/graphs/HostDetail.tsx`, `features/graphs/RangePicker.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/hosts/LatestData.tsx`, `features/network/Links.tsx`, `features/network/Maps.tsx`, `features/network/Network.tsx`, `features/network/Sites.tsx`, `features/problems/Problems.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/Capacity.tsx`, `features/reports/Inventory.tsx`, and 5 more
+Imported by: `features/dashboard/Overview.tsx`, `features/graphs/HostDetail.tsx`, `features/graphs/RangePicker.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/hosts/LatestData.tsx`, `features/network/Links.tsx`, `features/network/Maps.tsx`, `features/network/Network.tsx`, `features/network/Sites.tsx`, `features/problems/Problems.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/Capacity.tsx`, `features/reports/Inventory.tsx`, and 4 more
 
 Tests that import it: `shared/hooks/useUrlState.test.tsx`
 <!-- /gen -->
@@ -3010,7 +3135,7 @@ Imports: `shared/lib/saveFile.ts`
 
 Imported by: `features/graphs/TimeSeriesChart.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/Inventory.tsx`
 
-Tests that import it: `features/graphs/chartCsv.test.ts`, `shared/lib/csv.test.ts`
+Tests that import it: `features/graphs/chartCsv.test.ts`, `features/reports/inventoryDefaults.test.tsx`, `shared/lib/csv.test.ts`
 <!-- /gen -->
 
 ### `web/src/shared/lib/freshness.ts`
@@ -3041,7 +3166,7 @@ Tests that import it: `__tests__/guardedReads.test.tsx`, `__tests__/zoneClocks.t
 A count with its noun. Walked through in [Web app: the shell and the shared code](web-shell-and-shared.md).
 
 <!-- gen:card web/src/shared/lib/plural.ts -->
-2 lines, 1 export. Imported by 11 files.
+2 lines, 1 export. Imported by 13 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -3049,7 +3174,7 @@ A count with its noun. Walked through in [Web app: the shell and the shared code
 
 Imports: none
 
-Imported by: `features/assistant/Assistant.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/meters/gaugeDial.ts`, `features/network/Maps.tsx`, `features/network/Sites.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/Inventory.tsx`, `features/sla/Availability.tsx`, `features/sla/Services.tsx`, `features/sla/Sla.tsx`
+Imported by: `features/assistant/Assistant.tsx`, `features/hosts/Devices.tsx`, `features/hosts/Hosts.tsx`, `features/meters/gaugeDial.ts`, `features/network/Maps.tsx`, `features/network/Sites.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/Inventory.tsx`, `features/sla/Response.tsx`, `features/sla/Rolling.tsx`, `features/sla/Services.tsx`, `features/sla/Sla.tsx`, `features/sla/Sli.tsx`
 
 Tests that import it: `shared/lib/plural.test.ts`
 <!-- /gen -->
@@ -3127,7 +3252,7 @@ Tests that import it: `__tests__/copiedHelpers.test.ts`
 Dates and months in HCML's reporting time zone. Walked through in [Web app: the shell and the shared code](web-shell-and-shared.md).
 
 <!-- gen:card web/src/shared/lib/time.ts -->
-269 lines, 24 exports. Imported by 23 files.
+281 lines, 25 exports. Imported by 23 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -3142,25 +3267,26 @@ Dates and months in HCML's reporting time zone. Walked through in [Web app: the 
 | `formatClockLabeled` | function | 110 | `const formatClockLabeled = (atMs: number, withSeconds = false, tz = reportTz): string =>` | The clock ending in the zone's name, "15:04 WIB", so it is never read as the viewer's own clock. |
 | `dayInZone` | function | 114 | `const dayInZone = (atMs: number, tz = reportTz): string =>` | The calendar day of a moment in `tz` as 2026-10-07, for file names: not yesterday's date after midnight in Jakarta. |
 | `formatDate` | function | 119 | `function formatDate(atMs: number, tz = reportTz): string` | The day in `tz` as the browser's locale writes a date. |
-| `formatWeekdayDate` | function | 131 | `function formatWeekdayDate(atMs: number, tz = reportTz): string` | "Wed, 7 Oct 2026": the day in `tz`, for the wall clock. |
-| `formatAxisTime` | function | 158 | `function formatAxisTime(atMs: number, spanSeconds: number, tz = reportTz, withDay = false): string` | A tick on the time axis of a chart, in the report zone: the day at midnight, otherwise the hour and minute, with the day too once the range runs... |
-| `axisNeedsDays` | function | 169 | `function axisNeedsDays(from: number, to: number, tz = reportTz): boolean` | Whether each tick of an axis from `from` to `to` (seconds) must name its day. |
-| `formatDay` | function | 175 | `const formatDay = (atMs: number, tz = reportTz): string =>` | "7 Oct": the day of a moment on the wall clock of `tz`. |
-| `formatDayTime` | function | 178 | `function formatDayTime(atMs: number, tz = reportTz): string` | "7 Oct 15:00": a moment in the report zone, short enough for the handle of a slider. |
-| `toZonedInput` | function | 204 | `function toZonedInput(epochSeconds: number, tz = reportTz): string` | A moment as a datetime-local field writes it, `2026-10-07T15:00`, on the wall clock of `tz`. |
-| `fromZonedInput` | function | 211 | `function fromZonedInput(text: string, tz = reportTz): number` | The Unix time of a datetime-local value read as the wall clock of `tz`, whatever the browser's zone; NaN when it is not a date and time. |
-| `zonedMonthStart` | function | 223 | `function zonedMonthStart(year: number, month: number, tz = reportTz): number` |  |
-| `isMonth` | function | 231 | `const isMonth = (s: string \| null \| undefined): s is string =>` |  |
-| `monthBounds` | function | 233 | `function monthBounds(month: string, tz = reportTz): { from: number; to: number }` |  |
-| `monthOf` | function | 242 | `function monthOf(atSeconds: number, tz = reportTz): string` |  |
-| `recentMonths` | function | 252 | `function recentMonths(count = 12, tz = reportTz): string[]` | The current month and the 11 before it, newest first. |
-| `monthLabel` | function | 266 | `function monthLabel(month: string): string` |  |
+| `formatLongDate` | function | 131 | `function formatLongDate(atMs: number, tz = reportTz): string` | "2 November 2026": the day in `tz` with the month in words, so that nobody reads the month for the day. |
+| `formatWeekdayDate` | function | 143 | `function formatWeekdayDate(atMs: number, tz = reportTz): string` | "Wed, 7 Oct 2026": the day in `tz`, for the wall clock. |
+| `formatAxisTime` | function | 170 | `function formatAxisTime(atMs: number, spanSeconds: number, tz = reportTz, withDay = false): string` | A tick on the time axis of a chart, in the report zone: the day at midnight, otherwise the hour and minute, with the day too once the range runs... |
+| `axisNeedsDays` | function | 181 | `function axisNeedsDays(from: number, to: number, tz = reportTz): boolean` | Whether each tick of an axis from `from` to `to` (seconds) must name its day. |
+| `formatDay` | function | 187 | `const formatDay = (atMs: number, tz = reportTz): string =>` | "7 Oct": the day of a moment on the wall clock of `tz`. |
+| `formatDayTime` | function | 190 | `function formatDayTime(atMs: number, tz = reportTz): string` | "7 Oct 15:00": a moment in the report zone, short enough for the handle of a slider. |
+| `toZonedInput` | function | 216 | `function toZonedInput(epochSeconds: number, tz = reportTz): string` | A moment as a datetime-local field writes it, `2026-10-07T15:00`, on the wall clock of `tz`. |
+| `fromZonedInput` | function | 223 | `function fromZonedInput(text: string, tz = reportTz): number` | The Unix time of a datetime-local value read as the wall clock of `tz`, whatever the browser's zone; NaN when it is not a date and time. |
+| `zonedMonthStart` | function | 235 | `function zonedMonthStart(year: number, month: number, tz = reportTz): number` |  |
+| `isMonth` | function | 243 | `const isMonth = (s: string \| null \| undefined): s is string =>` |  |
+| `monthBounds` | function | 245 | `function monthBounds(month: string, tz = reportTz): { from: number; to: number }` |  |
+| `monthOf` | function | 254 | `function monthOf(atSeconds: number, tz = reportTz): string` |  |
+| `recentMonths` | function | 264 | `function recentMonths(count = 12, tz = reportTz): string[]` | The current month and the 11 before it, newest first. |
+| `monthLabel` | function | 278 | `function monthLabel(month: string): string` |  |
 
 Imports: none
 
-Imported by: `web/scripts/units.check.ts`, `features/assistant/useAi.ts`, `features/dashboard/HostsView.tsx`, `features/dashboard/Overview.tsx`, `features/graphs/RangePicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/graphs/chartCsv.ts`, `features/meters/InternetMeters.tsx`, `features/meters/gaugeDial.ts`, `features/reports/AlertNoise.tsx`, `features/reports/Inventory.tsx`, `features/shell/TodayDate.tsx`, `features/shell/build.ts`, `features/sla/Availability.tsx`, and 9 more
+Imported by: `web/scripts/units.check.ts`, `features/assistant/useAi.ts`, `features/dashboard/HostsView.tsx`, `features/dashboard/Overview.tsx`, `features/graphs/RangePicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/graphs/chartCsv.ts`, `features/meters/InternetMeters.tsx`, `features/meters/gaugeDial.ts`, `features/reports/AlertNoise.tsx`, `features/reports/Inventory.tsx`, `features/shell/TodayDate.tsx`, `features/shell/build.ts`, `features/sla/ReportSchedule.tsx`, and 9 more
 
-Tests that import it: `__tests__/copiedHelpers.test.ts`, `__tests__/mainZone.test.tsx`, `__tests__/reportZoneUi.test.tsx`, `__tests__/urlFilters.test.tsx`, `__tests__/zoneClocks.test.tsx`, `features/assistant/useAi.test.tsx`, `features/graphs/chartZone.test.tsx`, `features/graphs/graphZone.test.tsx`, and 6 more
+Tests that import it: `__tests__/copiedHelpers.test.ts`, `__tests__/mainZone.test.tsx`, `__tests__/reportZoneUi.test.tsx`, `__tests__/urlFilters.test.tsx`, `__tests__/zoneClocks.test.tsx`, `features/assistant/useAi.test.tsx`, `features/graphs/chartZone.test.tsx`, `features/graphs/graphZone.test.tsx`, and 8 more
 <!-- /gen -->
 
 ### `web/src/shared/lib/units.ts`
@@ -3168,7 +3294,7 @@ Tests that import it: `__tests__/copiedHelpers.test.ts`, `__tests__/mainZone.tes
 Zabbix units turned into human text. Walked through in [Web app: the shell and the shared code](web-shell-and-shared.md).
 
 <!-- gen:card web/src/shared/lib/units.ts -->
-161 lines, 8 exports. Imported by 11 files.
+161 lines, 8 exports. Imported by 12 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -3183,7 +3309,7 @@ Zabbix units turned into human text. Walked through in [Web app: the shell and t
 
 Imports: `shared/lib/time.ts`
 
-Imported by: `web/scripts/units.check.ts`, `features/graphs/TimeSeriesChart.tsx`, `features/meters/gaugeDial.ts`, `features/network/Links.tsx`, `features/network/Network.tsx`, `features/reports/AlertNoise.tsx`, `features/sla/Availability.tsx`, `features/sla/Sla.tsx`, `features/sla/Sli.tsx`, `features/sla/percent.ts`, `shared/lib/severity.ts`
+Imported by: `web/scripts/units.check.ts`, `features/graphs/TimeSeriesChart.tsx`, `features/meters/gaugeDial.ts`, `features/network/Links.tsx`, `features/network/Network.tsx`, `features/reports/AlertNoise.tsx`, `features/sla/Response.tsx`, `features/sla/Rolling.tsx`, `features/sla/Sla.tsx`, `features/sla/Sli.tsx`, `features/sla/percent.ts`, `shared/lib/severity.ts`
 
 Tests that import it: `features/graphs/chartZone.test.tsx`, `shared/lib/units.test.ts`
 <!-- /gen -->
@@ -3336,7 +3462,7 @@ Tests that import it: none
 The login wrapper, the Explain slide-over, modal dialogs, notices and the role chip. Walked through in [Web app: the stylesheet](web-styles.md).
 
 <!-- gen:card web/src/styles/08-explain-modal-notices.css -->
-363 lines, stylesheet part. Imported by 0 files.
+367 lines, stylesheet part. Imported by 0 files.
 
 Imports: none
 
@@ -3378,7 +3504,7 @@ Tests that import it: none
 The Graphs, Latest data and Network pages. Walked through in [Web app: the stylesheet](web-styles.md).
 
 <!-- gen:card web/src/styles/11-graphs-network.css -->
-345 lines, stylesheet part. Imported by 0 files.
+346 lines, stylesheet part. Imported by 0 files.
 
 Imports: none
 
@@ -3392,7 +3518,7 @@ Tests that import it: none
 The SLA, services, availability, capacity, sites and links pages. Walked through in [Web app: the stylesheet](web-styles.md).
 
 <!-- gen:card web/src/styles/12-sla-services-links.css -->
-212 lines, stylesheet part. Imported by 0 files.
+211 lines, stylesheet part. Imported by 0 files.
 
 Imports: none
 
@@ -3638,7 +3764,7 @@ Tests that import it: none
 Re-exports every shape so a page writes one import. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/types/index.ts -->
-110 lines, 0 exports, 102 re-exports. Imported by 71 files.
+110 lines, 0 exports, 102 re-exports. Imported by 73 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -3747,9 +3873,9 @@ Re-exports every shape so a page writes one import. No chapter walks through it,
 
 Imports: `types/assistant.ts`, `types/auth.ts`, `types/dashboard.ts`, `types/graphs.ts`, `types/hosts.ts`, `types/meters.ts`, `types/network.ts`, `types/problems.ts`, `types/reports.ts`, `types/sla.ts`
 
-Imported by: `api/assistant.ts`, `api/dashboard.ts`, `api/graphs.ts`, `api/hosts.ts`, `api/meters.ts`, `api/network.ts`, `api/problems.ts`, `api/reports.ts`, `api/shell.ts`, `api/sla.ts`, `features/assistant/Assistant.tsx`, `features/assistant/ExplainPanel.tsx`, `features/dashboard/HostsView.tsx`, `features/dashboard/Overview.tsx`, and 57 more
+Imported by: `api/assistant.ts`, `api/dashboard.ts`, `api/graphs.ts`, `api/hosts.ts`, `api/meters.ts`, `api/network.ts`, `api/problems.ts`, `api/reports.ts`, `api/shell.ts`, `api/sla.ts`, `features/assistant/Assistant.tsx`, `features/assistant/ExplainPanel.tsx`, `features/dashboard/HostsView.tsx`, `features/dashboard/Overview.tsx`, and 59 more
 
-Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/countPills.test.tsx`, `__tests__/guardedReads.test.tsx`, `__tests__/openapiTypes.test.ts`, `__tests__/pagePastEnd.test.tsx`, `__tests__/reportZoneUi.test.tsx`, `__tests__/sharedPages.test.tsx`, `__tests__/sharedPieces.test.tsx`, and 36 more
+Tests that import it: `__tests__/OperatorWording.test.tsx`, `__tests__/countPills.test.tsx`, `__tests__/guardedReads.test.tsx`, `__tests__/openapiTypes.test.ts`, `__tests__/pagePastEnd.test.tsx`, `__tests__/reportZoneUi.test.tsx`, `__tests__/sharedPages.test.tsx`, `__tests__/sharedPieces.test.tsx`, and 51 more
 <!-- /gen -->
 
 ### `web/src/types/meters.ts`
@@ -3863,7 +3989,7 @@ Tests that import it: none
 The shapes of availability, SLA and the service trees. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card web/src/types/sla.ts -->
-338 lines, 31 exports. Imported by 1 file.
+340 lines, 31 exports. Imported by 1 file.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -3878,26 +4004,26 @@ The shapes of availability, SLA and the service trees. No chapter walks through 
 | `SliPath` | interface | 87 | `interface SliPath` |  |
 | `SliWeb` | interface | 98 | `interface SliWeb` |  |
 | `SliReport` | interface | 107 | `interface SliReport` |  |
-| `ServiceSla` | interface | 139 | `interface ServiceSla` | Services tree (Zabbix Services, read-only) |
-| `ServiceNode` | interface | 149 | `interface ServiceNode` |  |
-| `ServicesResponse` | interface | 165 | `interface ServicesResponse` |  |
-| `DerivedKind` | type | 173 | `type DerivedKind = 'root' \| 'business' \| 'site' \| 'class' \| 'wan-path' \| 'host' \| 'web'` | Services derived from the estate (server sli/tree.ts) when Zabbix has none. |
-| `DerivedServiceNode` | interface | 175 | `interface DerivedServiceNode extends ServiceNode` |  |
-| `DerivedServicesResponse` | interface | 183 | `interface DerivedServicesResponse extends ServicesResponse` |  |
-| `SlaSource` | interface | 196 | `interface SlaSource` | Whether Zabbix's own SLAs have anything to show (/api/sla/source). |
-| `ReportStyle` | interface | 203 | `interface ReportStyle` | How a report writes its numbers and dates, and what a CSV file puts between its fields. |
-| `ReportFileFormat` | type | 210 | `type ReportFileFormat = 'pdf' \| 'xlsx' \| 'csv'` | The kinds of file the report comes in. |
-| `EmailInfo` | interface | 213 | `interface EmailInfo` | GET /api/sli/email: whether the report can be emailed, from where, to whom unless told otherwise, and how far a list may go (administrators only). |
-| `SavedRecipients` | interface | 227 | `interface SavedRecipients` | PUT /api/sli/recipients: the list the portal saved, and the list that applies now. |
-| `DeletedRecipients` | interface | 233 | `interface DeletedRecipients` | DELETE /api/sli/recipients: the list that applies now (the one in MAIL_TO, or nobody), and how many addresses were removed. |
-| `EmailRequest` | interface | 239 | `interface EmailRequest` | What POST /api/sli/email takes besides the month. |
-| `EmailSent` | interface | 247 | `interface EmailSent` | POST /api/sli/email: how many recipients the mail server took the message for, how many it refused, and what went. |
-| `ScheduleSettings` | interface | 257 | `interface ScheduleSettings` | The monthly send as it is set. |
-| `SendRecord` | interface | 273 | `interface SendRecord` | One send the portal made, with counts and never an address. |
-| `ScheduleInfo` | interface | 290 | `interface ScheduleInfo` | GET and PUT /api/sli/schedule (administrators only). |
-| `ScheduleRequest` | interface | 308 | `interface ScheduleRequest` | What PUT /api/sli/schedule takes. |
-| `Sla` | interface | 319 | `interface Sla` | Services → SLA (Zabbix-native, read-only) |
-| `SlaSli` | interface | 329 | `interface SlaSli` |  |
+| `ServiceSla` | interface | 141 | `interface ServiceSla` | Services tree (Zabbix Services, read-only) |
+| `ServiceNode` | interface | 151 | `interface ServiceNode` |  |
+| `ServicesResponse` | interface | 167 | `interface ServicesResponse` |  |
+| `DerivedKind` | type | 175 | `type DerivedKind = 'root' \| 'business' \| 'site' \| 'class' \| 'wan-path' \| 'host' \| 'web'` | Services derived from the estate (server sli/tree.ts) when Zabbix has none. |
+| `DerivedServiceNode` | interface | 177 | `interface DerivedServiceNode extends ServiceNode` |  |
+| `DerivedServicesResponse` | interface | 185 | `interface DerivedServicesResponse extends ServicesResponse` |  |
+| `SlaSource` | interface | 198 | `interface SlaSource` | Whether Zabbix's own SLAs have anything to show (/api/sla/source). |
+| `ReportStyle` | interface | 205 | `interface ReportStyle` | How a report writes its numbers and dates, and what a CSV file puts between its fields. |
+| `ReportFileFormat` | type | 212 | `type ReportFileFormat = 'pdf' \| 'xlsx' \| 'csv'` | The kinds of file the report comes in. |
+| `EmailInfo` | interface | 215 | `interface EmailInfo` | GET /api/sli/email: whether the report can be emailed, from where, to whom unless told otherwise, and how far a list may go (administrators only). |
+| `SavedRecipients` | interface | 229 | `interface SavedRecipients` | PUT /api/sli/recipients: the list the portal saved, and the list that applies now. |
+| `DeletedRecipients` | interface | 235 | `interface DeletedRecipients` | DELETE /api/sli/recipients: the list that applies now (the one in MAIL_TO, or nobody), and how many addresses were removed. |
+| `EmailRequest` | interface | 241 | `interface EmailRequest` | What POST /api/sli/email takes besides the month. |
+| `EmailSent` | interface | 249 | `interface EmailSent` | POST /api/sli/email: how many recipients the mail server took the message for, how many it refused, and what went. |
+| `ScheduleSettings` | interface | 259 | `interface ScheduleSettings` | The monthly send as it is set. |
+| `SendRecord` | interface | 275 | `interface SendRecord` | One send the portal made, with counts and never an address. |
+| `ScheduleInfo` | interface | 292 | `interface ScheduleInfo` | GET and PUT /api/sli/schedule (administrators only). |
+| `ScheduleRequest` | interface | 310 | `interface ScheduleRequest` | What PUT /api/sli/schedule takes. |
+| `Sla` | interface | 321 | `interface Sla` | Services → SLA (Zabbix-native, read-only) |
+| `SlaSli` | interface | 331 | `interface SlaSli` |  |
 
 Imports: `types/hosts.ts`
 

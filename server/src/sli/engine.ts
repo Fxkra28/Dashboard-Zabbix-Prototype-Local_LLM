@@ -143,6 +143,8 @@ export interface SliReport {
   hosts: SliHost[];
   wanPaths: SliPath[];
   web: SliWeb[];
+  /** When the web check figures were taken, as unix seconds, once they are kept for a month that has closed (services/closedWeb.ts). Absent while they can still change. */
+  webTakenAt?: number;
   /** Estate-wide spans in which (almost) nothing was collected. */
   gaps: { from: number; to: number }[];
   /** Spans the setting SLA_NO_DATA_WINDOWS declares not measured, treated as gaps by both profiles. */

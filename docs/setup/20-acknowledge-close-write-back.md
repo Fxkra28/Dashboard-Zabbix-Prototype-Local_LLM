@@ -73,7 +73,7 @@ small extensions of the same route.
 ## What changed on 7 October 2026 (SC-07, SC-08, IN-06)
 
 - The portal user goes into the message. The text Zabbix receives always starts with `[portal:<user>]`, also when the caller wrote nothing, because Zabbix files every write under the write token's owner. Brackets and control characters in the name are dropped, the tag comes first, and the cut at 2,048 characters keeps it.
-- At most 50 event ids per request. A slip or a script cannot close a whole estate; the page sends one.
+- At most 50 event ids per request. A slip or a script cannot close a whole estate; the page sends one. Since 15 November 2026 a person is also held to `ACTION_EVENTS_PER_MINUTE` events a minute, 200 unless set otherwise and never under 50, the two actions together: over it the portal answers 429 `rate_limited` with the seconds to wait (SC-51).
 - Every attempt is on record. Each acknowledge or close writes a line with the user, the address, the event ids and the action, before any check can turn it away. A refusal or a failure writes a second line with the status.
 - With sign-in off write-back is refused unless `ALLOW_WRITE_WITHOUT_AUTH=true` (§19), and `/api/health` then reports `writeBack: false`, so the buttons are not offered.
 - The dialog warns when Zabbix is not collecting. If the freshness signal says Zabbix has collected nothing for over ten minutes, for example because no `zabbix-server` is running, the dialog says so before a change is sent: a close would be accepted and not applied.

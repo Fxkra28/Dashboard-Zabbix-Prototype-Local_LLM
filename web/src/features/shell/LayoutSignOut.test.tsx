@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, configure } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { api } from '../../api';
 import { resetAuthProbe, useAuth } from '../../shared/hooks/useAuth';
 import type { Me } from '../../types';
+
+// A page loads in steps and the test files run side by side, so the default second of waiting is too short on a busy machine.
+configure({ asyncUtilTimeout: 5000 });
 
 /**
  * Sign out when the portal does not answer (SC-37). The cookie is cleared only by the request, so a
@@ -82,11 +85,47 @@ describe('the Sign out button', () => {
     show();
     fireEvent.click(await signOutButton());
     const waiting = await screen.findByRole('button', { name: 'Signing out...' });
-    expect(waiting).toBeDisabled();
+    expect(waiting).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(waiting);
     expect(logoutMock).toHaveBeenCalledTimes(1);
     finish();
     expect(await screen.findByText('Sign in page')).toBeInTheDocument();
+  });
+
+  // UX-61: a disabled button drops the focus it holds, so after a failed sign-out the keyboard user had to find it again.
+  it('is not disabled while it works, so that the button keeps the focus and still ignores a second press', async () => {
+    let finish!: () => void;
+    logoutMock.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
+    show();
+    const button = await signOutButton();
+    button.focus();
+    fireEvent.click(button);
+    const waiting = await screen.findByRole('button', { name: 'Signing out...' });
+    expect(waiting).toBe(button);
+    expect(waiting).not.toBeDisabled();
+    expect(waiting).toHaveAttribute('aria-disabled', 'true');
+    expect(document.activeElement).toBe(button);
+    fireEvent.click(waiting);
+    fireEvent.keyDown(waiting, { key: 'Enter' });
+    expect(logoutMock).toHaveBeenCalledTimes(1);
+    finish();
+    await screen.findByText('Sign in page');
+  });
+
+  it('keeps the focus on the button when the sign-out failed, and takes aria-disabled away so that Enter tries again', async () => {
+    logoutMock.mockRejectedValueOnce(new Error('Sign-out failed (HTTP 502).')).mockResolvedValue(undefined);
+    show();
+    const button = await signOutButton();
+    button.focus();
+    fireEvent.click(button);
+    await screen.findByRole('alert');
+    const again = screen.getByRole('button', { name: 'Sign out' });
+    expect(again).toBe(button);
+    expect(again).not.toHaveAttribute('aria-disabled', 'true');
+    expect(document.activeElement).toBe(button);
+    fireEvent.click(again);
+    expect(await screen.findByText('Sign in page')).toBeInTheDocument();
+    expect(logoutMock).toHaveBeenCalledTimes(2);
   });
 
   it('is pressable again, with its own name, when the sign-out failed', async () => {

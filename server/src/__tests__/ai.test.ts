@@ -497,3 +497,60 @@ describe('one model request at a time', () => {
     await settled;
   });
 });
+
+// BK-67: an explanation whose reader has left must not keep the one slot, whether it waits for it or already holds it.
+describe('an explanation whose reader left (BK-67)', () => {
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it('gives up its place in the queue, asks the model nothing, and leaves the holder their slot', async () => {
+    const fetchMock = stubFetch(completion(OK_PROBLEM));
+    const { humanize, tryAcquireModelSlot } = await loadAi(LOCAL_ENV);
+    const holder = tryAcquireModelSlot();
+    const gone = new AbortController();
+
+    const waiting = humanize('problem', {}, undefined, gone.signal);
+    await tick();
+    gone.abort(new Error('the reader left'));
+    await expect(waiting).rejects.toThrow('the reader left');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    expect(tryAcquireModelSlot()).toBeNull(); // still the holder's
+    holder?.();
+    expect(tryAcquireModelSlot()).not.toBeNull(); // and free once they let go
+  });
+
+  it('stops a model call that is running, and frees the slot at once', async () => {
+    let seen: AbortSignal | null | undefined;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url: string, init: RequestInit) => {
+        seen = init.signal;
+        return new Promise((_resolve, reject) => init.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true }));
+      }),
+    );
+    const { humanize, tryAcquireModelSlot } = await loadAi(LOCAL_ENV);
+    const gone = new AbortController();
+
+    const running = humanize('problem', {}, undefined, gone.signal);
+    running.catch(() => undefined);
+    await tick();
+    expect(tryAcquireModelSlot()).toBeNull(); // it holds the slot
+    gone.abort(new Error('the reader left'));
+    await expect(running).rejects.toThrow('the reader left');
+    expect(seen?.aborted).toBe(true);
+    expect(tryAcquireModelSlot()).not.toBeNull();
+  });
+
+  it('still times out on its own when the reader stays, as before', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(Object.assign(new Error('timed out'), { name: 'TimeoutError' })));
+    const { humanize, AiUpstreamError } = await loadAi(LOCAL_ENV);
+    await expect(humanize('problem', {}, undefined, new AbortController().signal)).rejects.toBeInstanceOf(AiUpstreamError);
+  });
+
+  it('works as before with no signal at all', async () => {
+    stubFetch(completion(OK_PROBLEM));
+    const { humanize } = await loadAi(LOCAL_ENV);
+    await expect(humanize('problem', {})).resolves.toEqual(OK_PROBLEM);
+  });
+});
+

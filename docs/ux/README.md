@@ -20,7 +20,7 @@
 | Only `/api/reports/inventory`, `/api/sli/email` and `/api/sli/schedule` need admin | `security/auth.ts:39` and `:41` |
 | `/api/links` and `/api/net` (the Dashboard's internet traffic meters, `/api/net/meters`, among them) need wall, which an operator and an admin pass too | `security/auth.ts:42` |
 | Only the write route (acknowledge, with close as an option) needs operator, so a wall screen never writes | `security/auth.ts:44` |
-| 19 pages, 18 of them behind the shell | `web/src/App.tsx` |
+| 18 pages, 17 of them behind the shell | `web/src/App.tsx` |
 | 139 monitored hosts across 14 sites | Zabbix, measured 15 September 2026 |
 | Exactly one write exists: acknowledge and close | `server/src/routes/actions.ts` |
 | That write is off unless `ZABBIX_WRITE_TOKEN` is set, and returns 503 otherwise | `routes/actions.ts:39-51` |
@@ -46,7 +46,7 @@ informative. Network and Links expose which physical links exist between sites, 
 infrastructure documentation than to monitoring. A viewer is someone who needs to know whether
 things are working, not how they are wired.
 
-The screens this implies matter most: Dashboard, Problems, SLA, Availability. Three of the four
+The screens this implies matter most: Dashboard, Problems and SLA, with its Response tab. Two of the three
 answer a question someone else asked them.
 
 ### Wall

@@ -64,7 +64,7 @@ signed-in stream ends when its token expires so the browser reconnects with the 
 stream ends on SIGTERM so the server can close. No token rides in the URL: `EventSource` cannot set a header, but it sends the
 httpOnly session cookie like any same-origin request, and the BFF refuses `?token=` on every route.
 `logging.ts` still redacts one, for pages loaded before the cookie (ADR-0010).
-`server/src/services/stream.ts:27-36,303-322`, `server/src/routes/stream.ts:4-39`, `web/src/api/problems.ts:7-10`.
+`TICK_MS` and `subscribe` in `server/src/services/stream.ts`, `streamRoutes` in `server/src/routes/stream.ts`, `streamUrl` in `web/src/api/problems.ts`.
 
 ### 3 · Server: one request
 
@@ -75,7 +75,7 @@ request ──► helmet ──► CORS ──► rate limit ──► compressi
 That is `index.ts` registration order, and **the order is the design**: a Fastify hook only covers the
 routes registered after it. The rate limit sits ahead of the auth guard deliberately: a flood should
 be rejected before the server spends work verifying JWTs, and `POST /api/auth/login` would otherwise
-be an unthrottled password oracle. `server/src/index.ts:56-106`, `server/src/http/rateLimit.ts:22-35`.
+be an unthrottled password oracle. `server/src/index.ts` (the options of `Fastify` and the order of its hooks), `registerRateLimit` in `server/src/http/rateLimit.ts`.
 
 ### 4 · Server: the cache
 
@@ -90,7 +90,7 @@ so a run of graph keys cannot push it out.
 This is why twenty NOC screens cost one upstream read. Stale serving is never permitted for the problem
 list. A view HCML's Zabbix takes tens of seconds to build is answered from its last copy while a newer one
 is read, and says so in `X-Data-Refreshing`; an answer given from an old copy because Zabbix failed says so
-in `X-Data-Stale`; both carry `X-Data-Age-Seconds`. `server/src/core/cache.ts:87-216`.
+in `X-Data-Stale`; both carry `X-Data-Age-Seconds`. `cached` in `server/src/core/cache.ts`.
 
 ### 5 · Auth
 
@@ -108,8 +108,8 @@ only exemptions, matched exactly against the route the router matched, so an enc
 address. The forgery check runs first: a POST sent with the cookie, and every sign-in and sign-out,
 needs `X-HCML-CSRF: 1` and, when the browser sends an `Origin`, one naming the portal's own host and
 port, or gets 403 `csrf`. A Bearer request skips the check, except on sign-in and sign-out. `POST /api/auth/logout` clears the cookie.
-In `server/src/security/auth.ts`: `ROUTE_RULES` 36-41, `roleAllows` 47, `PUBLIC_ROUTES` 50, `csrfRefusal` 133,
-`loadUsers` 177, `authenticate` 308, and the `onRequest` guard from 476.
+In `server/src/security/auth.ts`: `ROUTE_RULES`, `roleAllows`, `PUBLIC_ROUTES`, `csrfRefusal`,
+`loadUsers`, `authenticate`, and the `onRequest` hooks in `setupAuth`.
 
 ### 6 · Data: where a number comes from
 
@@ -135,7 +135,7 @@ Reached on demand only, never on page load, and only if the layer is configured 
 problem is sent to the local model: host, trigger name, opdata, severity, start time, the
 acknowledged/resolved flags and that problem's tags, and none of it leaves this host.
 `/api/explain/sla` is the second route on this path and is cached 5 minutes, not an hour.
-`server/src/routes/explain.ts:11`, `server/src/services/explain.ts:80,120`.
+`explainRoutes` in `server/src/routes/explain.ts`; `explainProblem`, `explainDerivedSla` and `explainZabbixSla` in `server/src/services/explain.ts`.
 
 ### 8 · AI: the Assistant
 
@@ -144,10 +144,10 @@ Assistant ──POST /api/chat──► estate snapshot + ≤3,000 chars of hist
 ```
 
 The Assistant is the larger of the two AI paths by a wide margin: Explain sends one problem, this
-sends a rollup of the whole estate: all 139 hosts by site, the open problems, unreachable-host lists
+sends a rollup of the whole estate: every host by site, the open problems, unreachable-host lists
 and derived SLA figures. Streamed token by token and never cached, where Explain is buffered and
-cached. `HISTORY_CHAR_BUDGET` is the one hard cap in the prompt, at 3,000 characters.
-`server/src/services/chat.ts:31-32`, `server/src/routes/chat.ts:27`.
+cached. Two caps bound the prompt: `HISTORY_CHAR_BUDGET`, 3,000 characters of earlier turns, and `SNAPSHOT_CHAR_CAP`, 5,500 characters of the snapshot.
+`HISTORY_CHAR_BUDGET` in `server/src/services/chat.ts`, `SNAPSHOT_CHAR_CAP` in `server/src/services/assistantSnapshot.ts`, `chatRoutes` in `server/src/routes/chat.ts`.
 
 ### 9 · The one write
 
@@ -159,7 +159,7 @@ The portal's only write to Zabbix, behind a token separate from the read token. 
 unset and the portal sends no write, provided the read token's role is read-only (tracker SC-23):
 `/api/health` reports `writeBack: false` and the UI hides the control. The invalidate and the push are drawn as a parallel fork in `DataFlow` but run in
 sequence: `event.acknowledge` is awaited first.
-[ADR-0006](../architecture/adr/0006-read-only-with-one-write.md), `server/src/routes/actions.ts:39`.
+[ADR-0006](../architecture/adr/0006-read-only-with-one-write.md), `actionRoutes` in `server/src/routes/actions.ts`.
 
 ---
 
@@ -254,8 +254,8 @@ than upstream faults, and nothing in the server ever returns 504. Both are pinne
 **DataFlow: five lanes, top to bottom, each read left to right.** Lane 1 is Zabbix doing the work we
 do not do. Lane 2 is the BFF. Lane 3 is the plain-language layer, reached on demand only, never
 on page load. Lane 4 is the browser. Lane 5 is the single write to Zabbix. There is no lane 6 in this
-copy: the hosted copy's report by email needs `MAIL_` settings and a state volume, and this one passes
-and declares neither.
+copy: the hosted copy's report by email needs `MAIL_` settings and a state file for its schedule, and this one passes
+no mail settings and keeps no schedule: its state volume holds only the web check figures of closed months.
 
 Lane 5 ends in its own terminal box rather than an arrow looping back to lane 1. It is the same
 Zabbix API; the arrow is omitted because one cycle is enough to make the layout engine scramble the

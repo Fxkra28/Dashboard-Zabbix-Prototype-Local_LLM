@@ -13,7 +13,7 @@ files, and `hash-password.ts`).
 
 ## `check/`: the repository against itself
 
-Read-only, run by CI. Each fails with a message that names the file and the line.
+Read-only. Each fails with a message that names the file and the line. CI runs every one of them except `installed.check.mjs`, which is for a working copy: CI installs from the lock files.
 
 | Tool | What it checks | Run (from the repository root) |
 |---|---|---|
@@ -25,6 +25,7 @@ Read-only, run by CI. Each fails with a message that names the file and the line
 | `diagrams.stamp.mjs` | writes that stamp, after a re-render | `node tools/check/diagrams.stamp.mjs [--force]` |
 | `handover.check.mjs` | the handover handbook in `docs/handover/` against the code: every generated block is what `handover:build` writes today, the code under each quoted snippet is the code its explanation was written against, every folder and (once the code part is complete) every code file has its description, the part for people who do not read code has no code in it, every name in code font exists, the A to Z index and the tests map hold their blocks, and no page holds an address, a token, an em dash or a hidden character | `node tools/check/handover.check.mjs` |
 | `parity.check.mjs` | the two copies (`hcml-portal`, `hcml-portal-ollama`) hold the same files apart from the ones meant to differ. With no sibling, as in CI, it runs only its own self-test | `node tools/check/parity.check.mjs` |
+| `installed.check.mjs` | every package in `server/node_modules` and `web/node_modules` is at the version its lock file names, nested ones included. `rsync` leaves `node_modules/` alone, so a copy brought up to date can go on testing older packages. It is the first step of `npm run verify` (`npm run verify:installed`); the cure is `npm run install:all`. CI does not run it | `node tools/check/installed.check.mjs` |
 
 ## `handover/`: the handover handbook
 
@@ -44,15 +45,15 @@ Read a running portal and change nothing.
 
 | Tool | What it does | Run |
 |---|---|---|
-| `signedin_check.py` | Signs in through nginx and checks health, ready, both report downloads, the stream, the problems list, and, as an administrator, the email settings, the monthly schedule and the CSV report. `--expect-mail on` is for the copy that has mail settings, `off` for the one that holds them back, and `--only-mail` runs the sign-in and those three alone. The password comes from `PORTAL_USER` and `PORTAL_PASSWORD`, and is never printed. Exit code 0 when every check passed, 1 when one failed | `PORTAL_USER=... PORTAL_PASSWORD=... python3 -I tools/live/signedin_check.py http://localhost:8081 --expect-mail on` |
+| `signedin_check.py` | Signs in through nginx and checks health, ready, both report downloads, the stream, the problems list, and, as an administrator, the email settings, the monthly schedule and the CSV report. `--expect-mail on` is for the copy that has mail settings, `off` for the one that holds them back, and `--only-mail` runs the sign-in and those three alone. `--expect-ai local` (or `hosted`) fails when the model is not where that copy promises, and `--only-health` runs the sign-in and the health and ready answers alone, which also check that the server's own log file is being written and still grows (IN-79, IN-83). The ready answer must be a 200 that says Zabbix is read: a portal that cannot read it fails the check, and `--expect-zabbix any` is for an image tried where Zabbix cannot be reached, such as off HCML's network (IN-91). The password comes from `PORTAL_USER` and `PORTAL_PASSWORD`, and is never printed. Exit code 0 when every check passed, 1 when one failed | `read -r PORTAL_USER; read -rs PORTAL_PASSWORD; export PORTAL_USER PORTAL_PASSWORD` then `python3 -I tools/live/signedin_check.py http://localhost:8081 --expect-mail on` |
 | `sse_hold.py` | Holds a live stream and says whether it stayed alive: a first frame, no close by the server, and something at least every 20 s. `signedin_check.py` uses it for its stream step; it also runs alone, and it fails on a stream that closes, goes quiet or never starts | `python3 -I tools/live/sse_hold.py http://localhost:8081/bff/api/stream --seconds 45 --cookie hcml_session=...` (the cookie shows in `ps`; `SSE_HOLD_COOKIE` does not) |
 | `layout-sweep.mjs` | Every page at five widths, and how far each runs past the window | `node tools/live/layout-sweep.mjs --base http://localhost:5173` (a dev portal, sign-in off) |
 | `page-audit.mjs` | Every page of the app (the sign-in screen with `--routes /login` against a portal that has sign-in on): console errors, failed requests, Content-Security-Policy violations, text contrast worked out in the page, unnamed controls, unlabelled fields, targets under 24 px, load time and bytes | `node tools/live/page-audit.mjs --base http://127.0.0.1:5199 [--theme dark] [--view 390x844] [--out file.json]` |
 | `download-check.mjs` | Clicks the two CSV buttons (and, given `--graph`, the one under a graph's Show data) and the SLA PDF and Excel buttons, and says whether each file arrived, how many rows and columns a CSV has, and whether the page logged a Content-Security-Policy violation | `node tools/live/download-check.mjs --base http://127.0.0.1:5199 [--month 2026-09] [--graph '/graphs?hostid=10084&itemid=23296']` |
 | `keyboard-walk.mjs` | Presses Tab through a page and reports stops with no focus ring and elements the keyboard cannot reach | `node tools/live/keyboard-walk.mjs http://127.0.0.1:5199 /,/problems` |
 | `enforcing-csp-server.mjs` | Serves `web/dist` with the production Content-Security-Policy and proxies `/bff` to a dev BFF, so a change to the policy can be tried before a rebuild. `STYLE_SRC="'self'"` drops inline styles too | `node tools/live/enforcing-csp-server.mjs` (port 5199; `PORT`, `BFF_PORT` and `DIST` change it) |
-| `load-test.mjs` | Closed-loop load on the cached read endpoints: requests per second and latency percentiles | `node tools/live/load-test.mjs http://127.0.0.1:4002 60 15` (start that BFF with `RATE_LIMIT_PER_MINUTE=10000000`) |
-| `api-timing.py` | Every read endpoint, cold and warm, with its size raw and gzipped | `python3 -I tools/live/api-timing.py` (a dev BFF on :4000) |
+| `load-test.mjs` | Closed-loop load on the cached read endpoints: requests per second and latency percentiles. The month it asks for is the one that has just closed, worked out each run, because the portal refuses a month more than about 400 days back (IN-88) | `node tools/live/load-test.mjs http://127.0.0.1:4002 60 15` (start that BFF with `RATE_LIMIT_PER_MINUTE=10000000`) |
+| `api-timing.py` | Every read endpoint, cold and warm, with its size raw and gzipped. Its month is the one that has just closed, or `MONTH` when set (IN-88) | `python3 -I tools/live/api-timing.py` (a dev BFF on :4000) |
 
 `page-audit.mjs` and `layout-sweep.mjs` default to every page of the app, and `server/src/__tests__/live-tools.test.ts` fails when a page is added and left out of either list.
 

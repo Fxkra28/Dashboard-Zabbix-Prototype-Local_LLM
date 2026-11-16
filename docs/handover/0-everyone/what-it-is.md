@@ -48,7 +48,7 @@ The portal exists twice, in two folders on the same machine, and the two are the
 
 ## Where it runs
 
-It runs as two small programs, called containers, on a server that HCML controls. One serves the pages to the browser. The other talks to Zabbix. People open it in a browser at an address the operator gives them, and sign in. Before anyone outside that machine uses it, a secure connection (TLS) has to be put in front of it; the portal does not provide one itself.
+It runs as two small programs, called containers, on a computer that stays on and is on HCML's network. Today that is one developer's Mac; a server of HCML's own is the aim. One serves the pages to the browser. The other talks to Zabbix. People open it in a browser at an address the operator gives them, and sign in. Before anyone outside that machine uses it, a secure connection (TLS) has to be put in front of it; the portal does not provide one itself.
 
 ## Why these pages exist
 

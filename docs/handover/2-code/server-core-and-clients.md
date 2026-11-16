@@ -2,7 +2,7 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Developers | about 35 min | [One request, from start to finish](one-request.md) | [Server: security and http](server-security-and-http.md) |
+| Developers | about 40 min | [One request, from start to finish](one-request.md) | [Server: security and http](server-security-and-http.md) |
 
 This chapter explains the functions the rest of the server stands on. `core/` is what everything uses: the cache, the checks on the settings, the gate that limits heavy work. `clients/` is everything the server calls out to: Zabbix, the certificate exception for Zabbix, and the AI layer's slot and guard.
 
@@ -14,14 +14,14 @@ Each entry names the file, says in one sentence what the function does, quotes t
 
 `server/src/core/cache.ts`. Every read of Zabbix goes through this function. It answers from memory when it can, makes callers that arrive together share one fetch, and can answer with an old copy while a new one is read, or when the read fails.
 
-<!-- gen:snippet server/src/core/cache.ts#cached sha=55d99b6a2597 -->
-`server/src/core/cache.ts:181-238`
+<!-- gen:snippet server/src/core/cache.ts#cached sha=8aab40546a54 -->
+`server/src/core/cache.ts:208-273`
 
 ```ts
 export async function cached<T>(
   key: string,
   ttlMs: number,
-  fn: () => Promise<T>,
+  fn: (ctx: FetchContext) => Promise<T>,
   opts: CacheOptions = {},
 ): Promise<T> {
   const now = Date.now();
@@ -44,7 +44,7 @@ export async function cached<T>(
         hit.refreshing = true;
         // Nobody awaits this promise. Left unhandled, a rejection would take
         // the whole process down; caught, the stale value simply stays.
-        begin(key, fn, opts).promise.catch((err: unknown) => {
+        begin(key, fn, opts, 0, true).promise.catch((err: unknown) => {
           hit.refreshing = false;
           hit.retryAt = Date.now() + REFRESH_RETRY_MS;
           log?.warn({ key, reason: reason(err) }, 'cache: background refresh failed; keeping the stale value');
@@ -60,10 +60,15 @@ export async function cached<T>(
     }
   }
 
-  const flight = inflight.get(key) ?? begin(key, fn, opts);
+  if (opts.signal?.aborted) throw new Cancelled();
+  const joined = inflight.get(key);
+  if (joined) joined.readers++;
+  const flight = joined ?? begin(key, fn, opts, 1);
   try {
-    return (await flight.promise) as T;
+    return (await untilAborted(flight.promise, opts.signal)) as T;
   } catch (err) {
+    // This reader left: no old copy for them, and no failed fetch to report.
+    if (err instanceof Cancelled) throw err;
     // Never inside a write hold: that is exactly when an old value is wrong.
     const last = opts.staleIfError && !held ? store.get(key) : undefined;
     if (!last) throw err;
@@ -74,6 +79,9 @@ export async function cached<T>(
     noteStale(ageMs);
     log?.warn({ key, ageMs, reason: reason(err) }, 'cache: fetch failed; answering with the last cached value');
     return last.v as T;
+  } finally {
+    flight.readers--;
+    abandonIfLeft(key, flight);
   }
 }
 ```
@@ -81,15 +89,15 @@ export async function cached<T>(
 
 ![A cached answer is missing, fresh, in its stale window or expired. Only the caller's options give it a stale window or an old copy after a failure.](../diagrams/cache-states.png)
 
-What it takes: a key, a lifetime in milliseconds, the function that fetches, and options. The options are four opt-ins and two marks: `staleMs` (a window after the lifetime in which the old copy is still answered at once), `staleIfError` (answer with the last copy when a fetch fails), `noteAge` (tell the response that an old copy was used), `maxAgeMs` (this call takes no copy that old, fresh or stale, and fetches instead; 0 always fetches) `pin` (evict this entry last) and `typed` (the key is made from what a caller chose, such as a search, a page number or a graph range: at most `MAX_TYPED_ENTRIES`, 150, of those are kept, and they are evicted before any other entry, so a run of distinct requests cannot push the problem list or the hosts out).
+What it takes: a key, a lifetime in milliseconds, the function that fetches, and options. The options are four opt-ins, two marks and a signal: `staleMs` (a window after the lifetime in which the old copy is still answered at once), `staleIfError` (answer with the last copy when a fetch fails), `noteAge` (tell the response that an old copy was used), `maxAgeMs` (this call takes no copy that old, fresh or stale, and fetches instead; 0 always fetches) `pin` (evict this entry last) and `typed` (the key is made from what a caller chose, such as a search, a page number, a graph range or the days of a report: at most `MAX_TYPED_ENTRIES`, 150, of those are kept, and they are evicted before any other entry, so a run of distinct requests cannot push the problem list or the hosts out). The signal is an `AbortSignal` that fires when this caller's reader has left, because the connection closed; step 4 says what it does.
 
 Reading it, top to bottom:
 
 1. `held` asks whether the key is under a hold, which `invalidate` sets after a write. A held key gets a lifetime of at most `HOLD_TTL_MS` (two seconds) and no stale window, because a copy from before an acknowledgement is exactly what must not be shown.
 2. A copy younger than the lifetime is answered at once, and `remember` makes it the most recently used. A caller that passed `maxAgeMs` gets no answer from a copy that old or older, so it falls through to a fetch: the live stream passes 0, because the cache dates a copy from the end of its read, and a stream that ticks at the lifetime would otherwise find a copy 14 seconds old and skip the read.
 3. A copy older than the lifetime but inside `ttl + staleMs`, and under any `maxAgeMs`, is answered at once as well. If the caller passed `noteAge`, the response will carry `X-Data-Refreshing` and the age. If no refresh is running for the key, and none has failed in the last minute (`REFRESH_RETRY_MS`), exactly one starts in the background. Nobody awaits it, so its failure is caught and logged: left unhandled, a rejection would stop the whole process. A failure also clears the running flag and starts the minute, so the next request after it tries again; the stale window, which can be a day, does not have to run out first. Past the window, a copy whose last fetch failed less than a minute ago is answered at once too, marked as an old copy, when the caller asked for an old copy after a failure (`staleIfError`), the key is not held, no fetch for it is running (a running one is joined, step 4) and the call takes a copy that old: Zabbix is not asked again until the minute has passed. A Zabbix that accepts and never answers still makes the first request after each minute wait for the read to time out.
-4. Anything else is a fetch. `inflight.get(key) ?? begin(...)` means that if a fetch for this key is already running, this call waits for that one. Ten pages asking together make one read of Zabbix.
-5. If the fetch fails, an old copy is used only when the caller asked for it and the key is not held. `noteStale` records the age for the response headers, and the failure is logged with the key and the reason. The failure also starts the minute on that copy, if it is still the copy this call started from: a newer one stored while the fetch ran is fresh and gets no pause. That minute is what step 3 refers to. Otherwise the error goes up to the error handler.
+4. Anything else is a fetch. `inflight.get(key) ?? begin(...)` means that if a fetch for this key is already running, this call waits for that one. Ten pages asking together make one read of Zabbix. Each caller counts as a reader of the fetch it waits for. A caller whose signal fires stops waiting at once, with `Cancelled`, and stops counting; a signal that has already fired starts nothing. The fetch goes on for any reader left, and a fetch that is already running finishes and is kept even when its last reader has gone, since the next caller will want it. The exception is a fetch that reads `ctx.signal`, as a model call does so that it can stop: when its last reader leaves it is told, with `Cancelled`, and its answer is not kept, and a fetch that asks for the signal only after the last reader has left, having read something first, is given one that has already fired (BK-67, BK-71). Only a fetch still waiting for a place at a gate can be dropped. The function that fetches is handed a `FetchContext`, and a gate asked with it (`gate.run(job, ctx)`) calls `wanted()` when the job's turn comes. `wanted()` is true while a reader waits or while the fetch is a background refresh, which has no reader by design. When it is false the fetch is taken off the key on the spot, so that the next caller starts a fresh one, and the gate drops the job (BK-59).
+5. If the fetch fails, an old copy is used only when the caller asked for it and the key is not held. `noteStale` records the age for the response headers, and the failure is logged with the key and the reason. The failure also starts the minute on that copy, if it is still the copy this call started from: a newer one stored while the fetch ran is fresh and gets no pause. That minute is what step 3 refers to. Otherwise the error goes up to the error handler. `Cancelled`, the caller's own signal, goes up as it is, with no old copy and no log line: the caller has gone.
 
 What can go wrong. A fetch that returns after `invalidate` has cancelled it still answers its own callers, but its value is not stored, so a read that began just before a write cannot put the old list back. A value larger than the whole 64 MB budget is not stored at all, and a warning says so. The cache holds at most 500 entries and about 64 MB, evicts the least recently used first, typed entries before the others and pinned entries last, and a parameterised key such as one per month or per host stays until it is evicted.
 
@@ -102,7 +110,7 @@ Used by nearly every service and by the domain reads and the health check. Pinne
 `server/src/core/cache.ts`. Drops cached entries by key prefix, so the next read fetches again. It is how a write shows up at once.
 
 <!-- gen:snippet server/src/core/cache.ts#invalidate sha=1611fe02bdeb -->
-`server/src/core/cache.ts:337-356`
+`server/src/core/cache.ts:417-436`
 
 ```ts
 export function invalidate(prefix: string, opts: InvalidateOptions = {}): number {
@@ -182,8 +190,8 @@ It must be registered before the routes, because a Fastify hook reaches only the
 
 `server/src/core/gate.ts`. Lets at most `limit` jobs run at once and makes the rest wait, first come first served. The heavy reports use it so that a new window or severity cannot keep the database busy with several cold reports.
 
-<!-- gen:snippet server/src/core/gate.ts#createGate sha=0cfe9a2d6adf -->
-`server/src/core/gate.ts:11-36`
+<!-- gen:snippet server/src/core/gate.ts#createGate sha=8f2d70f80bcc -->
+`server/src/core/gate.ts:24-55`
 
 ```ts
 export function createGate(limit: number): Gate {
@@ -192,11 +200,17 @@ export function createGate(limit: number): Gate {
   const queue: Array<() => void> = [];
 
   return {
-    async run<T>(job: () => Promise<T>): Promise<T> {
+    async run<T>(job: () => Promise<T>, opts?: GateRun): Promise<T> {
       // A place handed to the next in line stays counted in `running`, so a newcomer cannot jump the queue.
+      let waited = false;
       if (running < limit) running++;
-      else await new Promise<void>((resolve) => queue.push(resolve));
+      else {
+        waited = true;
+        await new Promise<void>((resolve) => queue.push(resolve));
+      }
       try {
+        // A job that started at once has a reader by definition; only one that waited can have lost it.
+        if (waited && opts?.wanted && !opts.wanted()) throw new Cancelled();
         return await job();
       } finally {
         const next = queue.shift();
@@ -216,11 +230,12 @@ export function createGate(limit: number): Gate {
 <!-- /gen -->
 
 1. A limit that is not a whole number of at least one is a programming error and throws at once.
-2. `run(job)` takes a place when one is free (`running++`). Otherwise it waits on a promise whose resolver goes to the back of `queue`.
-3. `finally` is the whole of the correctness. When a job ends, by returning or by throwing, it hands its place straight to the next in line: `next()` resolves the waiter and `running` is not decremented, so the place stays counted and a newcomer arriving at that instant cannot jump the queue. Only when nobody is waiting does `running` go down.
-4. `running` and `waiting` are read-only counters for tests and logs.
+2. `run(job, opts)` takes a place when one is free (`running++`). Otherwise it notes that it waited, and waits on a promise whose resolver goes to the back of `queue`.
+3. A job that waited and came with `opts.wanted` is asked, when its turn comes, whether anyone still wants its answer. If not, its reader has left: the job is not run, `run` rejects with `Cancelled`, and the place goes on to the next in line. A job that started at once is never asked, because its reader has only just called (BK-59).
+4. `finally` is the whole of the correctness. When a job ends, by returning, by throwing or by being dropped, it hands its place straight to the next in line: `next()` resolves the waiter and `running` is not decremented, so the place stays counted and a newcomer arriving at that instant cannot jump the queue. Only when nobody is waiting does `running` go down.
+5. `running` and `waiting` are read-only counters for tests and logs.
 
-A job that throws gives its place back, which is what the `finally` guarantees. A gate has no timeout: a job that never settles holds its place for good. The heavy reports use a gate of two, `HEAVY_REPORTS_AT_ONCE`. Tests: `gate.test.ts`.
+A job that throws gives its place back, which is what the `finally` guarantees. A gate has no timeout: a job that never settles holds its place for good, and a job that is already running is never stopped, only one still waiting can be dropped. The heavy reports use a gate of two, `HEAVY_REPORTS_AT_ONCE`. Tests: `gate.test.ts`, `cache.test.ts` and `heavy-reports.test.ts`.
 
 ## The settings
 
@@ -228,8 +243,8 @@ A job that throws gives its place back, which is what the `finally` guarantees. 
 
 `server/src/core/config.ts`. Run once at start. It refuses a configuration that is unsafe or unreadable, and warns about one that is merely odd, so that a portal that looks healthy and is not never starts.
 
-<!-- gen:snippet server/src/core/config.ts#assertConfig lines=1-48 sha=3abf7030d12a -->
-`server/src/core/config.ts:560-607` (lines 1 to 48 of assertConfig)
+<!-- gen:snippet server/src/core/config.ts#assertConfig lines=1-48 sha=1be14b5e300d -->
+`server/src/core/config.ts:582-629` (lines 1 to 48 of assertConfig)
 
 ```ts
 export function assertConfig(warn: (msg: string) => void): void {
@@ -301,7 +316,7 @@ The rest of the function warns and does not stop the start: an invalid `ZBX_URL`
 `server/src/core/config.ts`. Reads the two settings of the certificate exception, `ZBX_TLS_PIN_SHA256` and `ZBX_TLS_PIN_UNTIL`, into one value, or into nothing.
 
 <!-- gen:snippet server/src/core/config.ts#parseTlsPin sha=f50b80f50ab5 -->
-`server/src/core/config.ts:143-151`
+`server/src/core/config.ts:144-152`
 
 ```ts
 export function parseTlsPin(rawFingerprint: string | undefined, rawUntil: string | undefined): TlsPin | undefined {
@@ -564,15 +579,24 @@ The release function is safe to call twice and hands the slot straight to the ne
 
 ### aiGuard
 
-`server/src/clients/limits.ts`. The route guard for the AI routes. It refuses a call that is too frequent, or one made after the day's tokens are used.
+`server/src/clients/limits.ts`. The route guard for the AI routes. It refuses a call that is too frequent, one made after the day's tokens are used, and, with a local model, a second call from a person whose last one is still waiting or running.
 
-<!-- gen:snippet server/src/clients/limits.ts#aiGuard sha=50e83d36c1c4 -->
-`server/src/clients/limits.ts:194-215`
+<!-- gen:snippet server/src/clients/limits.ts#aiGuard sha=9169322fce79 -->
+`server/src/clients/limits.ts:205-243`
 
 ```ts
 export function aiGuard(kind: AiKind) {
   return async function guard(req: FastifyRequest, reply: FastifyReply): Promise<FastifyReply | void> {
     const caller = callerOf(req);
+    // The one slot is Ollama's: a person with a call waiting or running may not queue another behind it. Checked first, so a refusal costs no allowance.
+    const single = config.ai.provider !== 'anthropic';
+    const holding = single ? inFlight.get(caller) : undefined;
+    if (holding && Date.now() - holding.at < inFlightLimitMs()) {
+      return reply
+        .code(429)
+        .header('retry-after', '5')
+        .send({ error: 'rate_limited', message: 'Your last question is still being answered. Ask again when it has finished.' });
+    }
     const wait = perMinute[kind].take(`${kind}|${caller}`);
     if (wait !== null) {
       const { max, unit } = WHAT[kind];
@@ -584,19 +608,27 @@ export function aiGuard(kind: AiKind) {
           message: `You are asking too quickly: the limit is ${max} ${unit} a minute for each person. Try again in ${wait} second${wait === 1 ? '' : 's'}.`,
         });
     }
-    // Only the hosted API is billed.
-    if (config.ai.provider !== 'anthropic') return;
-    const refusal = aiBudget.refusal(caller);
+    // Only a call that leaves the machine's network can be billed: the hosted API, or a gateway outside it (SC-53).
+    const refusal = config.ai.external ? aiBudget.refusal(caller) : null;
     if (refusal) {
       return reply.code(429).header('retry-after', String(refusal.retryAfter)).send({ error: 'ai_budget', message: refusal.message });
     }
+    if (!single) return;
+    const mark = { at: Date.now() };
+    inFlight.set(caller, mark);
+    const release = () => {
+      if (inFlight.get(caller) === mark) inFlight.delete(caller);
+    };
+    reply.raw.once('finish', release);
+    reply.raw.once('close', release);
+    if (reply.raw.destroyed || reply.raw.writableEnded) release();
   };
 }
 ```
 <!-- /gen -->
 
-1. `aiGuard(kind)` returns a guard for `chat` or `explain`. `callerOf` names the person: the signed-in user, or the client address when sign-in is off.
+1. `aiGuard(kind)` returns a guard for `chat` or `explain`. `callerOf` names the person: the signed-in user, or the client address when sign-in is off. With a provider other than Anthropic there is one slot and it is first come, so the guard looks first at `inFlight`: a person with a call that is waiting or running is answered 429 `rate_limited` at once, and one person cannot keep the slot busy for everybody (BK-67). A mark older than the call's own timeout plus the wait for the slot is ignored, so a mark that was never taken off cannot lock anyone out, and the guard takes its mark off when the response finishes or the connection closes.
 2. `perMinute[kind].take(key)` is a fixed minute that starts at the key's first call. It answers with the seconds to wait, or `null` when the call may go on. Too fast is a 429 `rate_limited` with `retry-after` and a sentence that names the limit.
-3. Only the hosted API is billed, so a local model skips the budget. Otherwise `aiBudget.refusal(caller)` says whether this person, or the whole portal, has used the day's tokens. If so, 429 `ai_budget`, with the time to midnight in the reporting time zone.
+3. Only a call that leaves this machine's own network can be billed: the hosted API, or a model at an outside address (`config.ai.external`, SC-53). A local model skips the budget. Otherwise `aiBudget.refusal(caller)` says whether this person, or the whole portal, has used the day's tokens. If so, 429 `ai_budget`, with the time to midnight in the reporting time zone.
 
 It is a `preHandler`, so it runs after the sign-in guard has set the user and before the route reads its body or takes over the response. It is not the rate-limit plugin's own route option, because that runs one limiter for each request and the overall one has already run by then. Counts live in memory, so a restart gives everyone a fresh allowance. Used by `routes/chat.ts` and `routes/explain.ts`. Tests: `ai-limits.test.ts` drives both refusals through the routes.

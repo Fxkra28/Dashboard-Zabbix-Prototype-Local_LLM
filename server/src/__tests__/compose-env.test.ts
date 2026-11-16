@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { isLocalBaseUrl } from '../core/localHost.js';
 
 /**
  * docker-compose.yml against what the BFF reads.
@@ -25,7 +26,10 @@ const NOT_PASSED: Record<string, string> = {
 /** The report email's settings: hcml-portal passes them, hcml-portal-ollama holds them back so that nothing leaves the machine. */
 const MAIL_VARS = ['MAIL_PROVIDER', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_SECURITY', 'MAIL_USER', 'MAIL_PASS', 'MAIL_FROM', 'MAIL_FROM_NAME', 'MAIL_TO', 'MAIL_ALLOWED_DOMAINS', 'MAIL_SCHEDULE'];
 for (const v of MAIL_VARS) NOT_PASSED[v] = 'hcml-portal-ollama passes no mail settings on purpose: nothing leaves the machine there (tracker FR-26)';
-NOT_PASSED.PORTAL_STATE_DIR = 'hcml-portal-ollama has no state volume: it sends no email, so it has nothing to keep (tracker IN-59)';
+
+/** What makes hcml-portal-ollama refuse a model outside this machine's network. hcml-portal may use the hosted API, so it has no promise to keep. */
+const LOCAL_ONLY_VARS = ['AI_LOCAL_ONLY', 'AI_ALLOW_REMOTE'];
+for (const v of LOCAL_ONLY_VARS) NOT_PASSED[v] = 'only hcml-portal-ollama, which promises that no question leaves the machine, passes it (tracker SC-53)';
 
 /** Every variable named in the non-test sources under src/: process.env.X, process.env['X'] and envNum('X'). */
 function variablesRead(dir = SRC): Set<string> {
@@ -74,6 +78,7 @@ const SAME_AS_CONFIG: Record<string, (c: Config) => unknown> = {
   RATE_LIMIT_PER_MINUTE: (c) => c.rateLimitPerMinute,
   STREAM_MAX_CLIENTS: (c) => c.stream.maxClients,
   STREAM_MAX_PER_USER: (c) => c.stream.maxPerUser,
+  ACTION_EVENTS_PER_MINUTE: (c) => c.actions.eventsPerMinute,
   SITE_TAG: (c) => c.site.tag,
   OWNER_TAG: (c) => c.inventory.ownerTag,
   CRITICALITY_TAG: (c) => c.inventory.criticalityTag,
@@ -105,6 +110,8 @@ const SAME_AS_CONFIG: Record<string, (c: Config) => unknown> = {
   SESSION_HOURS: (c) => c.auth.sessionHours,
   SESSION_EPOCH: (c) => c.auth.sessionEpoch,
   PORTAL_USER: (c) => c.auth.user,
+  LOG_FILE_MAX_MB: (c) => c.log.fileMaxMb,
+  LOG_FILE_KEEP: (c) => c.log.fileKeep,
 };
 
 /** Defaults that are meant to differ from config.ts's (a container is not a dev machine), or between the copies. */
@@ -137,14 +144,50 @@ describe('docker-compose.yml and the BFF (tracker IN-04)', () => {
     for (const v of MAIL_VARS) expect(have.has(v), `${v} in ${local ? 'hcml-portal-ollama' : 'hcml-portal'}`).toBe(!local);
   });
 
-  it('gives hcml-portal a folder for its state, the one its volume is mounted at, and gives hcml-portal-ollama none', () => {
+  // IN-79: what hcml-portal-ollama exists to guarantee was pinned by nothing, so a lost line would have shipped.
+  it('fixes hcml-portal-ollama to a local model, with the words that make the server refuse any other, and leaves hcml-portal free to use the hosted API', () => {
     const text = readFileSync(root('docker-compose.yml'), 'utf8');
     const local = /^name: hcml-portal-ollama\s*$/m.test(text);
+    const have = passed();
+    for (const v of LOCAL_ONLY_VARS) expect(have.has(v), `${v} in ${local ? 'hcml-portal-ollama' : 'hcml-portal'}`).toBe(local);
+    if (!local) {
+      expect(/^ {6}AI_PROVIDER: \$\{AI_PROVIDER:-anthropic\}\s*$/m.test(text), 'hcml-portal defaults to the hosted provider').toBe(true);
+      expect(have.has('ANTHROPIC_API_KEY'), 'hcml-portal passes the Anthropic key').toBe(true);
+      return;
+    }
+    expect(/^ {6}AI_PROVIDER: openai-compatible\s*$/m.test(text), 'the provider is the literal word, not an interpolation a mistyped .env could change').toBe(true);
+    expect(have.has('ANTHROPIC_API_KEY'), 'no Anthropic key is passed').toBe(false);
+    expect(text, 'no Anthropic key is named anywhere in the file').not.toMatch(/ANTHROPIC/);
+    expect(/^ {6}AI_LOCAL_ONLY: ['"]?true['"]?\s*$/m.test(text), 'AI_LOCAL_ONLY is fixed to true').toBe(true);
+    expect(have.get('AI_ALLOW_REMOTE')?.fallback, 'AI_ALLOW_REMOTE is off unless .env says so').toBe('');
+    const base = have.get('AI_BASE_URL')?.fallback ?? '';
+    expect(isLocalBaseUrl(base), `the default AI_BASE_URL "${base}" is on this machine or its network`).toBe(true);
+  });
+
+  it('gives both copies a folder for their state, the one the portal-state volume is mounted at, and declares the volume (IN-59, BK-60)', () => {
+    // The local-model copy sends no email, but it keeps the web check figures of closed months there (ADR 0016).
+    const text = readFileSync(root('docker-compose.yml'), 'utf8');
+    expect(passed().has('PORTAL_STATE_DIR')).toBe(true);
     const line = /^ {6}PORTAL_STATE_DIR: (.*)$/m.exec(text)?.[1];
-    expect(passed().has('PORTAL_STATE_DIR'), local ? 'hcml-portal-ollama' : 'hcml-portal').toBe(!local);
-    if (!local) expect(line).toBe('/data');
-    const mounted = /^ {6}- portal-state:(\/\S+)$/m.exec(text)?.[1];
-    expect(mounted, 'the volume the state folder is').toBe(local ? undefined : line);
+    expect(line).toBe('/data');
+    expect(/^ {6}- portal-state:(\/\S+)$/m.exec(text)?.[1], 'the volume the state folder is').toBe(line);
+    expect(text).toMatch(/^ {2}portal-state:\s*$/m);
+  });
+
+  it('gives both copies a folder for the BFF’s own log, the one the portal-logs volume is mounted at, and declares the volume (SC-42)', () => {
+    const text = readFileSync(root('docker-compose.yml'), 'utf8');
+    expect(passed().has('LOG_DIR')).toBe(true);
+    const folder = /^ {6}LOG_DIR: (.*)$/m.exec(text)?.[1];
+    expect(folder).toBe('/var/log/portal');
+    expect(/^ {6}- portal-logs:(\/\S+)$/m.exec(text)?.[1]).toBe(folder);
+    expect(text).toMatch(/^ {2}portal-logs:\s*$/m);
+  });
+
+  it('has the image make that folder for the user the portal runs as, before it gives up root (SC-42)', () => {
+    const docker = readFileSync(root('server/Dockerfile'), 'utf8');
+    const made = /^RUN mkdir -p .*\/var\/log\/portal.* && chown node:node .*\/var\/log\/portal.*$/m.exec(docker);
+    expect(made, 'a RUN that makes and hands over /var/log/portal').not.toBeNull();
+    expect(made!.index).toBeLessThan(docker.indexOf('USER node'));
   });
 
   it('holds back only variables the BFF still reads', () => {

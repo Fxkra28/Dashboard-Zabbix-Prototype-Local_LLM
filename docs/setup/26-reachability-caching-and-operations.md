@@ -68,7 +68,7 @@ method counts each as 100 %; the SLA page lists them and the figures are unchang
   note `cache.ts` leaves in a request-scoped store, and to no other. A failure also starts a pause of a minute
   (`REFRESH_RETRY_MS`): until it has passed the same copy is answered without asking Zabbix, so a Zabbix that is
   down is asked about each value once a minute (tracker BK-27, BK-31). The web app shows "Zabbix did
-  not answer, so this is the last copy the portal kept, from …" on the SLA, Availability, Capacity
+  not answer, so this is the last copy the portal kept, from …" on the SLA, Capacity
   and Alert noise pages;
 - `invalidate(prefix, { holdMs })` also cancels fetches already in flight, so data from before an
   acknowledge is never stored again; after a write, matching keys are held at a ≤ 2 s TTL for 15 s.
@@ -127,7 +127,8 @@ method counts each as 100 %; the SLA page lists them and the figures are unchang
   reloaded with a different context size and really stays loaded for `AI_KEEP_ALIVE`.
 - Prefill when the Assistant page opens; a focus block for questions that name a site or a host.
 - One request at a time: chat, explain and prefill share one slot; a request that waits more
-  than 20 s gets `503 ai_busy` with `Retry-After`.
+  than 20 s is told the assistant is busy: Explain answers `503 ai_busy` with `Retry-After`, and the Assistant,
+  whose stream has already begun with a 200, sends the same sentence as an `error` event.
 
 ## Zabbix stack settings (`Proto1/docker-compose.yml`)
 

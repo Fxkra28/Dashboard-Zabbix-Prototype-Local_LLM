@@ -23,7 +23,7 @@ the report method is shown beside it so the published figure can still be checke
 ## How a figure is computed
 
 1. Window. A calendar month cut at midnight `SLA_TIMEZONE` ([`sli/time.ts`](../../server/src/sli/time.ts)),
-   or a rolling window for the availability report.
+   or a rolling window (the last 7 or 30 days of the SLA page) for the availability report.
 2. Triggers. `trigger.get` by name (`SLI_REPORT_TRIGGERS` / `SLI_AVAILABILITY_TRIGGERS`), not
    filtered to monitored hosts: HCML's report lists disabled hosts too. The report category is the
    host's device template (`Cisco IOS by SNMP`, `Generic by SNMP`, `FortiGate by SNMP`, else `ICMP Ping`).
@@ -94,7 +94,7 @@ workbooks and compares them with `GET /api/sli?profile=hcml-report`:
 | 2026-08 | 99.2313 % | 138 | 138 / 138 | 1,417 / 1,417 |
 
 Category counts (51 / 42 / 31 / 14) and category figures match within 0.005 pp. Run again on 10 November 2026, against HCML's own Zabbix and the build that runs now, all three months passed with the same figures to the last digit, the same 138 devices and the same incident counts (739, 1,165 and 1,417); the first table was measured on the restored copy. Run it with the BFF
-up and sign-in off (it sends no credentials): `cd server && npx tsx scripts/validate-sli.ts`, with the spreadsheets in `~/Downloads` or in `REPORT_DIR`. The workbooks hold real host names and event
+up. With sign-in on, first read `PORTAL_USER` and `PORTAL_PASSWORD` into your own shell (`read -r PORTAL_USER; read -rs PORTAL_PASSWORD; export PORTAL_USER PORTAL_PASSWORD`), and the script signs in once. Then `cd server && npx tsx scripts/validate-sli.ts`, with the spreadsheets in `~/Downloads` or in `REPORT_DIR`. The workbooks hold real host names and event
 ids, so they are read in memory and nothing from them is stored.
 
 ## Endpoints
@@ -109,4 +109,4 @@ ids, so they are read in memory and nothing from them is stored.
 | `GET /api/reports/availability?basis=availability` | the availability report, now on this engine (default); `basis=all-problems` keeps the original any-problem report, no longer truncated | 2 min |
 
 A closed month of the strict method costs about 20 Zabbix calls and 0.6 s cold; the report method
-about 6 calls and 0.2 s. Months that are not cached are read two at a time (`SLI_AT_ONCE`, BK-50): a caller who asks for every month of both methods at once starts two reads, and the others wait their turn, so one low-privilege token cannot hold every cold month of both methods in memory at once. A cached month does not wait, and two requests for one month still share one read.
+about 6 calls and 0.2 s. Months that are not cached are read two at a time (`SLI_AT_ONCE`, BK-50): a caller who asks for every month of both methods at once starts two reads, and the others wait their turn, so one low-privilege token cannot hold every cold month of both methods in memory at once. A cached month does not wait, and two requests for one month still share one read. One person may also hold at most four places in that line at once (`SLI_READS_PER_PERSON`, BK-76): a month in one method, as the SLA page and the service tree ask for it, takes one, and the report file takes two, since it reads both methods. A request that would take more is refused with `429 rate_limited` and a `Retry-After`, and a place comes back when the answer is sent or the reader leaves. A read of a month that is still waiting for a place when its reader leaves is dropped, for the SLA page, the report file and the service tree alike, unless another reader still waits for the same month (BK-59, BK-77).

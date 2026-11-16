@@ -11,6 +11,7 @@ import { focusMain } from '../../shared/hooks/useDialogFocus';
 import { useSessionRenewal } from './useSessionRenewal';
 import { useWallMode } from './useWallMode';
 import { usePageTitle } from './usePageTitle';
+import { useTopBarHeight } from './useTopBarHeight';
 
 /** What a page learns from the shell, via useOutletContext. */
 export type LayoutContext = { wall: boolean; exitWall: () => void };
@@ -36,6 +37,8 @@ export default function Layout() {
 
   const { wall, enter: enterWall, exit: exitWall } = useWallMode();
   const wallToggle = useRef<HTMLButtonElement>(null);
+  const topbar = useRef<HTMLElement>(null);
+  useTopBarHeight(topbar, !wall);
   const wasWall = useRef(wall);
   useEffect(() => {
     if (wasWall.current === wall) return;
@@ -85,7 +88,7 @@ export default function Layout() {
       )}
       <div className="main">
         {!wall && (
-          <header className="topbar">
+          <header ref={topbar} className="topbar">
             <h1>{title}</h1>
             <div className="right">
               <TodayDate />
@@ -116,7 +119,8 @@ export default function Layout() {
                       Sign-out did not reach the portal. You are still signed in. Try again.
                     </span>
                   )}
-                  <button className="btn ghost sm" disabled={signingOut} onClick={() => void signOut()}>
+                  {/* aria-disabled, not disabled: a disabled button drops the focus it holds, and after a failed sign-out it had gone (UX-61). */}
+                  <button className="btn ghost sm" aria-disabled={signingOut} onClick={() => !signingOut && void signOut()}>
                     {signingOut ? 'Signing out...' : 'Sign out'}
                   </button>
                 </>

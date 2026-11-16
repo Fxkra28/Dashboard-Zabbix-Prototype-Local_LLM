@@ -6,7 +6,6 @@ import { api, HttpFailure } from '../../api';
 import ReportDownload, { GIVE_UP_AFTER_MS, READY_FOR_MS, REVOKE_AFTER_MS } from './ReportDownload';
 import { recentMonths } from '../../shared/lib/time';
 import { DEFAULT_REPORT_STYLE, REPORT_STYLE_KEY } from './reportStyle';
-import Availability from './Availability';
 import Sla from './Sla';
 import type { AvailabilityReport, SliGroup, SliProfile, SliReport } from '../../types';
 
@@ -469,7 +468,7 @@ describe('ReportDownload', () => {
   });
 });
 
-// The two pages that carry it
+// The SLA page, which carries it
 
 const at = (url: string) => window.history.replaceState(null, '', url);
 
@@ -565,7 +564,7 @@ describe('on the SLA page', () => {
     const { give } = serveSli();
     openSla();
 
-    const controls = screen.getByLabelText('Month').closest('.controls') as HTMLElement;
+    const controls = screen.getByLabelText('Period').closest('.controls') as HTMLElement;
     const downloads = within(controls).getByRole('group', { name: downloadGroup(lastMonth) });
     expect(within(downloads).getAllByRole('button')).toHaveLength(3);
     // Nothing here is the AI's: its "Explain overall" button is not on the page at all.
@@ -589,7 +588,7 @@ describe('on the SLA page', () => {
     give(lastMonth);
     await waitFor(() => expect(screen.getByRole('button', { name: 'PDF report' })).toBeEnabled());
 
-    await user.selectOptions(screen.getByLabelText('Month'), monthBefore);
+    await user.selectOptions(screen.getByLabelText('Period'), monthBefore);
     expect(screen.getByRole('group', { name: downloadGroup(monthBefore) })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'PDF report' })).toBeDisabled();
 
@@ -605,7 +604,7 @@ describe('on the SLA page', () => {
     const { give } = serveSli();
     openSla();
 
-    const controls = screen.getByLabelText('Month').closest('.controls') as HTMLElement;
+    const controls = screen.getByLabelText('Period').closest('.controls') as HTMLElement;
     const email = await within(controls).findByRole('group', { name: emailGroup(lastMonth) });
     const button = within(email).getByRole('button', { name: 'Email report' });
     expect(button).toBeDisabled();
@@ -640,74 +639,69 @@ describe('on the SLA page', () => {
   });
 });
 
-describe('on the availability page', () => {
-  beforeEach(pageSetup);
+describe('on the SLA page, across periods', () => {
+  beforeEach(() => {
+    pageSetup();
+    vi.spyOn(api, 'sli').mockImplementation(async (month, profile) => sliReport(month ?? '', profile ?? 'availability'));
+  });
 
   const open = (search: string) => {
-    at(`/availability${search}`);
+    at(`/sla${search}`);
     return render(
       <BrowserRouter>
-        <Availability />
+        <Sla />
       </BrowserRouter>,
     );
   };
 
   it('offers nothing for a rolling window, which is not a month', async () => {
     vi.spyOn(api, 'availability').mockResolvedValue(availabilityReport(null));
-    open('');
+    open('?month=d7');
     expect(await screen.findByLabelText('Period')).toHaveValue('d7');
-    expect(screen.queryByRole('group', { name: /Download the SLA report/ })).toBeNull();
-  });
-
-  it('offers nothing on the legacy basis, whose figures are not the SLA', async () => {
-    vi.spyOn(api, 'availability').mockResolvedValue(availabilityReport(lastMonth));
-    open(`?period=m:${lastMonth}&basis=all-problems`);
-    expect(await screen.findByLabelText('Basis')).toHaveValue('all-problems');
+    await screen.findByText('Overall · Strict');
     expect(screen.queryByRole('group', { name: /Download the SLA report/ })).toBeNull();
   });
 
   it('offers the chosen calendar month, off while that month loads', async () => {
-    const answer = deferred<AvailabilityReport>();
-    const availability = vi.spyOn(api, 'availability').mockReturnValue(answer.promise);
-    open(`?period=m:${lastMonth}`);
+    const answer = deferred<SliReport>();
+    vi.spyOn(api, 'sli').mockReturnValue(answer.promise);
+    open(`?month=${monthBefore}`);
 
-    const downloads = await screen.findByRole('group', { name: downloadGroup(lastMonth) });
+    const downloads = await screen.findByRole('group', { name: downloadGroup(monthBefore) });
     expect(downloads.closest('.controls')).toContainElement(screen.getByLabelText('Period'));
     expect(within(downloads).getByRole('button', { name: 'PDF report' })).toBeDisabled();
 
-    answer.resolve(availabilityReport(lastMonth));
+    answer.resolve(sliReport(monthBefore, 'availability'));
     await waitFor(() => expect(within(downloads).getByRole('button', { name: 'PDF report' })).toBeEnabled());
-    expect(availability).toHaveBeenCalledWith(expect.objectContaining({ month: lastMonth }));
   });
 
-  it('offers Email report for the same calendar month to an administrator, and for no rolling window', async () => {
+  it('offers Email report for the chosen calendar month to an administrator, and for no rolling window', async () => {
     auth.role = 'admin';
     emailOn();
-    vi.spyOn(api, 'availability').mockImplementation(async (arg) =>
-      availabilityReport(typeof arg === 'object' ? (arg.month ?? null) : null),
-    );
+    vi.spyOn(api, 'availability').mockResolvedValue(availabilityReport(null));
     const user = userEvent.setup();
-    open(`?period=m:${lastMonth}`);
+    open(`?month=${monthBefore}`);
 
-    const group = await screen.findByRole('group', { name: emailGroup(lastMonth) });
+    const group = await screen.findByRole('group', { name: emailGroup(monthBefore) });
     await waitFor(() => expect(within(group).getByRole('button', { name: 'Email report' })).toBeEnabled());
 
     await user.selectOptions(screen.getByLabelText('Period'), 'd30');
     await waitFor(() => expect(screen.queryByRole('group', { name: /Email the SLA report/ })).toBeNull());
   });
 
-  it('stays off when the month just picked fails to load, though the last month’s figures are still on screen', async () => {
-    const availability = vi
-      .spyOn(api, 'availability')
-      .mockResolvedValueOnce(availabilityReport(lastMonth))
-      .mockRejectedValueOnce(new Error('Zabbix rejected the API token.'));
+  it('stays off when the month just picked fails to load', async () => {
+    // The page asks for both methods of a month, so the month is what fails, not the nth call.
+    const sli = vi.spyOn(api, 'sli').mockImplementation(async (month, profile) => {
+      if (month === monthBefore) throw new Error('Zabbix rejected the API token.');
+      return sliReport(month ?? '', profile ?? 'availability');
+    });
     const user = userEvent.setup();
-    open(`?period=m:${lastMonth}`);
+    open('');
     const first = await screen.findByRole('group', { name: downloadGroup(lastMonth) });
     await waitFor(() => expect(within(first).getByRole('button', { name: 'PDF report' })).toBeEnabled());
 
-    await user.selectOptions(screen.getByLabelText('Period'), `m:${monthBefore}`);
-    await waitFor(() => expect(availability).toHaveBeenCalledTimes(2));
+    await user.selectOptions(screen.getByLabelText('Period'), monthBefore);
+    await waitFor(() => expect(sli.mock.calls.some(([m]) => m === monthBefore)).toBe(true));
     await new Promise((r) => setTimeout(r, 20));
     const after = screen.getByRole('group', { name: downloadGroup(monthBefore) });
     expect(within(after).getByRole('button', { name: 'PDF report' })).toBeDisabled();
@@ -715,18 +709,18 @@ describe('on the availability page', () => {
   });
 
   it('comes and goes with the period picked', async () => {
-    vi.spyOn(api, 'availability').mockImplementation(async (arg) =>
-      availabilityReport(typeof arg === 'object' ? (arg.month ?? null) : null),
-    );
+    vi.spyOn(api, 'availability').mockResolvedValue(availabilityReport(null));
     const user = userEvent.setup();
-    open('');
-    const period = await screen.findByLabelText('Period');
+    open('?month=d7');
+    await screen.findByText('Overall · Strict');
     expect(screen.queryByRole('group', { name: /Download the SLA report/ })).toBeNull();
 
-    await user.selectOptions(period, `m:${monthBefore}`);
+    // The select is drawn again with each view, so it is looked up again each time.
+    await user.selectOptions(screen.getByLabelText('Period'), monthBefore);
     expect(await screen.findByRole('group', { name: downloadGroup(monthBefore) })).toBeInTheDocument();
 
-    await user.selectOptions(period, 'd30');
+    await user.selectOptions(screen.getByLabelText('Period'), 'd30');
+    await screen.findByText('Overall · Strict');
     expect(screen.queryByRole('group', { name: /Download the SLA report/ })).toBeNull();
   });
 });

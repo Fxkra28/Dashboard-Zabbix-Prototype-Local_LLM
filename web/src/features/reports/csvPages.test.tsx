@@ -109,6 +109,8 @@ describe('the Alert noise CSV (FR-05)', () => {
   it('names the file for the period and filter a link opened the page with (FR-14)', async () => {
     const user = userEvent.setup();
     window.history.replaceState(null, '', '/reports/noise?days=30&show=chronic');
+    // The file is named by the days of the report it holds (FR-54), so the stand-in answers for 30 days.
+    vi.mocked(api.noise).mockResolvedValue({ ...report(triggers), windowSeconds: 30 * 86_400 });
     render(<AlertNoise />, { wrapper: BrowserRouter });
     await screen.findByText('Disk full');
     await user.click(screen.getByRole('button', { name: 'Download CSV' }));

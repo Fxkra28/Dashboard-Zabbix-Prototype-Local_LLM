@@ -14,8 +14,9 @@ vi.hoisted(() => {
 });
 vi.mock('../services/explain.js', () => {
   const answer = { status: 'Met', plain: 'on target', meetingTarget: true, recommendation: 'none' };
+  // The usage callback is the one function among the arguments: a reader's signal may follow it (BK-67).
   const call = async (...args: unknown[]) => {
-    (args.at(-1) as (n: number) => void)(77);
+    (args.find((a) => typeof a === 'function') as (n: number) => void)(77);
     return answer;
   };
   return { explainProblem: vi.fn(call), explainDerivedSla: vi.fn(call), explainZabbixSla: vi.fn(call) };

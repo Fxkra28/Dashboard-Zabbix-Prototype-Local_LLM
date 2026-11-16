@@ -28,11 +28,12 @@ COPY --from=build /app/dist ./dist
 ARG BUILD_COMMIT=unknown
 ARG BUILD_TIME=unknown
 ENV BUILD_COMMIT=$BUILD_COMMIT BUILD_TIME=$BUILD_TIME
-# The one place this process may write, a volume in the hosted compose file: the saved
-# recipients, the monthly schedule and a record of what was sent (core/state.ts).
-RUN mkdir -p /data && chown node:node /data
+# The two places this process may write, a volume each in the compose file: /data holds the saved
+# recipients, the monthly schedule and a record of what was sent (core/state.ts, hosted copy only) and the web check
+# figures of closed months (services/closedWebStore.ts, both copies), /var/log/portal its own copy of the log (core/logFile.ts).
+RUN mkdir -p /data /var/log/portal && chown node:node /data /var/log/portal
 # The image's own unprivileged user, not root: this process holds both Zabbix tokens
-# and the AI key. The root-owned app needs no chown, and it writes nothing but /data.
+# and the AI key. The root-owned app needs no chown, and it writes nothing but those two folders.
 USER node
 EXPOSE 4000
 # Exec form, no `npm start` and no shell: SIGTERM reaches node (as PID 1, or from

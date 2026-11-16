@@ -12,7 +12,7 @@ export async function mapRoutes(app: FastifyInstance): Promise<void> {
   app.get('/api/maps/detail', { schema: { querystring: singleValues('mapid') } }, async (req) => {
     const mapid = requireId((req.query as { mapid?: string }).mapid, 'mapid');
     const detail = await getMapDetail(mapid);
-    // Network hosts are operator data. Cut after the cache: it holds one map for every role.
+    // Network hosts are wall data. Cut after the cache: it holds one map for every role.
     return hidesNetwork(req) ? withoutNetworkElements(detail, await networkHostIds(), config.netGroupIds) : detail;
   });
 }

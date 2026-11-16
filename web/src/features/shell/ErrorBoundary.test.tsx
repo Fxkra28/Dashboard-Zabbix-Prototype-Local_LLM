@@ -32,16 +32,40 @@ describe('the card for a page that crashed', () => {
     expect(screen.queryByText('This page hit an error')).toBeNull();
   });
 
-  it('shows the message, a hint and a Reload button instead of a blank page', () => {
+  it('shows a plain sentence, a hint and a Reload button instead of a blank page', () => {
     render(
       <ErrorBoundary>
         <Boom message="Cannot read properties of undefined" />
       </ErrorBoundary>,
     );
     expect(screen.getByText('This page hit an error')).toBeInTheDocument();
-    expect(screen.getByText('Cannot read properties of undefined')).toBeInTheDocument();
+    expect(screen.getByText(/The page could not be drawn/)).toBeInTheDocument();
     expect(screen.getByText(/Other pages still work/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Reload' })).toBeInTheDocument();
+  });
+
+  // UX-55: a screen reader was told nothing when the page broke, and a viewer was shown the engine's own words.
+  it('is announced as an alert, so that a screen reader says the page broke', () => {
+    render(
+      <ErrorBoundary>
+        <Boom message="Cannot read properties of undefined" />
+      </ErrorBoundary>,
+    );
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('This page hit an error');
+    expect(alert).toHaveTextContent('The page could not be drawn');
+  });
+
+  it('keeps the engine’s message out of the way, in a closed technical detail that an administrator can open and quote', () => {
+    render(
+      <ErrorBoundary>
+        <Boom message="Cannot read properties of undefined" />
+      </ErrorBoundary>,
+    );
+    const detail = screen.getByText('Cannot read properties of undefined').closest('details');
+    expect(detail).not.toBeNull();
+    expect(detail).not.toHaveAttribute('open');
+    expect(detail?.querySelector('summary')).toHaveTextContent('Technical detail');
   });
 
   it('writes the crash to the console with the component stack', () => {

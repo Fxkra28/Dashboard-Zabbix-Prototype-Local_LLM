@@ -8,11 +8,12 @@ It is written from the files of this repository and from one Mac: nothing here w
 | What | Where | How big it gets |
 |---|---|---|
 | Container logs | Docker's `json-file` driver, set once in `docker-compose.yml` (`x-logging`) | Up to five files of 50 MB for each container, so up to 250 MB for each of the four containers (two copies, two containers each). They are deleted when a container is made again |
+| The server's own log | The `portal-logs` volume of each copy (`/var/log/portal`), written by the server itself | At most `LOG_FILE_KEEP` files of `LOG_FILE_MAX_MB` MB, ten of 20 MB by default, so 200 MB for each copy. A rebuild keeps it; `docker compose down -v` deletes it |
 | Saved logs | `~/.local/state/hcml-portal-logs`, written by `deploy/rebuild.sh` before each rebuild | One compressed file for each copy and each rebuild, the newest 30 of each kept (`LOG_ARCHIVE_KEEP`). 6.2 MB on the Mac on 12 November 2026 |
 | The watcher | `~/.local/state/hcml-portal-watch` (`deploy/watch.sh`) | A state file and a log that grows by a line for each thing it says |
 | Images | Docker | Each rebuild keeps the images it replaced under a `rollback-<day><month>` tag, and `last-good` keeps one more. Docker on the Mac held 30 images of all projects, 18.4 GB, 9.4 GB of it reclaimable, on 12 November |
 | Build cache | Docker | 9.3 GB on the same Mac, 7.6 GB of it reclaimable (with `--all`, below) |
-| The state volume | `portal-state` (`hcml-portal` only) | Kilobytes: the saved list, the schedule and the last 24 sends |
+| The state volume | `portal-state` | Kilobytes: in `hcml-portal` the saved list, the schedule and the last 24 sends, and in both copies the web check figures of closed months |
 
 ## See which it is
 
@@ -31,7 +32,7 @@ du -sh ~/.local/state/hcml-portal-logs # the saved logs
 
 ## What not to do
 
-- `docker compose down -v`, or `docker volume prune --all` and `docker system prune --all --volumes` once the containers are gone (after `docker compose down`). They delete `portal-state`, and with it the saved list and the monthly schedule. Before Docker 23, plain `docker volume prune` and `docker system prune --volumes` deleted named volumes too, so on an older Engine take the same care with them.
+- `docker compose down -v`, or `docker volume prune --all` and `docker system prune --all --volumes` once the containers are gone (after `docker compose down`). They delete `portal-state`, and with it the saved list and the monthly schedule, and `portal-logs`, the server's own copy of its log. Before Docker 23, plain `docker volume prune` and `docker system prune --volumes` deleted named volumes too, so on an older Engine take the same care with them.
 - `docker system prune -a`. It deletes every image without a container, the rollback and `last-good` tags with them, and with those the way back from a bad build.
 
 ## What the portal does meanwhile

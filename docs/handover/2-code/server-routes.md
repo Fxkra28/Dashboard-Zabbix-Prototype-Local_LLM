@@ -89,7 +89,7 @@ Tests: `request-schemas.test.ts` holds the schemas, and `graphs.test.ts` and `ro
 
 ### A route that uses them: /api/items
 
-<!-- gen:snippet server/src/routes/hosts.ts#hostRoutes lines=17-31 sha=15e4285f7883 -->
+<!-- gen:snippet server/src/routes/hosts.ts#hostRoutes lines=17-31 sha=dfa3f2ad9141 -->
 `server/src/routes/hosts.ts:35-49` (lines 17 to 31 of hostRoutes)
 
 ```ts
@@ -105,7 +105,7 @@ app.get('/api/items', { schema: { querystring: ITEMS_QUERY }, preHandler: search
   }
   const hostid = itemids ? optionalId(q.hostid, 'hostid') : requireId(q.hostid, 'hostid');
   const found = await findItems({ hostid, itemids, search: q.search, graphable });
-  // Interface items are operator data. Cut after the cache: it holds one list for every role.
+  // Interface items are wall data. Cut after the cache: it holds one list for every role.
   return hidesNetwork(req) ? withoutNetworkItems(found) : found;
 });
 ```
@@ -270,8 +270,8 @@ Tests: `graphs.test.ts`.
 
 ![The acknowledge path: the page sends the request, the guard checks the role, the route checks the body, the write token sends event.acknowledge to Zabbix, the caches are cleared and the live screens are told.](../diagrams/acknowledge-flow.png)
 
-<!-- gen:snippet server/src/routes/actions.ts#actionRoutes lines=10-35 sha=3e8f6e0b0943 -->
-`server/src/routes/actions.ts:38-63` (lines 10 to 35 of actionRoutes)
+<!-- gen:snippet server/src/routes/actions.ts#actionRoutes lines=10-35 sha=d24a42ab6808 -->
+`server/src/routes/actions.ts:39-64` (lines 10 to 35 of actionRoutes)
 
 ```ts
 const trail = trailOf(req);
@@ -303,8 +303,8 @@ if (req.body != null && (typeof req.body !== 'object' || Array.isArray(req.body)
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/routes/actions.ts#actionRoutes lines=63-101 sha=3e8f6e0b0943 -->
-`server/src/routes/actions.ts:91-129` (lines 63 to 101 of actionRoutes)
+<!-- gen:snippet server/src/routes/actions.ts#actionRoutes lines=63-101 sha=d24a42ab6808 -->
+`server/src/routes/actions.ts:92-130` (lines 63 to 101 of actionRoutes)
 
 ```ts
 const note = (body.message ?? '').trim();
@@ -319,6 +319,13 @@ if (note) asked |= ACTION_MESSAGE;
 
 if (asked === 0) {
   return refuse(400, 'bad_request', 'Nothing to do. Supply acknowledge, close, or a message.');
+}
+
+// Counted last, once the request is one that will be written, so that a refusal above costs no allowance (SC-51).
+const wait = takeEvents(req, eventids.length);
+if (wait !== null) {
+  reply.header('retry-after', String(wait));
+  return refuse(429, 'rate_limited', limitMessage(wait));
 }
 
 // Zabbix files the write under the token's owner, so the portal user goes into the text. The tag
@@ -339,19 +346,12 @@ try {
   // The error handler's own log line, which this answer skips: the address Zabbix was asked at is in it.
   req.log.error({ detail: (err as { detail?: string }).detail }, (err as Error).message);
   // A write that may have gone through: the next read of the lists must be Zabbix's, as after one that did, since the message says to look again (BK-53).
-  if (err instanceof ZabbixTimeoutError || (err instanceof ZabbixApiError && err.maybeApplied)) {
-    for (const key of STALE_AFTER_WRITE) invalidate(key, { holdMs: WRITE_HOLD_MS });
-    void notifyProblemsChanged();
-  }
-  return reply.code(told.status).send({ error: told.error, message: told.message });
-}
-
 ```
 <!-- /gen -->
 
 1. Every attempt is on record before any check can turn it away. `logAttempt` runs as a pre-validation hook and logs who, from where and which events. The `onResponse` hook logs a refusal that happened outside the handler (no token, a viewer, a bad body, a limit).
 2. `refuse` logs the refusal with the same fields and sends the status. A blank write token or a sign-in that is off gives the 503 `zabbix_write_disabled`, with a sentence for the reader that says to tell an administrator, and the setting to change goes to the log only.
-3. The lines left out between the two quotes check the body: it must be an object, there must be at least one event id and at most 50 (`MAX_EVENTIDS`), every id must be digits and no larger than Zabbix stores (`isZabbixId`), `message` must be text, and `acknowledge` and `close` must be true or false. Types are checked and not coerced: the text "false" would otherwise count as true.
+3. The lines left out between the two quotes check the body: it must be an object, there must be at least one event id and at most 50 (`MAX_EVENTIDS`), every id must be digits and no larger than Zabbix stores (`isZabbixId`), `message` must be text, and `acknowledge` and `close` must be true or false. Types are checked and not coerced: the text "false" would otherwise count as true. Last of all `takeEvents` counts the ids against the person's allowance, `ACTION_EVENTS_PER_MINUTE` (200, and never under 50), only for a request that will be written, so a refusal above costs nothing; over it the answer is 429 `rate_limited` with `Retry-After` (SC-51).
 4. `asked` is a bit mask of what the caller wants: 1 closes the problem, 2 acknowledges it and 4 adds a message. Acknowledging is the default. A request that asks for nothing is a 400.
 5. Zabbix files every write under the owner of the write token, so the portal user goes into the message as `[portal:<user>]`, first, and the cut to 2,048 characters keeps it. The cut never splits a pair of characters such as an emoji, and the dialog allows 1,974 characters, which leaves room for the longest tag, so a note is not cut off unseen. `actor`, in `security/audit.ts`, takes brackets and control characters out of the name so the tag cannot be closed early.
 6. `zbxWrite` sends `event.acknowledge`. A failure is logged. A refusal by Zabbix and a timeout are answered by the route itself, through `writeFailure`, with the portal's own sentence and the reference to quote (BK-43): 502 `zabbix_error` for a refusal, which says that Zabbix refused the change and that it may already be closed or the account may not be allowed to change it, and 503 `zabbix_timeout` for a timeout, which says that the change may or may not have been made, and 502 `zabbix_error` with its own sentence when the portal cannot tell what Zabbix did with the request (an error page, a body that is not JSON-RPC, a connection that failed when the request may have left), which says the same (BK-53). After a timeout or such an error the route drops the cached lists and tells the open screens, as after a write that went through. The route writes the error handler's log line itself, because the reply skips the handler and the address is in that line. Any other failure is thrown to the error handler as before.

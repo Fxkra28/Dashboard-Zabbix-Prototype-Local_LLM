@@ -149,14 +149,20 @@ export async function fetchTrendsSliced<T extends { itemid: string }>(
   return parts.flat();
 }
 
-/** `fn` over `items` with at most `limit` running at once, results in input order. */
+/** `fn` over `items` with at most `limit` running at once, results in input order. After a failure no item starts; those running finish. */
 export async function mapLimit<I, O>(items: I[], limit: number, fn: (item: I, index: number) => Promise<O>): Promise<O[]> {
   const out = new Array<O>(items.length);
   let next = 0;
+  let failed = false;
   const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
-    while (next < items.length) {
+    while (!failed && next < items.length) {
       const i = next++;
-      out[i] = await fn(items[i], i);
+      try {
+        out[i] = await fn(items[i], i);
+      } catch (err) {
+        failed = true;
+        throw err;
+      }
     }
   });
   await Promise.all(workers);

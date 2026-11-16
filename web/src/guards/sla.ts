@@ -146,6 +146,7 @@ const sli = shape<SliReport>({
   hosts: listOf(sliHost),
   wanPaths: listOf(sliPath),
   web: listOf(sliWeb),
+  webTakenAt: opt(num),
   gaps: listOf(sliGap),
   noDataWindows: listOf(sliGap),
   stats: shape<SliReport['stats']>({ zabbixCalls: num, triggers: num, events: num, trendRows: num, ms: num }),

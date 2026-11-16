@@ -28,7 +28,12 @@ const LABELS: Record<DimensionKey, string> = {
   criticality: 'Criticality',
 };
 
-const GAP_FILTERS: (DimensionKey | 'all')[] = ['all', 'naming', 'site', 'owner', 'criticality'];
+/** `basic` is the hosts missing a name that follows the convention or a site: what can be closed with the tags HCML already has. */
+type GapFilter = DimensionKey | 'all' | 'basic';
+/** `auto` is the address with no type: the page picks what to open on. */
+const GAP_FILTERS: (GapFilter | 'auto')[] = ['auto', 'all', 'basic', 'naming', 'site', 'owner', 'criticality'];
+
+const TAG_DIMENSIONS: DimensionKey[] = ['owner', 'criticality'];
 
 /** Red below a third, amber below three quarters, green above. */
 function barColor(pct: number): string {
@@ -62,18 +67,33 @@ function gapRows(gaps: ScorecardResponse['gaps']): unknown[][] {
 
 export default function Inventory() {
   const q = useAsync<ScorecardResponse>(() => api.inventory(), [], 120_000);
-  // The gap type lives in the URL, so Back and a shared link keep it. One that is not scored reads as all gaps.
-  const [asked, setFilter] = useUrlState<DimensionKey | 'all'>('gap', 'all', { options: GAP_FILTERS });
-  const filter = asked !== 'all' && q.data && !q.data.dimensions.some((d) => d.scored && d.key === asked) ? 'all' : asked;
+  // The gap type lives in the URL, so Back and a shared link keep it. One that is not scored reads as the list the page opens on.
+  const [asked, setAsked] = useUrlState<GapFilter | 'auto'>('gap', 'auto', { options: GAP_FILTERS });
+  const dimensions = q.data?.dimensions ?? [];
+  // Owner and criticality come from tags HCML's Zabbix may not carry yet. While nothing is recorded for any host, their gaps are every host
+  // and say nothing, so the list opens on the gaps that can be closed now, unless there are none, when it opens on all of them.
+  const tags = dimensions.filter((d) => TAG_DIMENSIONS.includes(d.key) && d.scored);
+  const emptyTags = tags.filter((d) => d.total > 0 && d.present === 0);
+  const canBasic = dimensions.some((d) => d.scored && (d.key === 'naming' || d.key === 'site'));
+  const basicGaps = (q.data?.gaps ?? []).filter((g) => g.missing.includes('naming') || g.missing.includes('site')).length;
+  const opening: GapFilter = canBasic && basicGaps > 0 && tags.length > 0 && emptyTags.length === tags.length ? 'basic' : 'all';
+  const chosen: GapFilter = asked === 'auto' ? opening : asked;
+  // A type that is not scored (or not offered) reads as the opening list.
+  const filter: GapFilter =
+    q.data && chosen !== 'all' && !(chosen === 'basic' ? canBasic : dimensions.some((d) => d.scored && d.key === chosen)) ? opening : chosen;
+  // Choosing what the page would open on takes the type out of the address again.
+  const setFilter = (value: GapFilter) => setAsked(value === opening ? 'auto' : value);
 
   const gaps = useMemo(() => {
     const list = q.data?.gaps ?? [];
-    return filter === 'all' ? list : list.filter((g) => g.missing.includes(filter));
+    if (filter === 'all') return list;
+    if (filter === 'basic') return list.filter((g) => g.missing.includes('naming') || g.missing.includes('site'));
+    return list.filter((g) => g.missing.includes(filter));
   }, [q.data, filter]);
 
   // The rows on screen, so a filtered file says so in its name and is not mistaken for the full list.
   const download = () => {
-    const shown = filter === 'all' ? '' : `-${filter}`;
+    const shown = filter === 'all' ? '' : `-${filter === 'basic' ? 'naming-site' : filter}`;
     const day = dayInZone(Date.now());
     downloadCsv(`hcml-inventory-gaps${shown}-${day}.csv`, gapRows(gaps));
   };
@@ -103,6 +123,13 @@ export default function Inventory() {
               </div>
             </div>
           </div>
+
+          {emptyTags.length > 0 && (
+            <div className="notice" style={{ marginBottom: 12 }}>
+              Nothing is recorded yet for {emptyTags.map((d, i) => (i ? d.label.toLowerCase() : d.label)).join(' and ')}: HCML’s Zabbix carries
+              no such tags or inventory fields on any host, so the percentage above cannot rise until someone adds them.
+            </div>
+          )}
 
           <div className="grid two-col">
             <div className="panel">
@@ -171,10 +198,11 @@ export default function Inventory() {
                   name="gap-type"
                   aria-label="Show gaps of type"
                   value={filter}
-                  onChange={(e) => setFilter(e.target.value as DimensionKey | 'all')}
+                  onChange={(e) => setFilter(e.target.value as GapFilter)}
                   style={{ minWidth: 150, maxWidth: '100%' }}
                 >
                   <option value="all">All gaps</option>
+                  {canBasic && <option value="basic">Missing naming or site</option>}
                   {data.dimensions
                     .filter((d) => d.scored)
                     .map((d) => (
@@ -192,6 +220,12 @@ export default function Inventory() {
                 </button>
               </span>
             </div>
+
+            {asked === 'auto' && filter === 'basic' && (
+              <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>
+                Opened on naming and site gaps, because nothing is recorded yet for owner and criticality. Choose All gaps to list every host.
+              </div>
+            )}
 
             {gaps.length ? (
               <TableWrap label="Gap list">

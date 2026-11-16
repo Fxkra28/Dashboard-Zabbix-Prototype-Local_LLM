@@ -25,7 +25,8 @@ and was deleted on 22 September 2026. One file per decision does not rot as a un
 | [0012](0012-internet-meters-from-the-zabbix-dashboard.md) | Draw the internet traffic meters from the gauge widgets of the Zabbix dashboard HCML already keeps | accepted | 2026-10-14 |
 | [0013](0013-layers-features-and-tools.md) | Group the server by layer, the web by feature, and keep the repository's checks in one place | accepted | 2026-10-16 |
 | [0014](0014-email-the-sla-report-through-smtp.md) | Email the SLA report through SMTP, when an administrator asks, and keep it off until it is set up | accepted, amended by 0015 | 2026-11-04 |
-| [0015](0015-keep-a-small-state-file-for-recipients-and-the-schedule.md) | Keep a small state file on a volume for the report's recipients, its schedule and what was sent | accepted | 2026-11-04 |
+| [0015](0015-keep-a-small-state-file-for-recipients-and-the-schedule.md) | Keep a small state file on a volume for the report's recipients, its schedule and what was sent | accepted, amended by 0016 | 2026-11-04 |
+| [0016](0016-keep-the-web-check-figures-of-closed-months.md) | Keep the web check figures of a closed month as they were when it was first read | accepted | 2026-11-16 |
 
 ## How they relate
 
@@ -38,6 +39,7 @@ and was deleted on 22 September 2026. One file per decision does not rot as a un
  │         └── 0011  the SLA report as a file, built per request and stored nowhere
  │              └── 0014  the same file by email, on request
 │                   └── 0015  a small state file: the recipients, the monthly schedule, what was sent
+│                        └── 0016  a second file beside it: the web check figures of closed months
  ├── 0006  read-only, one write
  │    └── 0012  the internet meters read HCML's own Zabbix dashboard, and store nothing
  └── 0005  provider-neutral AI

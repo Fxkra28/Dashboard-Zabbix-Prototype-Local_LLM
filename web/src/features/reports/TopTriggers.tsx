@@ -47,6 +47,7 @@ export default function TopTriggers() {
           stale={q.stale}
           updatedAt={q.updatedAt}
           loadingLabel="Aggregating events…"
+          onRetry={q.reload}
         >
           {(data) =>
             data.triggers.length ? (

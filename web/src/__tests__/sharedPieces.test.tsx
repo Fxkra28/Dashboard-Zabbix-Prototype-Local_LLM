@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -88,15 +89,49 @@ describe('Pager', () => {
         mid
       </Pager>,
     );
-    expect(screen.getByRole('button', { name: '‹ Prev' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Next ›' })).toBeEnabled();
+    // aria-disabled and not disabled: the press that reaches an end of the list switches that button off while it holds the focus, and a disabled button drops it (UX-63).
+    const prev = screen.getByRole('button', { name: '‹ Prev' });
+    expect(prev).toHaveAttribute('aria-disabled', 'true');
+    expect(prev).not.toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next ›' })).not.toHaveAttribute('aria-disabled');
+    await user.click(prev);
+    expect(onPage).toHaveBeenCalledTimes(2);
 
     rerender(
       <Pager page={3} pages={3} onPage={onPage}>
         mid
       </Pager>,
     );
-    expect(screen.getByRole('button', { name: 'Next ›' })).toBeDisabled();
+    const next = screen.getByRole('button', { name: 'Next ›' });
+    expect(next).toHaveAttribute('aria-disabled', 'true');
+    expect(next).not.toBeDisabled();
+    await user.click(next);
+    expect(onPage).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the focus on the button that reached an end of the list', async () => {
+    const user = userEvent.setup();
+    const Walk = () => {
+      const [page, setPage] = useState(2);
+      return (
+        <Pager page={page} pages={2} onPage={setPage}>
+          Page {page}
+        </Pager>
+      );
+    };
+    render(<Walk />);
+    screen.getByRole('button', { name: 'Next ›' }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByText('Page 2')).toBeInTheDocument();
+    const next = screen.getByRole('button', { name: 'Next ›' });
+    expect(next).toHaveFocus();
+    // Enter on the off button does nothing, and the focus stays
+    await user.keyboard('{Enter}');
+    expect(next).toHaveFocus();
+    screen.getByRole('button', { name: '‹ Prev' }).focus();
+    await user.keyboard('{Enter}');
+    expect(screen.getByText('Page 1')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '‹ Prev' })).toHaveFocus();
   });
 });
 

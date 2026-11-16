@@ -265,13 +265,14 @@ export function buildDerivedTree(
   };
 }
 
-export async function getDerivedServices(month: string, profile: SliProfile): Promise<DerivedServicesResponse> {
-  return cached(`services:derived:${profile}:${month}`, 30_000, async () => {
+/** `signal` fires when this reader has left. The tree is shared, so the month's read follows the fetch's own signal, which fires only when every reader has gone (BK-77). */
+export async function getDerivedServices(month: string, profile: SliProfile, signal?: AbortSignal): Promise<DerivedServicesResponse> {
+  return cached(`services:derived:${profile}:${month}`, 30_000, async (f) => {
     const [report, problems] = await Promise.all([
-      getMonthlySli(month, profile),
+      getMonthlySli(month, profile, f.signal),
       cachedProblems().then(openProblems),
     ]);
     return buildDerivedTree(report, problems, month);
-  }, SLOW_VIEW);
+  }, { ...SLOW_VIEW, signal });
 }
 

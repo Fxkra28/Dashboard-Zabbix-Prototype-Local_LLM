@@ -233,14 +233,12 @@ function ServiceTree({
   data,
   seedDepth,
   openTop = false,
-  extraControls,
   onExplain,
 }: {
   data: ServicesResponse;
   /** How deep the degraded branches open on first load. */
   seedDepth: number;
   openTop?: boolean;
-  extraControls?: React.ReactNode;
   onExplain: (n: ServiceNode) => void;
 }) {
   const aiEnabled = useAiEnabled();
@@ -284,7 +282,6 @@ function ServiceTree({
   return (
     <>
       <div className="controls">
-        {extraControls}
         <FieldSpacer>
           <span className="pill">{count(data.total, 'service')}</span>
         </FieldSpacer>
@@ -330,7 +327,8 @@ function DerivedServices() {
   const zone = useReportTimeZone();
   const months = useMemo(() => recentMonths(12, zone), [zone]);
   // Month and method live in the URL, so Back from a device graph returns to the same tree. One not offered reads as the default.
-  const [month, setMonth] = useUrlState<string>('month', lastClosedMonth(), { options: months });
+  // The default is the last closed month, which moves on the 1st: it is written into the address so that a shared link keeps the month (FR-53).
+  const [month, setMonth] = useUrlState<string>('month', lastClosedMonth(), { options: months, keepDefault: true });
   const [profile, setProfile] = useUrlState<SliProfile>('method', 'availability', { options: PROFILES });
   const [explaining, setExplaining] = useState<DerivedSlaScope | null>(null);
   const q = useAsync<DerivedServicesResponse>(
@@ -368,8 +366,8 @@ function DerivedServices() {
         problem state right now.
       </div>
 
-      {/* Also on an error, so another month or method can still be picked. */}
-      {!data && <div className="controls">{controls}</div>}
+      {/* Drawn once, above the read: the one pressed keeps its focus while the tree loads, and an error still offers another month or method (UX-56). */}
+      <div className="controls">{controls}</div>
 
       <Async
         loading={q.loading || !data}
@@ -387,7 +385,6 @@ function DerivedServices() {
               data={d}
               seedDepth={0}
               openTop
-              extraControls={controls}
               onExplain={onExplain}
             />
           </>

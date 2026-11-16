@@ -15,61 +15,78 @@ The page is written by `npm run handover:build` from the test files, so it canno
 
 | Test file | Tests | What it checks | Code it imports |
 |---|---|---|---|
+| `server/src/__tests__/action-limit.test.ts` | 10 | the setting | `clients/limits.ts`, `clients/zabbix.ts`, `core/config.ts`, `routes/actions.ts`, `services/actions.ts` |
 | `server/src/__tests__/ai-errors.test.ts` | 17 | a model that cannot be reached | `clients/ai.ts`, `http/errors.ts`, `services/assistant.ts` |
-| `server/src/__tests__/ai-hosted-limits.test.ts` | 16 | acquireHostedSlot | `clients/ai.ts`, `services/assistant.ts` |
-| `server/src/__tests__/ai-limits.test.ts` | 17 | calls a minute for each user | `clients/ai.ts`, `clients/limits.ts`, `core/cache.ts`, `domain/queries.ts`, `http/errors.ts`, and 5 more |
-| `server/src/__tests__/ai-notice.test.ts` | 11 | GET /api/health says whether a question leaves this machine | `core/config.ts`, `domain/queries.ts`, `http/health.ts` |
-| `server/src/__tests__/ai.test.ts` | 30 | humanize: openai-compatible backend | `clients/ai.ts`, `core/config.ts`, `services/assistant.ts` |
+| `server/src/__tests__/ai-hosted-limits.test.ts` | 22 | acquireHostedSlot | `clients/ai.ts`, `services/assistant.ts` |
+| `server/src/__tests__/ai-limits.test.ts` | 22 | calls a minute for each user | `clients/ai.ts`, `clients/limits.ts`, `core/cache.ts`, `domain/queries.ts`, `http/errors.ts`, and 5 more |
+| `server/src/__tests__/ai-local-only.test.ts` | 7 | AI_LOCAL_ONLY | `core/config.ts` |
+| `server/src/__tests__/ai-notice.test.ts` | 12 | GET /api/health says whether a question leaves this machine | `core/config.ts`, `domain/queries.ts`, `http/health.ts` |
+| `server/src/__tests__/ai-outside-usage.test.ts` | 15 | Explain through a model outside the network | `clients/ai.ts`, `clients/limits.ts`, `security/audit.ts`, `services/assistant.ts` |
+| `server/src/__tests__/ai.test.ts` | 34 | humanize: openai-compatible backend | `clients/ai.ts`, `core/config.ts`, `services/assistant.ts` |
 | `server/src/__tests__/api-hygiene.test.ts` | 12 | grouping stays linear | `clients/zabbix.ts`, `core/cache.ts`, `core/config.ts`, `routes/actions.ts`, `routes/sla.ts`, and 2 more |
 | `server/src/__tests__/auth-rules.test.ts` | 18 | requiredRole | `http/errors.ts`, `routes/sliExport.ts`, `security/auth.ts`, `services/sli.ts` |
 | `server/src/__tests__/auth-sessions.test.ts` | 13 | tokens are bound to this portal | none |
-| `server/src/__tests__/auth-users.test.ts` | 21 | PORTAL_USERS entries (SC-22) | `security/passwords.ts` |
+| `server/src/__tests__/auth-users.test.ts` | 22 | PORTAL_USERS entries (SC-22) | `security/passwords.ts` |
 | `server/src/__tests__/auth.test.ts` | 61 | auth guard | `http/errors.ts`, `http/rateLimit.ts`, `security/auth.ts` |
+| `server/src/__tests__/availability-window.test.ts` | 3 | getDerivedAvailability: windowSeconds | `services/availability.ts`, `services/sli.ts`, `sli/engine.ts` |
 | `server/src/__tests__/availability.test.ts` | 10 | mergedSeconds | `services/availability.ts`, `services/incidents.ts`, `sli/intervals.ts` |
-| `server/src/__tests__/cache.test.ts` | 49 | cached | `core/cache.ts` |
+| `server/src/__tests__/cache.test.ts` | 69 | cached | `core/cache.ts`, `core/gate.ts` |
 | `server/src/__tests__/chat-route.test.ts` | 14 | POST /api/chat | `clients/ai.ts`, `clients/zabbix.ts`, `core/schemas.ts`, `http/errors.ts`, `http/requestId.ts`, and 2 more |
 | `server/src/__tests__/chat.test.ts` | 64 | buildSnapshot | `core/cache.ts`, `core/config.ts`, `domain/queries.ts`, `routes/chat.ts`, `services/assistant.ts`, and 5 more |
 | `server/src/__tests__/ci-workflow.test.ts` | 27 | .github/workflows/ci.yml | none |
+| `server/src/__tests__/closed-web-freeze.test.ts` | 18 | a closed month keeps its web check figures | `core/cache.ts`, `services/closedWeb.ts`, `services/closedWebStore.ts`, `services/sli.ts`, `sli/engine.ts` |
+| `server/src/__tests__/closed-web-store.test.ts` | 19 | readClosedWeb | `core/state.ts`, `services/closedWebStore.ts` |
 | `server/src/__tests__/compose-auth.test.ts` | 4 | docker-compose.yml, sign-in settings | `security/auth.ts` |
-| `server/src/__tests__/compose-env.test.ts` | 5 | docker-compose.yml and the BFF (tracker IN-04) | `core/config.ts` |
+| `server/src/__tests__/compose-env.test.ts` | 8 | docker-compose.yml and the BFF (tracker IN-04) | `core/config.ts`, `core/localHost.ts` |
 | `server/src/__tests__/compose-runtime.test.ts` | 4 | portal-bff in docker-compose.yml | none |
 | `server/src/__tests__/compress.test.ts` | 13 | pickEncoding | `core/acceptEncoding.ts`, `http/compress.ts` |
 | `server/src/__tests__/config-placeholder-key.test.ts` | 9 | the placeholder API key from .env.example | `core/config.ts` |
 | `server/src/__tests__/config-tls-pin.test.ts` | 5 | the exception for an expired Zabbix certificate, at startup | `core/config.ts` |
 | `server/src/__tests__/container-hardening.test.ts` | 25 | the images (SC-21) | none |
-| `server/src/__tests__/deploy-docs.test.ts` | 29 | the browser-to-nginx hop is drawn as plain HTTP (tracker IN-26) | `core/config.ts` |
+| `server/src/__tests__/coverage-config.test.ts` | 6 | coverage at the root | none |
+| `server/src/__tests__/deploy-docs.test.ts` | 30 | the browser-to-nginx hop is drawn as plain HTTP (tracker IN-26) | `core/config.ts` |
 | `server/src/__tests__/devices-route.test.ts` | 9 | GET /api/devices | `clients/zabbix.ts`, `core/cache.ts`, `domain/naming.ts`, `routes/devices.ts`, `routes/hosts.ts`, and 2 more |
 | `server/src/__tests__/diagrams-check.test.ts` | 12 | diagrams.check.mjs: the stamp | none |
 | `server/src/__tests__/download-log.test.ts` | 2 | one line for each report downloaded | `http/errors.ts`, `routes/sliExport.ts`, `security/auth.ts`, `services/sli.ts`, `services/sliExport.ts` |
 | `server/src/__tests__/email-without-auth.test.ts` | 20 | the settings as they apply now | `clients/mail.ts`, `core/config.ts`, `core/mailConfig.ts`, `core/schemas.ts`, `core/state.ts`, and 7 more |
 | `server/src/__tests__/empty-report-retry.test.ts` | 3 | the try after an empty report (BK-51) | `clients/mail.ts`, `core/cache.ts`, `core/validate.ts`, `services/sliMail.ts`, `sli/engine.ts` |
-| `server/src/__tests__/env-templates.test.ts` | 9 | the root .env.example and docker-compose.yml (IN-04) | none |
+| `server/src/__tests__/env-templates.test.ts` | 7 | the example passwords | `security/passwords.ts` |
 | `server/src/__tests__/explain-figure.test.ts` | 1 | the figure in Explain | `services/explain.ts` |
 | `server/src/__tests__/explain-problem.test.ts` | 3 | the start time Explain gives the model (BK-37) | `clients/ai.ts`, `core/cache.ts`, `core/config.ts`, `domain/queries.ts`, `services/explain.ts` |
+| `server/src/__tests__/explain-reader-left.test.ts` | 7 | explainProblem and the reader who leaves | `clients/ai.ts`, `core/cache.ts`, `core/gate.ts`, `domain/queries.ts`, `security/audit.ts`, and 1 more |
+| `server/src/__tests__/explain-route-signal.test.ts` | 3 | the Explain routes | `routes/explain.ts`, `services/explain.ts` |
 | `server/src/__tests__/export-csv.test.ts` | 50 | the files in the package | `core/reportChoices.ts`, `export/csv.ts`, `export/types.ts` |
 | `server/src/__tests__/export-pdf.test.ts` | 109 | structure | `domain/naming.ts`, `export/logo.ts`, `export/pdf.ts`, `export/pdfFonts.ts`, `export/slaReport.ts`, and 2 more |
 | `server/src/__tests__/export-route.test.ts` | 46 | GET /api/sli/export | `clients/zabbix.ts`, `core/cache.ts`, `core/validate.ts`, `http/compress.ts`, `http/errors.ts`, and 3 more |
 | `server/src/__tests__/export-sla-report-style.test.ts` | 30 | the default style | `core/reportChoices.ts`, `export/slaReport.ts`, `export/types.ts`, `sli/engine.ts` |
-| `server/src/__tests__/export-sla-report.test.ts` | 94 | the document as a whole | `domain/naming.ts`, `export/slaReport.ts`, `export/types.ts`, `sli/engine.ts` |
+| `server/src/__tests__/export-sla-report.test.ts` | 100 | the document as a whole | `core/reportChoices.ts`, `domain/naming.ts`, `export/slaReport.ts`, `export/types.ts`, `sli/engine.ts` |
 | `server/src/__tests__/export-style.test.ts` | 9 | the default style | `core/reportChoices.ts`, `core/validate.ts`, `services/sliExport.ts` |
 | `server/src/__tests__/export-theme.test.ts` | 4 | report palette | `export/theme.ts` |
 | `server/src/__tests__/export-writers-agree.test.ts` | 5 | the two writers treat the same awkward document the same way | `export/pdf.ts`, `export/types.ts`, `export/xlsx.ts` |
 | `server/src/__tests__/export-xlsx.test.ts` | 82 | workbook package | `export/slaReport.ts`, `export/theme.ts`, `export/types.ts`, `export/xlsx.ts` |
 | `server/src/__tests__/export-zip.test.ts` | 10 | zip | `export/zip.ts` |
+| `server/src/__tests__/facts-counts-note.test.ts` | 5 | what facts.check says about the test counts | none |
+| `server/src/__tests__/facts-pages.test.ts` | 5 | the pages that facts.check counts in App.tsx | none |
 | `server/src/__tests__/freshness.test.ts` | 16 | newestClock | `clients/zabbix.ts`, `domain/reachability.ts`, `routes/reports.ts` |
-| `server/src/__tests__/gate.test.ts` | 5 | createGate | `core/gate.ts` |
-| `server/src/__tests__/gitignore.test.ts` | 1 | .gitignore | none |
+| `server/src/__tests__/gate.test.ts` | 11 | createGate | `core/gate.ts` |
+| `server/src/__tests__/gitignore.test.ts` | 3 | .gitignore | none |
 | `server/src/__tests__/graphs.test.ts` | 33 | /api/items | `clients/zabbix.ts`, `core/config.ts`, `routes/history.ts`, `routes/hosts.ts`, `routes/net.ts`, and 2 more |
 | `server/src/__tests__/handover-check.test.ts` | 30 | handover tools: reading the code | none |
 | `server/src/__tests__/health-log.test.ts` | 2 | what the log holds for the health check | `http/health.ts`, `security/auth.ts` |
 | `server/src/__tests__/health-timezone.test.ts` | 2 | GET /api/health: defaults.timezone | `clients/zabbix.ts`, `http/health.ts` |
-| `server/src/__tests__/health.test.ts` | 38 | createReadiness | `clients/zabbix.ts`, `core/config.ts`, `domain/queries.ts`, `http/health.ts`, `security/auth.ts`, and 1 more |
-| `server/src/__tests__/heavy-reports.test.ts` | 3 | heavy reports | `clients/zabbix.ts`, `routes/analytics.ts`, `services/reportPolicy.ts` |
+| `server/src/__tests__/health.test.ts` | 45 | createReadiness | `clients/zabbix.ts`, `core/config.ts`, `core/logFile.ts`, `domain/queries.ts`, `http/health.ts`, and 2 more |
+| `server/src/__tests__/heavy-limit.test.ts` | 8 | the places one person may hold in the line of the heavy reports (BK-75) | `clients/zabbix.ts`, `core/cache.ts`, `core/config.ts`, `http/errors.ts`, `routes/analytics.ts`, and 3 more |
+| `server/src/__tests__/heavy-reports.test.ts` | 9 | heavy reports | `clients/zabbix.ts`, `core/readerGone.ts`, `routes/analytics.ts`, `routes/reports.ts`, `routes/sli.ts`, and 2 more |
 | `server/src/__tests__/incidents-before-window.test.ts` | 33 | any-problem availability and a span declared not measured (SLA_NO_DATA_WINDOWS) | `clients/zabbix.ts`, `core/config.ts`, `services/availability.ts`, `services/incidents.ts`, `services/noise.ts` |
+| `server/src/__tests__/index-assembly.test.ts` | 5 | index.ts: the order of setting up | none |
+| `server/src/__tests__/installed-check.test.ts` | 6 | installed.check.mjs | none |
 | `server/src/__tests__/inventory-site-hint.test.ts` | 2 | the Site check of the inventory scorecard (BK-32) | `core/cache.ts`, `domain/queries.ts`, `services/inventory.ts` |
 | `server/src/__tests__/layering.test.ts` | 11 | the layers of server/src | none |
 | `server/src/__tests__/light-reads.test.ts` | 14 | the problem list | `clients/zabbix.ts`, `core/cache.ts`, `core/staleness.ts`, `domain/queries.ts`, `domain/recentValues.ts`, and 4 more |
-| `server/src/__tests__/live-tools.test.ts` | 2 |  | none |
+| `server/src/__tests__/live-tools-months.test.ts` | 4 | tools/live/load-test.mjs | none |
+| `server/src/__tests__/live-tools.test.ts` | 3 |  | none |
+| `server/src/__tests__/local-host.test.ts` | 4 | isLocalBaseUrl | `core/localHost.ts` |
+| `server/src/__tests__/log-file.test.ts` | 25 | createRotatingFile | `core/config.ts`, `core/logFile.ts` |
 | `server/src/__tests__/logging.test.ts` | 3 | redactUrl | `http/logging.ts` |
 | `server/src/__tests__/mail-client.test.ts` | 32 | what a timeout is told (FR-35) | `clients/mail.ts`, `core/mailConfig.ts` |
 | `server/src/__tests__/mail-config-wiring.test.ts` | 11 | config.mail | `core/config.ts` |
@@ -79,14 +96,15 @@ The page is written by `npm run handover:build` from the test files, so it canno
 | `server/src/__tests__/mail-recipients.test.ts` | 23 | a good list | `core/mailConfig.ts`, `core/recipients.ts`, `core/validate.ts` |
 | `server/src/__tests__/mail-route.test.ts` | 78 | who may ask | `clients/mail.ts`, `core/config.ts`, `core/mailConfig.ts`, `core/schemas.ts`, `core/state.ts`, and 7 more |
 | `server/src/__tests__/mail-service.test.ts` | 6 | email that is off | `clients/mail.ts`, `core/config.ts`, `core/mailConfig.ts`, `services/sli.ts`, `services/sliMail.ts` |
+| `server/src/__tests__/map-limit.test.ts` | 5 | mapLimit | `sli/events.ts` |
 | `server/src/__tests__/meters-route.test.ts` | 33 | GET /api/net/meters | `clients/zabbix.ts`, `core/cache.ts`, `http/errors.ts`, `routes/meters.ts`, `security/auth.ts`, and 1 more |
 | `server/src/__tests__/meters.test.ts` | 42 | parseScale | `routes/meters.ts`, `services/meters.ts` |
 | `server/src/__tests__/naming.test.ts` | 4 | HOST_NAME_PATTERN | `domain/naming.ts` |
 | `server/src/__tests__/nginx-conf.test.ts` | 36 | web/nginx.conf | none |
 | `server/src/__tests__/no-store.test.ts` | 11 | Cache-Control on /api replies | `http/noStore.ts` |
 | `server/src/__tests__/noise-large.test.ts` | 2 | the alert noise report on a trigger with a very long list of incidents (BK-35) | `services/incidents.ts`, `services/noise.ts` |
-| `server/src/__tests__/openapi-contract.test.ts` | 4 | every answer fits docs/api/openapi.yaml (BK-14) | `clients/ai.ts`, `clients/zabbix.ts`, `core/schemas.ts`, `http/errors.ts`, `http/health.ts`, and 25 more |
-| `server/src/__tests__/page-access.test.ts` | 6 | GET /api/auth/me: pages | `http/errors.ts`, `security/auth.ts`, `security/pageAccess.ts` |
+| `server/src/__tests__/openapi-contract.test.ts` | 4 | every answer fits docs/api/openapi.yaml (BK-14) | `clients/ai.ts`, `clients/mail.ts`, `clients/zabbix.ts`, `core/schemas.ts`, `http/errors.ts`, and 26 more |
+| `server/src/__tests__/page-access.test.ts` | 7 | GET /api/auth/me: pages | `http/errors.ts`, `security/auth.ts`, `security/pageAccess.ts` |
 | `server/src/__tests__/parity-script.test.ts` | 13 | parity.check.mjs: what it reports | none |
 | `server/src/__tests__/passwords.test.ts` | 19 | hashPassword | `security/passwords.ts` |
 | `server/src/__tests__/period-window.test.ts` | 4 | monthWindow | `core/validate.ts`, `services/incidents.ts`, `sli/time.ts` |
@@ -94,7 +112,8 @@ The page is written by `npm run handover:build` from the test files, so it canno
 | `server/src/__tests__/plain-wording.test.ts` | 5 | the sentences a screen can be sent | `clients/ai.ts`, `clients/zabbix.ts`, `http/errors.ts`, `http/requestId.ts`, `services/chat.ts` |
 | `server/src/__tests__/portal-state.test.ts` | 37 | a portal with no place to keep it | `core/mailConfig.ts`, `core/state.ts` |
 | `server/src/__tests__/reachability.test.ts` | 12 | isFresh | `clients/zabbix.ts`, `core/cache.ts`, `domain/reachability.ts` |
-| `server/src/__tests__/rebuild-script.test.ts` | 52 | deploy/rebuild.sh, as a dry run | none |
+| `server/src/__tests__/reader-gone.test.ts` | 5 | readerGone | `core/gate.ts`, `core/readerGone.ts` |
+| `server/src/__tests__/rebuild-script.test.ts` | 73 | deploy/rebuild.sh, as a dry run | none |
 | `server/src/__tests__/report-schedule.test.ts` | 102 | a state folder that stops taking writes | `clients/mail.ts`, `clients/zabbix.ts`, `core/state.ts`, `core/validate.ts`, `services/reportSchedule.ts`, and 2 more |
 | `server/src/__tests__/request-id.test.ts` | 12 | genReqId | `clients/zabbix.ts`, `core/config.ts`, `core/validate.ts`, `http/errors.ts`, `http/requestId.ts`, and 1 more |
 | `server/src/__tests__/request-schemas.test.ts` | 22 | POST /api/auth/login body | `clients/zabbix.ts`, `core/config.ts`, `core/schemas.ts`, `http/errors.ts`, `routes/actions.ts`, and 2 more |
@@ -102,35 +121,39 @@ The page is written by `npm run handover:build` from the test files, so it canno
 | `server/src/__tests__/schedule-route.test.ts` | 35 | who may ask | `core/config.ts`, `core/schemas.ts`, `core/state.ts`, `http/errors.ts`, `routes/sliSchedule.ts`, and 2 more |
 | `server/src/__tests__/search-limit.test.ts` | 7 | ${SEARCHES_PER_MINUTE} text searches a minute for each person (BK-36) | `clients/zabbix.ts`, `core/cache.ts`, `core/config.ts`, `http/errors.ts`, `routes/hosts.ts`, and 2 more |
 | `server/src/__tests__/self-hosted-fonts.test.ts` | 10 | the @font-face rules | none |
-| `server/src/__tests__/shutdown.test.ts` | 15 | installShutdown | `core/cache.ts`, `domain/queries.ts`, `http/shutdown.ts`, `routes/stream.ts`, `services/stream.ts` |
+| `server/src/__tests__/shutdown.test.ts` | 19 | installShutdown | `core/cache.ts`, `domain/queries.ts`, `http/shutdown.ts`, `routes/stream.ts`, `services/stream.ts` |
+| `server/src/__tests__/signedin-check-health.test.ts` | 16 | signedin_check.py and the model (IN-79) | none |
 | `server/src/__tests__/signedin-check-script.test.ts` | 10 |  | none |
 | `server/src/__tests__/site-naming.test.ts` | 9 | siteFromHostName | `domain/naming.ts` |
-| `server/src/__tests__/sla-summary.test.ts` | 3 | derivedSlaLines | `services/sli.ts`, `sli/summary.ts`, `sli/tree.ts` |
+| `server/src/__tests__/sla-summary.test.ts` | 4 | derivedSlaLines | `services/sli.ts`, `sli/summary.ts`, `sli/tree.ts` |
 | `server/src/__tests__/sli-cache.test.ts` | 10 | getMonthlySli keeps what it computes | `core/cache.ts`, `services/sli.ts`, `sli/engine.ts` |
 | `server/src/__tests__/sli-engine.test.ts` | 39 | intervalsFor | `clients/zabbix.ts`, `core/config.ts`, `sli/engine.ts`, `sli/events.ts`, `sli/intervals.ts` |
-| `server/src/__tests__/sli-gate.test.ts` | 4 | getMonthlySli under a burst (BK-50) | `core/cache.ts`, `services/reportPolicy.ts`, `services/sli.ts`, `sli/engine.ts` |
+| `server/src/__tests__/sli-gate.test.ts` | 6 | getMonthlySli under a burst (BK-50) | `core/cache.ts`, `core/gate.ts`, `services/reportPolicy.ts`, `services/sli.ts`, `sli/engine.ts` |
+| `server/src/__tests__/sli-limit.test.ts` | 20 | the places one person may hold in the line of the derived SLA reads (BK-76) | `clients/zabbix.ts`, `core/cache.ts`, `core/config.ts`, `core/gate.ts`, `http/errors.ts`, and 9 more |
 | `server/src/__tests__/sli-maintenance-groups.test.ts` | 8 | maintenanceByHost with nested host groups (BK-46) | `clients/zabbix.ts`, `sli/maintenance.ts` |
 | `server/src/__tests__/sli-maintenance.test.ts` | 7 | maintenanceWindows | `sli/maintenance.ts` |
-| `server/src/__tests__/sli-routes.test.ts` | 21 | GET /api/sli | `clients/ai.ts`, `clients/zabbix.ts`, `core/cache.ts`, `core/config.ts`, `routes/analytics.ts`, and 7 more |
+| `server/src/__tests__/sli-routes.test.ts` | 22 | GET /api/sli | `clients/ai.ts`, `clients/zabbix.ts`, `core/cache.ts`, `core/config.ts`, `routes/analytics.ts`, and 7 more |
 | `server/src/__tests__/sli-schedule.test.ts` | 52 | zonedTime | `core/state.ts`, `sli/schedule.ts`, `sli/time.ts` |
 | `server/src/__tests__/sli-time.test.ts` | 10 | monthBounds | `core/validate.ts`, `sli/time.ts` |
 | `server/src/__tests__/source-down.test.ts` | 3 | a Zabbix failure as a reader sees it | `clients/zabbix.ts`, `http/errors.ts`, `http/requestId.ts` |
 | `server/src/__tests__/sse-hold.test.ts` | 6 |  | none |
-| `server/src/__tests__/stale-headers.test.ts` | 9 | stale headers on a real report route | `core/cache.ts`, `core/staleness.ts`, `http/compress.ts`, `http/errors.ts`, `routes/sli.ts`, and 1 more |
-| `server/src/__tests__/startup-guards.test.ts` | 42 | with auth on, the BFF refuses to start | `core/config.ts`, `security/auth.ts`, `security/passwords.ts`, `sli/time.ts` |
+| `server/src/__tests__/stale-headers.test.ts` | 11 | stale headers on a real report route | `core/cache.ts`, `core/staleness.ts`, `http/compress.ts`, `http/errors.ts`, `routes/analytics.ts`, and 2 more |
+| `server/src/__tests__/startup-guards.test.ts` | 47 | with auth on, the BFF refuses to start | `core/config.ts`, `security/auth.ts`, `security/passwords.ts`, `sli/time.ts` |
 | `server/src/__tests__/statsItemCount.test.ts` | 5 | the item count on /api/stats | `clients/zabbix.ts`, `core/cache.ts`, `services/actions.ts`, `services/reports.ts` |
 | `server/src/__tests__/stream-limits-env.test.ts` | 3 | config.stream | `core/config.ts` |
 | `server/src/__tests__/stream-signout.test.ts` | 2 | GET /api/stream and sign-out | `core/cache.ts`, `domain/queries.ts`, `routes/stream.ts`, `security/auth.ts`, `services/stream.ts` |
 | `server/src/__tests__/stream.test.ts` | 40 | fingerprint | `clients/zabbix.ts`, `core/cache.ts`, `core/config.ts`, `domain/queries.ts`, `http/requestId.ts`, and 3 more |
-| `server/src/__tests__/surface.test.ts` | 5 | API surface | `clients/zabbix.ts`, `routes/actions.ts`, `routes/analytics.ts`, `routes/chat.ts`, `routes/devices.ts`, and 20 more |
+| `server/src/__tests__/surface.test.ts` | 7 | API surface | `clients/zabbix.ts`, `routes/actions.ts`, `routes/analytics.ts`, `routes/chat.ts`, `routes/devices.ts`, and 22 more |
 | `server/src/__tests__/top-hosts-route.test.ts` | 10 | GET /api/reports/top-hosts | `clients/zabbix.ts`, `core/cache.ts`, `routes/topHosts.ts` |
 | `server/src/__tests__/typed-keys.test.ts` | 11 | a flood of distinct requests leaves the shared entries in the cache (BK-36) | `clients/zabbix.ts`, `core/cache.ts`, `security/viewerPolicy.ts`, `services/history.ts`, `services/hosts.ts`, and 2 more |
 | `server/src/__tests__/usage-log-sla.test.ts` | 1 | the SLA explanations in the log | `http/errors.ts`, `routes/explain.ts`, `security/auth.ts`, `services/explain.ts` |
 | `server/src/__tests__/usage-log.test.ts` | 9 | one line for each use of the AI | `clients/ai.ts`, `core/cache.ts`, `domain/queries.ts`, `http/errors.ts`, `routes/chat.ts`, and 4 more |
 | `server/src/__tests__/validate-ids.test.ts` | 6 | isZabbixId | `core/validate.ts` |
-| `server/src/__tests__/validate-sli-script.test.ts` | 6 | scripts/validate-sli.ts, a month with no spreadsheet (IN-49) | `export/zip.ts` |
+| `server/src/__tests__/validate-sli-script.test.ts` | 8 | scripts/validate-sli.ts, a month with no spreadsheet (IN-49) | `export/zip.ts` |
 | `server/src/__tests__/viewer-network-ids.test.ts` | 9 | the lookup behind it | `clients/zabbix.ts`, `core/cache.ts`, `core/config.ts`, `http/errors.ts`, `routes/history.ts`, and 1 more |
 | `server/src/__tests__/viewer-network.test.ts` | 22 | isNetworkKey | `clients/zabbix.ts`, `core/cache.ts`, `core/config.ts`, `domain/queries.ts`, `http/errors.ts`, and 5 more |
+| `server/src/__tests__/viewer-reports-load.test.ts` | 6 | the top hosts report | `clients/zabbix.ts`, `core/cache.ts`, `routes/reports.ts`, `routes/topHosts.ts`, `routes/webMonitoring.ts`, and 1 more |
+| `server/src/__tests__/viewer-reports-typed.test.ts` | 4 | a run of different numbers in one report | `clients/zabbix.ts`, `core/cache.ts`, `routes/analytics.ts`, `services/capacity.ts` |
 | `server/src/__tests__/watch-script.test.ts` | 62 | deploy/watch.sh | none |
 | `server/src/__tests__/web-monitoring-route.test.ts` | 16 | GET /api/reports/web-monitoring | `clients/zabbix.ts`, `core/cache.ts`, `routes/webMonitoring.ts`, `services/webMonitoring.ts` |
 | `server/src/__tests__/write-audit.test.ts` | 35 | the message Zabbix records | `clients/zabbix.ts`, `core/cache.ts`, `core/config.ts`, `core/schemas.ts`, `http/errors.ts`, and 3 more |
@@ -158,22 +181,22 @@ The page is written by `npm run handover:build` from the test files, so it canno
 | `web/src/__tests__/hostListFailure.test.tsx` | 11 | Graphs | `api/index.ts`, `features/graphs/HostDetail.tsx`, `features/hosts/LatestData.tsx`, `shared/components/states.tsx`, `shared/hooks/useAuth.ts` |
 | `web/src/__tests__/layering.test.ts` | 7 | the layers of web/src | none |
 | `web/src/__tests__/mainZone.test.tsx` | 1 |  | `App.tsx`, `api/index.ts`, `features/shell/ErrorBoundary.tsx`, `main.tsx`, `shared/lib/time.ts` |
-| `web/src/__tests__/markup.test.tsx` | 18 | icons | `features/sla/Sli.tsx`, `shared/components/icons.tsx` |
+| `web/src/__tests__/markup.test.tsx` | 19 | icons | `features/sla/Sli.tsx`, `shared/components/icons.tsx` |
 | `web/src/__tests__/narrowScreen.test.tsx` | 20 | useNarrowScreen (UX-14) | `features/shell/Layout.tsx`, `features/shell/useUiPrefs.ts` |
 | `web/src/__tests__/openapiTypes.test.ts` | 3 | the OpenAPI file and the web types (FR-16) | `generated/openapi.ts`, `types/index.ts` |
 | `web/src/__tests__/pagePastEnd.test.tsx` | 7 | Latest data past the end | `api/index.ts`, `features/hosts/LatestData.tsx`, `features/network/Network.tsx`, `shared/hooks/useAuth.ts`, `types/index.ts` |
 | `web/src/__tests__/recipientsApi.test.ts` | 7 | replacing the saved list | `api/index.ts` |
 | `web/src/__tests__/reportApi.test.ts` | 37 | api.sliExport | `api/index.ts` |
-| `web/src/__tests__/reportZoneUi.test.tsx` | 7 | MonthSelect | `api/index.ts`, `features/graphs/RangePicker.tsx`, `features/sla/Availability.tsx`, `features/sla/Sla.tsx`, `features/sla/Sli.tsx`, and 2 more |
+| `web/src/__tests__/reportZoneUi.test.tsx` | 9 | MonthSelect | `api/index.ts`, `features/graphs/RangePicker.tsx`, `features/sla/Sla.tsx`, `features/sla/Sli.tsx`, `shared/lib/time.ts`, and 1 more |
 | `web/src/__tests__/requestTimeout.test.ts` | 11 | a read that never answers (tracker FR-11) | `api/index.ts` |
-| `web/src/__tests__/routes.test.tsx` | 10 | an address that is not a page (FR-06) | `App.tsx`, `features/shell/Layout.tsx`, `features/shell/usePageTitle.ts` |
+| `web/src/__tests__/routes.test.tsx` | 11 | an address that is not a page (FR-06) | `App.tsx`, `features/shell/Layout.tsx`, `features/shell/usePageTitle.ts` |
 | `web/src/__tests__/sharedPages.test.tsx` | 7 | the pager on Latest data | `api/index.ts`, `features/hosts/Hosts.tsx`, `features/hosts/LatestData.tsx`, `features/network/Network.tsx`, `features/network/Sites.tsx`, and 3 more |
-| `web/src/__tests__/sharedPieces.test.tsx` | 12 | Field, FieldGroup and FieldSpacer | `features/hosts/HostTable.tsx`, `features/problems/AckPill.tsx`, `shared/components/Field.tsx`, `shared/components/Pager.tsx`, `types/index.ts` |
+| `web/src/__tests__/sharedPieces.test.tsx` | 13 | Field, FieldGroup and FieldSpacer | `features/hosts/HostTable.tsx`, `features/problems/AckPill.tsx`, `shared/components/Field.tsx`, `shared/components/Pager.tsx`, `types/index.ts` |
 | `web/src/__tests__/signOutClearsChat.test.ts` | 12 | the Assistant conversation and the end of a session | `api/index.ts`, `shared/lib/chatStore.ts` |
 | `web/src/__tests__/signOutFailure.test.ts` | 8 | logout() when the request does not get through | `api/index.ts`, `api/session.ts`, `shared/lib/chatStore.ts` |
 | `web/src/__tests__/stylesheet.test.ts` | 3 | the stylesheet in parts | none |
 | `web/src/__tests__/themeBeforePaint.test.ts` | 5 | public/theme.js | `features/shell/useUiPrefs.ts` |
-| `web/src/__tests__/tokenPairs.test.ts` | 4 | the pairs the checker computes | `web/scripts/tokens.check.mjs` |
+| `web/src/__tests__/tokenPairs.test.ts` | 10 | the pairs the checker computes | `web/scripts/tokens.check.mjs` |
 | `web/src/__tests__/tooltipFacts.test.tsx` | 4 | a refresh that failed | `api/index.ts`, `features/network/Sites.tsx`, `features/sla/Sli.tsx`, `shared/components/states.tsx`, `shared/hooks/useAuth.ts`, and 1 more |
 | `web/src/__tests__/urlFilters.test.tsx` | 23 | Hosts | `api/index.ts`, `features/hosts/Hosts.tsx`, `features/network/Sites.tsx`, `features/reports/AlertNoise.tsx`, `features/reports/Inventory.tsx`, and 5 more |
 | `web/src/__tests__/writeFailure.test.ts` | 9 | a failed write | `api/index.ts` |
@@ -183,13 +206,14 @@ The page is written by `npm run handover:build` from the test files, so it canno
 | `web/src/features/assistant/ContextStrip.test.tsx` | 3 | the age of the snapshot in the Assistant | `features/assistant/Assistant.tsx`, `types/index.ts` |
 | `web/src/features/assistant/aiNotice.test.tsx` | 8 | the Assistant page | `api/index.ts`, `features/assistant/Assistant.tsx`, `features/assistant/ExplainPanel.tsx`, `features/assistant/useAi.ts`, `shared/hooks/useAuth.ts` |
 | `web/src/features/assistant/assistantSignOutRace.test.tsx` | 1 | an answer that lands while signing out | `api/index.ts`, `features/assistant/Assistant.tsx`, `shared/hooks/useAuth.ts` |
-| `web/src/features/assistant/modelNotice.test.tsx` | 9 | useModelDown | `api/index.ts`, `features/assistant/Assistant.tsx`, `features/assistant/ExplainPanel.tsx`, `features/assistant/useModel.ts`, `shared/hooks/useAuth.ts` |
+| `web/src/features/assistant/explainRetry.test.tsx` | 2 | Try again in the Explain panels (UX-49) | `api/index.ts`, `features/assistant/ExplainPanel.tsx`, `shared/hooks/useAuth.ts` |
+| `web/src/features/assistant/modelNotice.test.tsx` | 11 | useModelProblem | `api/index.ts`, `features/assistant/Assistant.tsx`, `features/assistant/ExplainPanel.tsx`, `features/assistant/useModel.ts`, `shared/hooks/useAuth.ts` |
 | `web/src/features/assistant/parseMarkdown.test.ts` | 4 | headings | `features/assistant/parseMarkdown.ts` |
 | `web/src/features/assistant/useAi.test.tsx` | 9 | useCapabilities | `api/index.ts`, `features/assistant/useAi.ts`, `shared/lib/time.ts` |
 | `web/src/features/auth/Login.test.tsx` | 2 | the sign-in form | `api/index.ts`, `features/auth/Login.tsx` |
 | `web/src/features/auth/returnPath.test.ts` | 6 | returnPath: where sign-in goes next | `features/auth/Login.tsx` |
 | `web/src/features/dashboard/HostsView.test.tsx` | 23 | HostsView availability | `api/index.ts`, `features/dashboard/HostsView.tsx`, `features/dashboard/useHostsView.ts` |
-| `web/src/features/dashboard/Tabs.test.tsx` | 6 | Tabs | `features/dashboard/Tabs.tsx` |
+| `web/src/features/dashboard/Tabs.test.tsx` | 8 | Tabs | `features/dashboard/Tabs.tsx` |
 | `web/src/features/dashboard/dashboardViews.test.tsx` | 38 | the Dashboard views | `api/index.ts`, `features/dashboard/Overview.tsx`, `shared/hooks/useAuth.ts`, `shared/hooks/useSSE.ts`, `types/index.ts` |
 | `web/src/features/dashboard/fit.test.ts` | 13 | fitBounds | `features/dashboard/fit.ts` |
 | `web/src/features/dashboard/hostsFigures.test.ts` | 11 | availability | `features/dashboard/hostsFigures.ts`, `features/hosts/deviceTally.ts` |
@@ -206,56 +230,77 @@ The page is written by `npm run handover:build` from the test files, so it canno
 | `web/src/features/graphs/chartCsv.test.ts` | 12 | chartCsvRows (MT-02) | `features/graphs/chartCsv.ts`, `shared/lib/csv.ts`, `types/index.ts` |
 | `web/src/features/graphs/chartTable.test.ts` | 8 | chartTable | `features/graphs/chartTable.ts`, `types/index.ts` |
 | `web/src/features/graphs/chartZone.test.tsx` | 2 |  | `features/graphs/TimeSeriesChart.tsx`, `shared/lib/time.ts`, `shared/lib/units.ts`, `types/index.ts` |
+| `web/src/features/graphs/graphRetry.test.tsx` | 5 | the host list of the Graphs page (UX-60) | `api/index.ts`, `features/graphs/HostDetail.tsx`, `features/graphs/ItemPicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `shared/hooks/useAuth.ts`, and 1 more |
 | `web/src/features/graphs/graphZone.test.tsx` | 13 | the time axis of a chart | `features/graphs/RangePicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `shared/lib/time.ts`, `types/index.ts` |
+| `web/src/features/graphs/itemPickerStale.test.tsx` | 2 | the item list of another host that is still loading (UX-58) | `api/index.ts`, `features/graphs/ItemPicker.tsx`, `types/index.ts` |
 | `web/src/features/graphs/unitScales.test.tsx` | 7 | unitFamilies | `api/index.ts`, `features/graphs/ItemPicker.tsx`, `features/graphs/TimeSeriesChart.tsx`, `features/graphs/unitScales.ts`, `types/index.ts` |
 | `web/src/features/graphs/useThemeChange.test.tsx` | 6 | useThemeChange | `features/graphs/TimeSeriesChart.tsx`, `features/graphs/useThemeChange.ts` |
 | `web/src/features/hosts/Devices.test.tsx` | 18 | the kind tiles | `api/index.ts`, `features/hosts/Devices.tsx`, `shared/hooks/useAuth.ts`, `types/index.ts` |
 | `web/src/features/hosts/LatestDataAny.test.tsx` | 3 | the Host menu of Latest data | `api/index.ts`, `features/hosts/LatestData.tsx`, `shared/hooks/useAuth.ts` |
+| `web/src/features/hosts/latestPager.test.tsx` | 4 | the pager of Latest data (UX-57) | `api/index.ts`, `features/hosts/LatestData.tsx`, `shared/hooks/useAuth.ts`, `types/index.ts` |
+| `web/src/features/hosts/latestRetry.test.tsx` | 3 | the notice for the host and group menus (UX-60) | `api/index.ts`, `features/hosts/LatestData.tsx`, `shared/hooks/useAuth.ts` |
 | `web/src/features/meters/Gauge.test.tsx` | 35 | Gauge with a current reading | `features/meters/Gauge.tsx`, `features/meters/gaugeDial.ts` |
-| `web/src/features/meters/InternetMeters.test.tsx` | 9 | InternetMeters | `api/index.ts`, `features/meters/InternetMeters.tsx`, `features/meters/useMeters.ts` |
+| `web/src/features/meters/InternetMeters.test.tsx` | 9 | InternetMeters | `api/index.ts`, `features/meters/InternetMeters.tsx`, `features/meters/useMeters.ts`, `shared/hooks/useAuth.ts`, `types/index.ts` |
 | `web/src/features/meters/gaugeDial.test.ts` | 31 | dialPoint and arcPath | `features/meters/gaugeDial.ts` |
 | `web/src/features/network/Links.test.tsx` | 8 | the page when the read works | `api/index.ts`, `features/network/Links.tsx`, `types/index.ts` |
 | `web/src/features/network/MapsPage.test.tsx` | 16 | the chosen map is in the URL (FR-18) | `api/index.ts`, `features/network/Maps.tsx`, `types/index.ts` |
 | `web/src/features/network/mapLabels.test.ts` | 15 | placeLabels (FR-18) | `features/network/mapLabels.ts` |
+| `web/src/features/network/mapsRetry.test.tsx` | 1 | the Maps list (UX-60) | `api/index.ts`, `features/network/Maps.tsx`, `shared/hooks/useAuth.ts` |
 | `web/src/features/network/networkPorts.test.tsx` | 9 | the port rows on Network | `api/index.ts`, `features/graphs/TimeSeriesChart.tsx`, `features/network/Network.tsx`, `shared/hooks/useAuth.ts`, `types/index.ts` |
+| `web/src/features/network/networkScroll.test.tsx` | 3 | choosing a device on the Network page | `api/index.ts`, `features/graphs/TimeSeriesChart.tsx`, `features/network/Network.tsx`, `shared/hooks/useAuth.ts`, `types/index.ts` |
+| `web/src/features/network/panelReveal.test.tsx` | 7 | choosing a site card (UX-62) | `api/index.ts`, `features/graphs/TimeSeriesChart.tsx`, `features/network/Network.tsx`, `features/network/Sites.tsx`, `shared/hooks/useAuth.ts`, and 1 more |
+| `web/src/features/network/portsPager.test.tsx` | 3 | the pager of the ports table (UX-57) | `api/index.ts`, `features/graphs/TimeSeriesChart.tsx`, `features/network/Network.tsx`, `shared/hooks/useAuth.ts`, `types/index.ts` |
 | `web/src/features/problems/AckDialog.test.tsx` | 35 | AckDialog and a Zabbix that has stopped collecting | `api/index.ts`, `features/problems/AckDialog.tsx`, `types/index.ts` |
 | `web/src/features/problems/ProblemsPage.test.tsx` | 51 | the live stream tells the page when to read the list again (IN-11) | `api/index.ts`, `features/assistant/useAi.ts`, `features/problems/Problems.tsx`, `features/problems/ProblemsTable.tsx`, `shared/hooks/useAuth.ts`, and 1 more |
 | `web/src/features/problems/liveChange.test.ts` | 4 | changeKey (the Problems page re-reads its list when the live stream says it changed, IN-11) | `features/problems/liveChange.ts` |
 | `web/src/features/problems/useChangeHighlight.test.ts` | 9 | useChangeHighlight | `features/dashboard/liveList.ts`, `features/problems/useChangeHighlight.ts`, `types/index.ts` |
-| `web/src/features/reports/Capacity.test.tsx` | 5 | the Capacity page | `api/index.ts`, `features/reports/Capacity.tsx`, `shared/hooks/useAuth.ts`, `types/index.ts` |
+| `web/src/features/reports/Capacity.test.tsx` | 9 | the table of each Capacity panel | `api/index.ts`, `features/reports/Capacity.tsx`, `shared/hooks/useAuth.ts`, `types/index.ts` |
 | `web/src/features/reports/csvPages.test.tsx` | 10 | the Alert noise CSV (FR-05) | `api/index.ts`, `features/reports/AlertNoise.tsx`, `features/reports/Inventory.tsx`, `types/index.ts` |
-| `web/src/features/shell/ErrorBoundary.test.tsx` | 9 | the card for a page that crashed | `features/shell/ErrorBoundary.tsx` |
-| `web/src/features/shell/LayoutSignOut.test.tsx` | 6 | the Sign out button | `api/index.ts`, `features/assistant/useAi.ts`, `features/shell/Layout.tsx`, `shared/hooks/useAuth.ts`, `types/index.ts` |
-| `web/src/features/shell/Sidebar.test.tsx` | 12 | the sidebar menu | `api/index.ts`, `features/assistant/useAi.ts`, `features/shell/Sidebar.tsx`, `shared/hooks/useAuth.ts`, `types/index.ts` |
+| `web/src/features/reports/inventoryDefaults.test.tsx` | 13 | the Inventory scorecard while owner and criticality are empty | `api/index.ts`, `features/reports/Inventory.tsx`, `shared/lib/csv.ts`, `types/index.ts` |
+| `web/src/features/reports/retryOnFailure.test.tsx` | 5 | Try again on the report pages (UX-49) | `api/index.ts`, `features/reports/AlertNoise.tsx`, `features/reports/Capacity.tsx`, `features/reports/TopTriggers.tsx`, `shared/hooks/useAuth.ts`, and 1 more |
+| `web/src/features/shell/ErrorBoundary.test.tsx` | 11 | the card for a page that crashed | `features/shell/ErrorBoundary.tsx` |
+| `web/src/features/shell/LayoutSignOut.test.tsx` | 8 | the Sign out button | `api/index.ts`, `features/assistant/useAi.ts`, `features/shell/Layout.tsx`, `shared/hooks/useAuth.ts`, `types/index.ts` |
+| `web/src/features/shell/LayoutTopBar.test.tsx` | 2 | the shell and its top bar (UX-51) | `api/index.ts`, `features/assistant/useAi.ts`, `features/shell/Layout.tsx`, `shared/hooks/useAuth.ts` |
+| `web/src/features/shell/Sidebar.test.tsx` | 13 | the sidebar menu | `api/index.ts`, `features/assistant/useAi.ts`, `features/shell/Sidebar.tsx`, `shared/hooks/useAuth.ts`, `types/index.ts` |
 | `web/src/features/shell/TodayDate.test.tsx` | 1 | TodayDate | `features/shell/TodayDate.tsx`, `shared/lib/time.ts` |
 | `web/src/features/shell/buildLabel.test.ts` | 4 | buildLabel | `features/shell/build.ts`, `shared/lib/time.ts` |
+| `web/src/features/shell/useTopBarHeight.test.tsx` | 5 | useTopBarHeight | `features/shell/useTopBarHeight.ts` |
+| `web/src/features/sla/AvailabilityRedirect.test.tsx` | 8 | the old Availability address | `features/sla/AvailabilityRedirect.tsx` |
 | `web/src/features/sla/EmailReport.test.tsx` | 75 | who is offered the button | `api/index.ts`, `features/sla/EmailReport.tsx`, `features/sla/reportStyle.ts`, `guards/index.ts`, `shared/hooks/useAuth.ts` |
 | `web/src/features/sla/FileChoices.test.tsx` | 7 | the choices | `features/sla/FileChoices.tsx`, `types/index.ts` |
 | `web/src/features/sla/ReportDialog.test.tsx` | 13 | the frame | `features/sla/ReportDialog.tsx` |
-| `web/src/features/sla/ReportDownload.test.tsx` | 40 | ReportDownload | `api/index.ts`, `features/sla/Availability.tsx`, `features/sla/ReportDownload.tsx`, `features/sla/Sla.tsx`, `features/sla/reportStyle.ts`, and 3 more |
+| `web/src/features/sla/ReportDownload.test.tsx` | 39 | ReportDownload | `api/index.ts`, `features/sla/ReportDownload.tsx`, `features/sla/Sla.tsx`, `features/sla/reportStyle.ts`, `shared/hooks/useAuth.ts`, and 2 more |
 | `web/src/features/sla/ReportSchedule.test.tsx` | 56 | the button | `api/index.ts`, `features/sla/ReportSchedule.tsx`, `features/sla/reportStyle.ts`, `guards/index.ts`, `shared/lib/time.ts`, and 1 more |
 | `web/src/features/sla/ReportStyleButton.test.tsx` | 14 | the button | `features/sla/ReportStyleButton.tsx`, `features/sla/reportStyle.ts` |
 | `web/src/features/sla/SavedList.test.tsx` | 27 | the view before it is opened | `api/index.ts`, `features/sla/SavedList.tsx` |
-| `web/src/features/sla/Services.test.tsx` | 7 | the Services tree from Zabbix (FR-12) | `api/index.ts`, `features/sla/Services.tsx`, `types/index.ts` |
-| `web/src/features/sla/SlaTabs.test.tsx` | 7 | the SLA source tabs (UX-18) | `api/index.ts`, `features/sla/Sla.tsx`, `types/index.ts` |
+| `web/src/features/sla/Services.test.tsx` | 12 | the Services tree from Zabbix (FR-12) | `api/index.ts`, `features/sla/Services.tsx`, `types/index.ts` |
+| `web/src/features/sla/SlaTabs.test.tsx` | 11 | the SLA view tabs (UX-18) | `api/index.ts`, `features/sla/Sla.tsx`, `features/sla/Sli.tsx`, `types/index.ts` |
 | `web/src/features/sla/SliPill.test.tsx` | 5 | SliPill | `features/sla/Sli.tsx` |
 | `web/src/features/sla/addresses.test.ts` | 8 | splitAddresses | `features/sla/addresses.ts` |
+| `web/src/features/sla/derivedBanner.test.tsx` | 4 | the banner over the derived SLA views | `api/index.ts`, `features/sla/Sla.tsx`, `types/index.ts` |
+| `web/src/features/sla/deviceTable.test.tsx` | 4 | the device table of a month | `api/index.ts`, `features/sla/Sla.tsx`, `types/index.ts` |
+| `web/src/features/sla/monthRows.test.tsx` | 15 | the Sites below target card of a month (FR-50) | `api/index.ts`, `features/sla/Sla.tsx`, `features/sla/Sli.tsx`, `shared/lib/time.ts`, `types/index.ts` |
 | `web/src/features/sla/percent.test.ts` | 13 | percentText | `features/sla/Sli.tsx`, `features/sla/percent.ts` |
 | `web/src/features/sla/reportStyle.test.ts` | 12 | the default style | `features/sla/reportStyle.ts` |
-| `web/src/features/sla/slaKpiCards.test.tsx` | 2 | the SLA page headline cards | `api/index.ts`, `features/sla/Availability.tsx`, `features/sla/Sla.tsx`, `types/index.ts` |
+| `web/src/features/sla/responseTab.test.tsx` | 13 | the Response tab | `api/index.ts`, `features/sla/Sla.tsx`, `features/sla/Sli.tsx`, `types/index.ts` |
+| `web/src/features/sla/rollingWindow.test.tsx` | 22 | the SLA period | `api/index.ts`, `features/assistant/useAi.ts`, `features/sla/Sla.tsx`, `shared/hooks/useAuth.ts`, `shared/lib/time.ts`, and 1 more |
+| `web/src/features/sla/sitesBelow.test.ts` | 5 | sitesBelowCard | `features/sla/sitesBelow.ts` |
+| `web/src/features/sla/slaKpiCards.test.tsx` | 2 | the SLA page headline cards | `api/index.ts`, `features/sla/Sla.tsx`, `types/index.ts` |
+| `web/src/features/sla/webChecksNote.test.tsx` | 8 | the Web checks panel of a month | `api/index.ts`, `features/sla/Sla.tsx`, `types/index.ts` |
 | `web/src/guards.test.ts` | 33 | the problem list (the Dashboard, the Problems page and the live stream) | `guards/index.ts`, `types/index.ts` |
 | `web/src/shared/components/BrandMark.test.tsx` | 3 | BrandMark | `shared/components/BrandMark.tsx` |
 | `web/src/shared/components/NoData.test.tsx` | 3 | NoData | `shared/components/NoData.tsx` |
 | `web/src/shared/components/TableWrap.test.tsx` | 9 | the box around a wide table | `shared/components/TableWrap.tsx` |
+| `web/src/shared/components/statesRetry.test.tsx` | 13 | Loaded (FR-54) | `api/index.ts`, `shared/components/states.tsx`, `shared/hooks/useAuth.ts` |
 | `web/src/shared/hooks/scrollLock.test.ts` | 8 | lockScroll | `shared/hooks/scrollLock.ts` |
-| `web/src/shared/hooks/useAsync.test.ts` | 10 | useAsync | `api/index.ts`, `shared/hooks/useAsync.ts` |
+| `web/src/shared/hooks/useAsync.test.ts` | 14 | useAsync | `api/index.ts`, `shared/hooks/useAsync.ts` |
 | `web/src/shared/hooks/useAuth.test.tsx` | 7 | useAuth | `api/index.ts`, `shared/hooks/useAuth.ts`, `types/index.ts` |
 | `web/src/shared/hooks/useDialogFocus.test.tsx` | 16 | useDialogFocus | `shared/hooks/useDialogFocus.ts` |
 | `web/src/shared/hooks/useSSE.test.ts` | 21 | useSSE | `api/index.ts`, `guards/index.ts`, `shared/hooks/useSSE.ts` |
-| `web/src/shared/hooks/useUrlState.test.tsx` | 6 | useUrlState | `shared/hooks/useUrlState.ts` |
+| `web/src/shared/hooks/useUrlState.test.tsx` | 11 | useUrlState | `shared/hooks/useUrlState.ts` |
 | `web/src/shared/lib/chatStore.test.ts` | 6 | the saved Assistant conversation | `shared/lib/chatStore.ts` |
 | `web/src/shared/lib/csv.test.ts` | 11 | csvCell | `shared/lib/csv.ts`, `shared/lib/saveFile.ts` |
-| `web/src/shared/lib/freshness.test.tsx` | 42 | the problem tiles before the list has loaded (UX-02) | `api/index.ts`, `features/dashboard/Overview.tsx`, `features/reports/Capacity.tsx`, `features/sla/Availability.tsx`, `features/sla/Sla.tsx`, and 4 more |
+| `web/src/shared/lib/freshness.test.tsx` | 42 | the problem tiles before the list has loaded (UX-02) | `api/index.ts`, `features/dashboard/Overview.tsx`, `features/reports/Capacity.tsx`, `features/sla/Sla.tsx`, `shared/components/states.tsx`, and 3 more |
 | `web/src/shared/lib/plural.test.ts` | 2 | count | `shared/lib/plural.ts` |
 | `web/src/shared/lib/reportZone.test.ts` | 7 | the report zone | `shared/lib/severity.ts`, `shared/lib/time.ts` |
 | `web/src/shared/lib/time.test.ts` | 10 | lib/time: reporting months in Asia/Jakarta | `shared/lib/time.ts` |

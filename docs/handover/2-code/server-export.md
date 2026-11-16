@@ -82,8 +82,8 @@ export interface ReportDoc {
 
 `server/src/export/slaReport.ts`. Makes the document from the two reports of one month: the strict one and HCML's method.
 
-<!-- gen:snippet server/src/export/slaReport.ts#buildSlaReportDoc lines=10-31 sha=a912fe77eafd -->
-`server/src/export/slaReport.ts:502-523` (lines 10 to 31 of buildSlaReportDoc)
+<!-- gen:snippet server/src/export/slaReport.ts#buildSlaReportDoc lines=10-31 sha=d21cf52c7b59 -->
+`server/src/export/slaReport.ts:513-534` (lines 10 to 31 of buildSlaReportDoc)
 
 ```ts
 }
@@ -112,7 +112,7 @@ return {
 <!-- /gen -->
 
 <!-- gen:snippet server/src/export/slaReport.ts#percentText sha=c48712aa05e9 -->
-`server/src/export/slaReport.ts:58-67`
+`server/src/export/slaReport.ts:63-72`
 
 ```ts
 export function percentText(value: number | null, target: number, decimal: ReportStyle['decimal'] = 'dot'): string {
@@ -129,7 +129,7 @@ export function percentText(value: number | null, target: number, decimal: Repor
 <!-- /gen -->
 
 <!-- gen:snippet server/src/export/slaReport.ts#durationText sha=1501c97e2aa5 -->
-`server/src/export/slaReport.ts:70-80`
+`server/src/export/slaReport.ts:75-85`
 
 ```ts
 export function durationText(seconds: number): string {
@@ -148,7 +148,7 @@ export function durationText(seconds: number): string {
 
 1. The function is pure: no Zabbix, no settings, and no clock but the one it is handed, so the same two reports always give the same document. A test can build it and compare. It also takes a style (the decimal mark and the shape of a date), which defaults to the one every report was written in before styles existed; the style changes the words of a percent and of a date and nothing else, so the same two reports give the same figures, verdicts and rows in every style.
 2. Before the lines quoted, it refuses reports that are mislabelled or do not match, because it would otherwise print one method's figures under the other's name: the first must be the `availability` profile, the second `hcml-report`, and both must cover the same period.
-3. The tables are, in order: by category, by site, by device, the WAN paths, the web checks, and the devices that were never measured. A table with no rows shows its `empty` line in place.
+3. The tables are, in order: by category, by site, by device, the WAN paths, the web checks, and the devices that were never measured. A table with no rows shows its `empty` line in place. The caption of the web checks says when their figures were taken and that they are kept, once a closed month's are (`webTakenAt`, ADR-0016), and otherwise that they can still change.
 4. The wording is the SLA page's own, copied from `features/sla/` in the web app, because the server cannot import the browser bundle. `export-sla-report.test.ts` fails if a copied sentence drifts.
 5. `percentText` and `durationText` turn a figure into the words a person reads, and the cells of the tables are made with them. `percentText` takes the decimal mark as its third argument and writes the digits that keep a figure on its own side of the target in either mark (`98.996%` or `98,996%`). A figure below 100 is never written as `100.00%`: where rounding would reach it, the figure is cut instead, so `99.996` reads `99.99%` and 100 is only ever a figure of 100 (BK-46). The Assistant's snapshot uses `percentText` as well, with the default mark, so the model and the report write a percentage the same way.
 

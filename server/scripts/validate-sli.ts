@@ -146,6 +146,15 @@ async function main(): Promise<number> {
     }
     const res = await fetch(`${bff}/api/sli?month=${month}&profile=hcml-report`, { headers: cookie ? { cookie } : {} });
     if (res.status === 401) throw new Error(`${month}: the portal wants a sign-in. Set PORTAL_USER and PORTAL_PASSWORD.`);
+    if (res.status === 400) {
+      // The portal reads only the last 400 days: Zabbix keeps events for about a year, so HCML's report of an older month cannot be checked here (IN-88).
+      const said = ((await res.json().catch(() => ({}))) as { message?: string }).message ?? '';
+      throw new Error(
+        /about a year/.test(said)
+          ? `${month}: the portal does not read a month that old. It reads the last 400 days, since Zabbix keeps events for about a year. Name a recent month that has a spreadsheet in ${dir}.`
+          : `${month}: the portal refused the request: ${said || 'HTTP 400'}`,
+      );
+    }
     if (!res.ok) throw new Error(`${month}: BFF answered ${res.status} ${await res.text()}`);
     const d = (await res.json()) as SliReport;
 

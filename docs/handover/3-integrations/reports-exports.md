@@ -21,7 +21,7 @@ The route reads both methods through the same cached function the page uses, so 
 | `Content-Type` | `application/pdf`, the Excel type or `application/zip` for the CSV files | |
 | `Content-Disposition` | An attachment named `HCML_SLA_Report_2026-08.pdf`, `.xlsx` or `_csv.zip` | The name comes from the validated month alone, so no request text reaches a header |
 | `Content-Length` | The size | |
-| `Cache-Control` | `private, no-store` | A closed month never changes and the current one does, and the file is for the person who asked |
+| `Cache-Control` | `private, no-store` | The file is for the person who asked, and the figures can move: the current month does, and a closed month is kept for a day and can still change when a maintenance period is edited or the readings behind the web checks age out |
 
 A build costs about ten milliseconds of processor time, and a burst of requests would run them back to back with the whole server waiting. So repeats inside ten seconds share one file. The file is keyed on the two cached reports themselves, so a refreshed report starts a new file and nothing outlives them.
 
@@ -45,7 +45,7 @@ The wording of the report is the SLA page's own, copied, since the browser's bun
 
 ## The page's side
 
-`web/src/features/sla/ReportDownload.tsx` shows the three file buttons, PDF, Excel and CSV (the style button beside them opens the number and date choices). It fetches the file with an ordinary request, and hands it to the browser through a throwaway link that carries a name, since a blob has no name of its own. It revokes the link after 40 seconds, because Firefox and Safari can cancel a save whose address is revoked at once. It gives up after 440 seconds, a little under the page's own limit of 450 seconds for an SLA read, so the buttons never stay shut for good. It says the file is ready for six seconds. The file always holds both methods, so the toggle beside the buttons does not change it. The SLA page offers the buttons on its derived monthly view. The Availability page offers them only when the period is one calendar month on the strict basis, since a rolling window has no month to report.
+`web/src/features/sla/ReportDownload.tsx` shows the three file buttons, PDF, Excel and CSV (the style button beside them opens the number and date choices). It fetches the file with an ordinary request, and hands it to the browser through a throwaway link that carries a name, since a blob has no name of its own. It revokes the link after 40 seconds, because Firefox and Safari can cancel a save whose address is revoked at once. It gives up after 440 seconds, a little under the page's own limit of 450 seconds for an SLA read, so the buttons never stay shut for good. It says the file is ready for six seconds. The file always holds both methods, so the toggle beside the buttons does not change it. The SLA page offers the buttons on its derived monthly view, for a calendar month only: the last 7 and 30 days have no month to report, so the buttons are left out there.
 
 The Graphs page has its own download, the points of Show data as a CSV file. Every CSV in the app goes through one writer, `web/src/shared/lib/csv.ts`, which guards against spreadsheet formulas: a text cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a quote put in front of it, so that a spreadsheet reads it as text. A number is never changed, because its minus is a real sign.
 

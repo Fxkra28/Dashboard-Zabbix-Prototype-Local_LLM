@@ -792,19 +792,22 @@ return { key: 'ifutil', label, rows };
 3. Only those candidates' trends are then read, at most about 400 items, sliced as before. A row's average is the average of its busier direction as a share of the speed. The maximum is the busier direction's peak, held to 100. The port name comes from the item name.
 4. A row without trend data is dropped, and the rest are sorted and cut to `top`.
 
-One thing to know: `/api/reports/capacity` is a viewer route, and the last panel names the busiest ports of each host. The viewer policy keeps interface items from `/api/items`, `/api/latest`, `/api/maps/detail` and `/api/graph`, and this route does not apply it. The owner decided on 11 November 2026 that every role may see it (SC-45), and part 5 and the setup guide say so.
+One thing to know: `/api/reports/capacity` is a viewer route, and the last panel names the busiest ports of each host. The viewer policy keeps interface items from `/api/items`, `/api/latest`, `/api/maps/detail` and `/api/graph`, and this route does not apply it. The owner decided on 11 November 2026 that every role may see it (SC-45), and part 5 and the setup guide say so. The page leaves the Graph button off an interface row for a viewer, since `/api/graph` would refuse those items (FR-55).
 
 ### getCapacityReport and the slow-report policy
 
-<!-- gen:snippet server/src/services/capacity.ts#getCapacityReport sha=dce32956a03d -->
-`server/src/services/capacity.ts:335-341`
+<!-- gen:snippet server/src/services/capacity.ts#getCapacityReport sha=bd6d066af793 -->
+`server/src/services/capacity.ts:340-349`
 
 ```ts
-export function getCapacityReport(days: number, top: number) {
-  return cached(`capacity:${days}:${top}`, CAPACITY_TTL, () => heavy.run(() => getCapacity(days, top)), {
+export function getCapacityReport(days: number, top: number, signal?: AbortSignal) {
+  const offered = top === CAPACITY_TOP && CAPACITY_PERIODS.includes(days);
+  return cached(`capacity:${days}:${top}`, CAPACITY_TTL, (f) => heavy.run(() => getCapacity(days, top), f), {
     ...staleReport(CAPACITY_TTL),
     staleMs: CAPACITY_STALE_MS,
-    pin: true,
+    pin: offered,
+    typed: !offered,
+    signal,
   });
 }
 ```
@@ -826,9 +829,9 @@ export const heavy = createGate(HEAVY_REPORTS_AT_ONCE);
 ```
 <!-- /gen -->
 
-1. A run of the report took HCML's Zabbix 256 seconds. So the answer is kept for `CAPACITY_TTL`, an hour, under a key made of the days and the top. Past the hour the previous run is served at once, with its age, for up to `CAPACITY_STALE_MS` (23 hours) while one refresh runs. A failed refresh answers with the previous run too. The entry is pinned, so the cache's size limit does not evict it.
+1. A run of the report took HCML's Zabbix 256 seconds. So the answer is kept for `CAPACITY_TTL`, an hour, under a key made of the days and the top. Past the hour the previous run is served at once, with its age, for up to `CAPACITY_STALE_MS` (23 hours) while one refresh runs. A failed refresh answers with the previous run too. The entry of a period the page offers (`CAPACITY_PERIODS`: 1, 7, 30 and 90 days, with the usual `top` of 10) is pinned, so the cache's size limit does not evict it. Any other days or top is a number a viewer chose, so its entry is typed instead: at most 150 such entries are kept and they go first, so a run of different numbers cannot push out the pinned reports or the problem list (BK-70).
 2. `staleReport` is the rule for reports over days of history: the previous run is shown with its age while a refresh runs, or when it fails. It is never used for `aging`, or for anything that shows live problem state.
-3. `heavy` is a gate that lets `HEAVY_REPORTS_AT_ONCE` (2) reports read Zabbix at the same time. A cold noise report over 365 days takes 7 seconds and thousands of SQL statements, and every new `days` or `severity` is a cold one, so the others wait their turn. A cached answer never waits.
+3. `heavy` is a gate that lets `HEAVY_REPORTS_AT_ONCE` (2) reports read Zabbix at the same time. A cold noise report over 365 days takes 7 seconds and thousands of SQL statements, and every new `days` or `severity` is a cold one, so the others wait their turn. A cached answer never waits. A reader who leaves while theirs waits drops it from the line (BK-59): the gate asks, when the turn comes, whether anyone still waits for it, and a read already running is left to finish.
 4. The warm-up reads the default report, 7 days and the top 10, last of all, so the first visitor after a start finds it ready.
 
 Tests: `light-reads.test.ts` for the cache policy, `heavy-reports.test.ts` for the gate, and `sli-routes.test.ts` for the key matchers.

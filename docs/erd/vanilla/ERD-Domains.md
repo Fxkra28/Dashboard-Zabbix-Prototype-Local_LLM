@@ -164,7 +164,7 @@ erDiagram
 
 ## Sites & Links
 
-Zabbix has no site object. `SITE` is derived from a host tag, falling back to inventory, then host group. A `LINK` is one (host, ping target) pair stitched from up to three ICMP items.
+Zabbix has no site object. `SITE` is derived from a host tag, falling back to the site code at the start of the host's name, then inventory, then host group. A `LINK` is one (host, ping target) pair stitched from up to three ICMP items.
 
 ```mermaid
 ---

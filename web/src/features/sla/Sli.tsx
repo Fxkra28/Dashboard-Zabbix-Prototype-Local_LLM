@@ -1,20 +1,39 @@
 import { useId } from 'react';
-import type { DataStatus, SliGap, SliProfile } from '../../types';
-import { reportTimeZone, monthLabel, recentMonths } from '../../shared/lib/time';
+import type { DataStatus, SliGap, SliProfile, SliReport } from '../../types';
+import { formatLongDate, reportTimeZone, monthLabel, recentMonths } from '../../shared/lib/time';
 import { useReportTimeZone } from '../../shared/hooks/useReportTimeZone';
 import { PERCENT_DP, fixedBelow100, formatDuration } from '../../shared/lib/units';
 import { percentText } from './percent';
 import { NoData } from '../../shared/components/NoData';
+import { count } from '../../shared/lib/plural';
 import { Field, FieldGroup } from '../../shared/components/Field';
 
 /**
- * Small shared pieces for the derived monthly SLA views (SLA, Services,
- * Availability): the month picker, the method toggle, the neutral "no data"
+ * Small shared pieces for the derived SLA views (SLA, Services): the period picker, the method toggle, the neutral "no data"
  * pill and the note on hours with no collected data.
  */
 
+/** The Services page's banner. That page shows its derived tree only when Zabbix has no services, so the reason is true there. */
 export const DERIVED_BANNER =
   'Derived from ICMP availability triggers: Zabbix has no services configured';
+
+/** The banner of the SLA page and the report files. It names what the figures are, true whatever Zabbix has configured. */
+export const DERIVED_SLA_BANNER = 'Derived from ICMP availability triggers, not from Zabbix’s own SLAs';
+
+/** Over the Web checks of a month that has closed, and in the report files: the readings behind these figures age out (BK-60). */
+export const WEB_AGING_NOTE =
+  'The web check figures of a month that has closed can change later, as the readings behind them age out, and some can turn to No data.';
+
+/** Around the date the figures of a closed month were taken, when they are kept (ADR 0016); the report files carry a copy that a test keeps equal. */
+export const WEB_KEPT_NOTE_BEFORE = 'The web check figures of this month are those taken on';
+export const WEB_KEPT_NOTE_AFTER = 'and kept as they were. Readings that had aged out by then are not counted.';
+
+/** What to say over the Web checks of a month: when the figures were taken and that they are kept, else that a closed month's can still change. Null for a month still running, and under HCML's method. */
+export function webNote(report: Pick<SliReport, 'closed' | 'profile' | 'webTakenAt' | 'timezone'>): string | null {
+  if (report.profile === 'hcml-report') return null;
+  if (report.webTakenAt !== undefined) return `${WEB_KEPT_NOTE_BEFORE} ${formatLongDate(report.webTakenAt * 1000, report.timezone)}, ${WEB_KEPT_NOTE_AFTER}`;
+  return report.closed ? WEB_AGING_NOTE : null;
+}
 
 export const METHOD_LABEL: Record<SliProfile, string> = {
   availability: 'Strict',
@@ -81,28 +100,53 @@ export function CoverageText({ coverage }: { coverage: number | null | undefined
   return <span className={pct < 50 ? 'sli-cov low' : 'sli-cov'}>{pct}%</span>;
 }
 
-/** The current month (marked "so far") and the 11 before it, in the report zone. */
+/** The windows the SLA page offers beside the months. A window is for watching and has no report files. */
+export const ROLLING_WINDOWS = [
+  { key: 'd7', days: 7, label: 'Last 7 days' },
+  { key: 'd30', days: 30, label: 'Last 30 days' },
+] as const;
+
+/** The days of a window key such as `d7`; null for anything else, a month included. */
+export const rollingDays = (period: string): number | null => ROLLING_WINDOWS.find((w) => w.key === period)?.days ?? null;
+
+/** The current month (marked "so far") and the 11 before it, in the report zone, with the windows first when `rolling`. */
 export function MonthSelect({
   value,
   onChange,
   label = 'Month',
+  rolling = false,
 }: {
   value: string;
   onChange: (m: string) => void;
   label?: string;
+  /** Offer the last 7 and 30 days before the months. */
+  rolling?: boolean;
 }) {
-  useReportTimeZone(); // the list follows the server's zone once it is known
+  const zone = useReportTimeZone(); // the list follows the server's zone once it is known
   const id = useId();
-  const months = recentMonths(12);
+  const months = recentMonths(12).map((m, i) => (
+    <option key={m} value={m}>
+      {monthLabel(m)}
+      {i === 0 ? ' (so far)' : ''}
+    </option>
+  ));
   return (
     <Field label={label} htmlFor={id}>
-      <select id={id} name="month" value={value} onChange={(e) => onChange(e.target.value)}>
-        {months.map((m, i) => (
-          <option key={m} value={m}>
-            {monthLabel(m)}
-            {i === 0 ? ' (so far)' : ''}
-          </option>
-        ))}
+      <select id={id} name="month" data-period={rolling ? '' : undefined} value={value} onChange={(e) => onChange(e.target.value)}>
+        {rolling ? (
+          <>
+            <optgroup label="Rolling window, not a month">
+              {ROLLING_WINDOWS.map((w) => (
+                <option key={w.key} value={w.key}>
+                  {w.label}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label={`Calendar month (${zone})`}>{months}</optgroup>
+          </>
+        ) : (
+          months
+        )}
       </select>
     </Field>
   );
@@ -122,7 +166,8 @@ export function MethodToggle({
 }) {
   return (
     <FieldGroup label={label}>
-      <div className="seg" role="group" aria-label="Calculation method">
+      {/* Named by the heading on screen, so that voice control can say it (WCAG 2.5.3). */}
+      <div className="seg" role="group" aria-label={label}>
         {(['availability', 'hcml-report'] as SliProfile[]).map((p) => (
           <button
             key={p}
@@ -171,7 +216,11 @@ function spansSummary(spans: SliGap[], what: string): string | null {
   if (!spans.length) return null;
   const seconds = spans.reduce((s, g) => s + (g.to - g.from), 0);
   const amount =
-    seconds >= 172800 ? `${(seconds / 86400).toFixed(1)} days` : `${Math.round(seconds / 3600)} hours`;
+    seconds >= 172800
+      ? `${(seconds / 86400).toFixed(1)} days`
+      : seconds < 3600
+        ? count(Math.max(1, Math.round(seconds / 60)), 'minute')
+        : count(Math.round(seconds / 3600), 'hour');
   return `${amount} ${what}: ${spans.map(spanText).join(', ')}`;
 }
 
@@ -181,10 +230,9 @@ export const gapsSummary = (gaps: SliGap[]) => spansSummary(gaps, 'with no colle
 /** The spans the setting SLA_NO_DATA_WINDOWS declares not measured, such as a collector that ran off HCML's network. */
 export const declaredSummary = (windows: SliGap[]) => spansSummary(windows, 'the portal is set to treat as not measured');
 
-const LEAD: Record<SliProfile | 'all-problems', string> = {
+const LEAD: Record<SliProfile, string> = {
   availability: 'Excluded ',
   'hcml-report': 'Counted as up by the HCML method: ',
-  'all-problems': 'No downtime counted in ',
 };
 
 export function GapsNote({
@@ -194,8 +242,7 @@ export function GapsNote({
 }: {
   gaps: SliGap[] | undefined;
   windows: SliGap[] | undefined;
-  /** `all-problems` is the legacy basis, which has no gaps and only leaves declared spans out of the downtime. */
-  profile: SliProfile | 'all-problems';
+  profile: SliProfile;
 }) {
   const lines = [gapsSummary(gaps ?? []), declaredSummary(windows ?? [])].filter((t): t is string => t !== null);
   if (!lines.length) return null;

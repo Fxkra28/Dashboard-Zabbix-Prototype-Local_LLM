@@ -14,7 +14,7 @@ export interface paths {
         /**
          * Liveness, build and readiness
          * @description Unguarded and not rate limited, like `POST /api/auth/logout`. Registered before the auth guard
-         *     (`index.ts:76`) and in the rate limiter's allow-list, so it answers even when Zabbix is down.
+         *     (`registerHealth` in `index.ts`) and in the rate limiter's allow-list, so it answers even when Zabbix is down.
          *     The status stays 200 then too: `ok` means the process answers, and `ready` says whether Zabbix
          *     does.
          *
@@ -697,13 +697,17 @@ export interface paths {
         };
         /**
          * Per-host availability over a window
-         * @description Cached 120 s with `staleIfError`: an upstream failure returns 200 with an old copy, marked
-         *     by `X-Data-Stale` and `X-Data-Age-Seconds` (see Stale answers above).
+         * @description A window, and `basis=all-problems` with a month, are cached 120 s with `staleIfError`: an upstream
+         *     failure returns 200 with an old copy, marked by `X-Data-Stale` and `X-Data-Age-Seconds`, and a copy
+         *     past its time is answered with `X-Data-Refreshing` while a new one is read (see Stale answers above).
+         *     A month with the default basis is the derived monthly SLA of `/api/sli`: it is kept and refreshed as
+         *     that is, and carries `X-Data-Stale` only when Zabbix fails, never `X-Data-Refreshing`.
          *
          *     **Two bases with materially different responses.** With `basis=availability` (the default)
          *     the derived SLI engine runs and `overall`, `categories`, `sites`, `target`, `profile` and
          *     `gaps` are all present. With `basis=all-problems` none of them are, and each host carries
-         *     only its id, name, availability, downtime, incidents and longest outage.
+         *     only its id, name, availability, downtime, incidents and longest outage. The pages of the portal
+         *     ask for `basis=availability` only; `basis=all-problems` stays for callers that still use it.
          *
          *     `month` takes precedence over `days`. A month that has not started is 400, and so is one
          *     more than 400 days ago, Zabbix keeps events about a year.
@@ -1254,8 +1258,10 @@ export interface paths {
          * @description Fire and forget. Returns 202 immediately and does the work detached: the only 202 in
          *     the API.
          *
-         *     On the hosted provider this is a no-op, so the warm-up costs nothing; on a local model it
-         *     loads the weights so the first real question is not paying for a cold start.
+         *     On every provider it builds the snapshot of the estate that the first question reads, and so
+         *     reads Zabbix, and starts the derived SLA figures that the snapshot holds when they are cold. On the hosted
+         *     provider that is all it does; on a local model it also loads the weights and has them read the
+         *     snapshot, so the first real question is not paying for a cold start.
          */
         get: operations["warmChat"];
         put?: never;
@@ -1330,7 +1336,7 @@ export interface paths {
          *     Closing additionally requires the trigger to permit manual close; `GET /api/problems` carries
          *     `manualClose` per problem so the UI never offers a Close that Zabbix will reject.
          *
-         *     After a successful write nine cache prefixes are invalidated with a 15 s hold, and the change
+         *     After a successful write the cache prefixes of the problem views (`STALE_AFTER_WRITE` in `services/actions.ts`) are invalidated with a 15 s hold, and the change
          *     is pushed immediately to every open SSE client.
          *
          *     Zabbix files every write under the write token's owner, so the portal user is put into the text:
@@ -1464,10 +1470,10 @@ export interface components {
             /** @description How long the Zabbix call took. Null when it did not answer. */
             zabbixMs: number | null;
             /**
-             * @description `off` is no model configured, `not_checked` is the hosted Anthropic model, which a probe would bill.
+             * @description `off` is no model configured, `missing` is a model server that answers without `AI_MODEL` in its list (a forgotten `ollama pull`, a mistyped name), `not_checked` is the hosted Anthropic model, which a probe would bill.
              * @enum {string}
              */
-            model: "ok" | "down" | "off" | "not_checked";
+            model: "ok" | "down" | "missing" | "off" | "not_checked";
             /** @description When these answers were read, milliseconds since epoch. */
             checkedAt: number;
             /** @description The server package version. */
@@ -1484,6 +1490,17 @@ export interface components {
             };
             /** @description Screens connected to `/api/stream` right now. */
             streams: number;
+            logFile: components["schemas"]["LogFile"];
+        };
+        /** @description Whether the server's own copy of its log (`bff.log`, in the `portal-logs` volume) is being written (IN-83). */
+        LogFile: {
+            /**
+             * @description `off` when `LOG_DIR` is empty, so the log goes to stdout alone. `failing` while the file cannot be written; the lines still go to stdout.
+             * @enum {string}
+             */
+            state: "off" | "ok" | "failing";
+            /** @description The bytes that have reached the file since the process started, rotations included. */
+            written: number;
         };
         User: {
             name: string;
@@ -2083,6 +2100,12 @@ export interface components {
             hosts: components["schemas"]["SliHost"][];
             wanPaths: components["schemas"]["SliPath"][];
             web: components["schemas"]["SliWeb"][];
+            /**
+             * @description Epoch seconds. Present for a month that has closed under the strict method: when the web check figures in `web` were taken. The first read of the
+             *     month after it closed keeps them, and a later read gives those figures again, whatever the readings in Zabbix say by then (ADR 0016). Absent for a
+             *     month still running, under HCML's method, and on a portal with no data folder to keep them in, where the figures can still change.
+             */
+            webTakenAt?: number;
             /** @description Estate-wide spans in which almost nothing was collected. */
             gaps: components["schemas"]["Interval"][];
             /**
@@ -2223,6 +2246,7 @@ export interface components {
          *     `basis=availability`. `truncated` is always false with `basis=availability`. With `basis=all-problems`
          *     it is true only when more than 200 outages from before the look-back needed a one-by-one lookup
          *     and the rest were left out, so the figures are a floor. Events are sliced, never silently cut.
+         *     `minSeverity` is the floor the request named. With `basis=availability` it is only echoed back: the figures do not use it.
          */
         AvailabilityReport: {
             from: number;
@@ -2498,6 +2522,19 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
+        /**
+         * @description `cancelled`, a slow read dropped because the connection of the person who asked closed while it waited for a place
+         *     (BK-59). Nobody is there to read it, so it matters to a script that gives up and to a log reader: the handler writes
+         *     no line of its own.
+         */
+        Cancelled: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
         /** @description `internal`. The message is fixed; the detail is in the BFF log only. */
         Internal: {
             headers: {
@@ -2606,8 +2643,10 @@ export interface operations {
                          */
                         aiProvider: "anthropic" | "openai-compatible";
                         /**
-                         * @description Whether a question leaves this machine: true only when the hosted Anthropic backend is configured. The
-                         *     Assistant and Explain then say so next to every answer; a local model shows nothing.
+                         * @description Whether a question leaves this machine's own network: true when the hosted Anthropic backend is configured, or when
+                         *     the model is on a host that is not local (`AI_BASE_URL` names a public address). The Assistant and Explain then say so
+                         *     next to every answer; a model on this machine, on a private address or on a name that only resolves inside a
+                         *     network shows nothing.
                          */
                         aiExternal: boolean;
                         /** @description Whether write-back is on, which is `ZABBIX_WRITE_TOKEN` set and either sign-in on or `ALLOW_WRITE_WITHOUT_AUTH=true`. False means acknowledge returns 503. */
@@ -2644,15 +2683,17 @@ export interface operations {
                             /** @description How long the Zabbix call took. Null when it did not answer. */
                             zabbixMs: number | null;
                             /**
-                             * @description `off` is no model configured, `not_checked` is the hosted Anthropic model, which a probe would bill.
+                             * @description `off` is no model configured, `missing` is a model server that answers without `AI_MODEL` in its list (a forgotten `ollama pull`, a mistyped name), `not_checked` is the hosted Anthropic model, which a probe would bill.
                              * @enum {string}
                              */
-                            model: "ok" | "down" | "off" | "not_checked";
+                            model: "ok" | "down" | "missing" | "off" | "not_checked";
                             /** @description When these answers were read, milliseconds since epoch. */
                             checkedAt: number;
                         };
                         /** @description Signed-in callers only. Screens connected to `/api/stream` right now. */
                         streams?: number;
+                        /** @description Signed-in callers only. Whether the server's own log file is being written. */
+                        logFile?: components["schemas"]["LogFile"];
                     };
                 };
             };
@@ -3338,6 +3379,16 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description `rate_limited`, this person already has four reports being prepared (a report over days of history waits for one of two places in a line, and one person may hold four of the places), or the 300 requests a minute of the client address. `Retry-After` says how long to wait. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            499: components["responses"]["Cancelled"];
             502: components["responses"]["ZabbixError"];
             503: components["responses"]["ZabbixUnavailable"];
         };
@@ -3449,7 +3500,7 @@ export interface operations {
             query?: {
                 basis?: "availability" | "all-problems";
                 days?: number;
-                /** @description Minimum severity. Defaults to `AVAILABILITY_MIN_SEVERITY`, normally 2. */
+                /** @description Minimum severity. With `basis=all-problems` it decides which problems count; with `basis=availability` it changes no figure and only comes back as `minSeverity`. Defaults to `AVAILABILITY_MIN_SEVERITY`, normally 2. */
                 severity?: number;
                 /** @description Takes precedence over `days`. */
                 month?: string;
@@ -3473,6 +3524,16 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description `rate_limited`, this person already has four reports being prepared (a report over days of history waits for one of two places in a line, and one person may hold four of the places), or the 300 requests a minute of the client address. `Retry-After` says how long to wait. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            499: components["responses"]["Cancelled"];
             502: components["responses"]["ZabbixError"];
             503: components["responses"]["ZabbixUnavailable"];
         };
@@ -3501,6 +3562,16 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description `rate_limited`, this person already has four reports being prepared (a report over days of history waits for one of two places in a line, and one person may hold four of the places), or the 300 requests a minute of the client address. `Retry-After` says how long to wait. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            499: components["responses"]["Cancelled"];
             502: components["responses"]["ZabbixError"];
             503: components["responses"]["ZabbixUnavailable"];
         };
@@ -3551,6 +3622,16 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description `rate_limited`, this person already has four reports being prepared (a report over days of history waits for one of two places in a line, and one person may hold four of the places), or the 300 requests a minute of the client address. `Retry-After` says how long to wait. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            499: components["responses"]["Cancelled"];
             502: components["responses"]["ZabbixError"];
             503: components["responses"]["ZabbixUnavailable"];
         };
@@ -3672,6 +3753,16 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description `rate_limited`, this person has too many monthly SLA reads being prepared (a month that is not kept yet waits for one of two places in a line, and one person may hold four of the places), or the 300 requests a minute of the client address. `Retry-After` says how long to wait. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            499: components["responses"]["Cancelled"];
             502: components["responses"]["ZabbixError"];
             503: components["responses"]["ZabbixUnavailable"];
         };
@@ -3778,6 +3869,16 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description `rate_limited`, this person has too many monthly SLA reads being prepared (a month that is not kept yet waits for one of two places in a line, and one person may hold four of the places), or the 300 requests a minute of the client address. `Retry-After` says how long to wait. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            499: components["responses"]["Cancelled"];
             502: components["responses"]["ZabbixError"];
             503: components["responses"]["ZabbixUnavailable"];
         };
@@ -3825,6 +3926,16 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            /** @description `rate_limited`, this person has too many monthly SLA reads being prepared (a month that is not kept yet waits for one of two places in a line, one person may hold four of the places, and a file takes two of them because it reads both methods), or the 300 requests a minute of the client address. `Retry-After` says how long to wait. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            499: components["responses"]["Cancelled"];
             502: components["responses"]["ZabbixError"];
             503: components["responses"]["ZabbixUnavailable"];
         };
@@ -4196,8 +4307,9 @@ export interface operations {
                 };
             };
             /**
-             * @description `rate_limited`, more calls than the per-user limit a minute (`AI_CHAT_PER_MINUTE` and `AI_EXPLAIN_PER_MINUTE`, 10 each by default), or `ai_budget`, the daily token budget is used
-             *     up (hosted model only; `AI_DAILY_TOKENS_PER_USER` and `AI_DAILY_TOKENS_TOTAL`). `Retry-After` says how long to wait.
+             * @description `rate_limited`, more calls than the per-user limit a minute (`AI_CHAT_PER_MINUTE` and `AI_EXPLAIN_PER_MINUTE`, 10 each by default), or, with a
+             *     local model, a call of the same person that is still waiting or running (one for each person); or `ai_budget`, the daily token budget is used
+             *     up (hosted Claude and a model at an outside address, counted by the tokens it reports or else by the size of what went in and out; `AI_DAILY_TOKENS_PER_USER` and `AI_DAILY_TOKENS_TOTAL`). `Retry-After` says how long to wait.
              */
             429: {
                 headers: {
@@ -4207,6 +4319,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            499: components["responses"]["Cancelled"];
             502: components["responses"]["AiError"];
             503: components["responses"]["AiUnavailable"];
         };
@@ -4250,8 +4363,9 @@ export interface operations {
                 };
             };
             /**
-             * @description `rate_limited`, more calls than the per-user limit a minute (`AI_CHAT_PER_MINUTE` and `AI_EXPLAIN_PER_MINUTE`, 10 each by default), or `ai_budget`, the daily token budget is used
-             *     up (hosted model only; `AI_DAILY_TOKENS_PER_USER` and `AI_DAILY_TOKENS_TOTAL`). `Retry-After` says how long to wait.
+             * @description `rate_limited`, more calls than the per-user limit a minute (`AI_CHAT_PER_MINUTE` and `AI_EXPLAIN_PER_MINUTE`, 10 each by default), or, with a
+             *     local model, a call of the same person that is still waiting or running (one for each person); or `ai_budget`, the daily token budget is used
+             *     up (hosted Claude and a model at an outside address, counted by the tokens it reports or else by the size of what went in and out; `AI_DAILY_TOKENS_PER_USER` and `AI_DAILY_TOKENS_TOTAL`). `Retry-After` says how long to wait.
              */
             429: {
                 headers: {
@@ -4261,6 +4375,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            499: components["responses"]["Cancelled"];
             502: components["responses"]["AiError"];
             503: components["responses"]["AiUnavailable"];
         };
@@ -4340,8 +4455,9 @@ export interface operations {
             403: components["responses"]["CsrfRefused"];
             413: components["responses"]["PayloadTooLarge"];
             /**
-             * @description `rate_limited`, more calls than the per-user limit a minute (`AI_CHAT_PER_MINUTE` and `AI_EXPLAIN_PER_MINUTE`, 10 each by default), or `ai_budget`, the daily token budget is used
-             *     up (hosted model only; `AI_DAILY_TOKENS_PER_USER` and `AI_DAILY_TOKENS_TOTAL`). `Retry-After` says how long to wait.
+             * @description `rate_limited`, more calls than the per-user limit a minute (`AI_CHAT_PER_MINUTE` and `AI_EXPLAIN_PER_MINUTE`, 10 each by default), or, with a
+             *     local model, a call of the same person that is still waiting or running (one for each person); or `ai_budget`, the daily token budget is used
+             *     up (hosted Claude and a model at an outside address, counted by the tokens it reports or else by the size of what went in and out; `AI_DAILY_TOKENS_PER_USER` and `AI_DAILY_TOKENS_TOTAL`). `Retry-After` says how long to wait.
              */
             429: {
                 headers: {
@@ -4431,6 +4547,18 @@ export interface operations {
                 };
             };
             413: components["responses"]["PayloadTooLarge"];
+            /**
+             * @description `rate_limited`. This person has acknowledged or closed more than `ACTION_EVENTS_PER_MINUTE` events in the last minute (200 by default, 50 at the least),
+             *     counted by event id and only for a request that would be written; `Retry-After` says how long to wait. The portal-wide limit (`RateLimited`) answers in the same shape.
+             */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             /**
              * @description `zabbix_error`. When Zabbix answered with an error, the message says that Zabbix refused the change and may already have
              *     closed the problem, or the account may not be allowed to change it; Zabbix's own words go to the log. When the portal

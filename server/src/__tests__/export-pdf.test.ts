@@ -1714,7 +1714,8 @@ describe('WinAnsi mapping, cutting and wrapping', () => {
     }
     expect(cut, 'the sweep cut text often').toBeGreaterThan(5000);
     expect(broken, 'the sweep broke a long word often').toBeGreaterThan(500);
-  });
+    // Under coverage the sweep takes longer than the default five seconds.
+  }, 30_000);
 });
 
 describe('paragraph wrapping', () => {

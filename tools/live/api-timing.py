@@ -6,8 +6,18 @@ A host, an item of it, a host with network interfaces and a map are taken from t
 HOSTID, ITEMID, IFHOSTID or MAPID name them. The table is also written to api-timing.json (OUT changes the file).
 """
 import json, os, subprocess, sys, urllib.request
+from datetime import datetime, timedelta, timezone
 
 B = os.environ.get('BFF', 'http://127.0.0.1:4000')
+
+def month_just_closed():
+    """YYYY-MM of the month before this one in Asia/Jakarta (UTC+7, no daylight saving), as signedin_check.py works it out."""
+    now = datetime.now(timezone(timedelta(hours=7)))
+    year, mon = (now.year, now.month - 1) if now.month > 1 else (now.year - 1, 12)
+    return f'{year}-{mon:02d}'
+
+# The portal refuses a month more than about 400 days back, so a fixed one stops working. MONTH names another.
+M = os.environ.get('MONTH') or month_just_closed()
 
 def get(path):
     with urllib.request.urlopen(B + path, timeout=170) as r:
@@ -28,12 +38,12 @@ URLS = [
  '/api/health', '/api/ready', '/api/auth/me', '/api/hosts', '/api/hosts/overview', '/api/hostgroups',
  f'/api/items?hostid={HOSTID}', f'/api/items?hostid={HOSTID}&graphable=1', f'/api/latest?hostid={HOSTID}&page=1&pageSize=100',
  '/api/problems', '/api/stats', '/api/freshness', '/api/reports/problems-by-group',
- f'/api/graph?itemids={ITEMID}&month=2026-09', f'/api/graph?itemids={ITEMID}&hours=24',
+ f'/api/graph?itemids={ITEMID}&month={M}', f'/api/graph?itemids={ITEMID}&hours=24',
  '/api/net/devices', f'/api/net/interfaces?hostid={IFHOSTID}', '/api/links', '/api/sites', '/api/services',
- '/api/reports/top-triggers?days=30', '/api/reports/availability?month=2026-08&profile=hcml-report', '/api/reports/availability?days=30',
+ '/api/reports/top-triggers?days=30', f'/api/reports/availability?month={M}&profile=hcml-report', '/api/reports/availability?days=30',
  '/api/reports/noise?days=30&top=100', '/api/reports/aging', '/api/reports/capacity?days=90', '/api/reports/capacity?days=365',
- '/api/reports/inventory', '/api/services/derived?month=2026-08&profile=hcml-report', '/api/sla/source', '/api/sla', '/api/sli?month=2026-08&profile=hcml-report',
- '/api/sli/export?month=2026-08&format=pdf', '/api/sli/export?month=2026-08&format=xlsx', '/api/maps', f'/api/maps/detail?mapid={MAPID}',
+ '/api/reports/inventory', f'/api/services/derived?month={M}&profile=hcml-report', '/api/sla/source', '/api/sla', f'/api/sli?month={M}&profile=hcml-report',
+ f'/api/sli/export?month={M}&format=pdf', f'/api/sli/export?month={M}&format=xlsx', '/api/maps', f'/api/maps/detail?mapid={MAPID}',
 ]
 def hit(u, gz=False):
     cmd = ['curl', '-s', '-o', '/dev/null', '-m', '170', '-w', '%{http_code} %{time_total} %{size_download}', B + u]

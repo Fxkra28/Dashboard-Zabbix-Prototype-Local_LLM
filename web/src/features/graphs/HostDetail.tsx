@@ -156,7 +156,7 @@ export default function HostDetail() {
               }}
             />
           ) : hostsFailed ? (
-            <ErrorState message={hostsQ.error as string} />
+            <ErrorState message={hostsQ.error as string} onRetry={hostsQ.reload} />
           ) : hostsEmpty ? (
             <Empty>No hosts to show.</Empty>
           ) : (

@@ -5,7 +5,6 @@ import { api } from '../api';
 import { setReportTimeZone } from '../shared/lib/time';
 import { GapsNote, MonthSelect, gapsSummary } from '../features/sla/Sli';
 import RangePicker from '../features/graphs/RangePicker';
-import Availability from '../features/sla/Availability';
 import Sla from '../features/sla/Sla';
 import type { SlaSource } from '../types';
 
@@ -35,6 +34,20 @@ describe('MonthSelect', () => {
     act(() => setReportTimeZone('Asia/Makassar'));
     expect(screen.getAllByRole('option')[0]).toHaveTextContent('Aug 2026 (so far)');
   });
+
+  it('offers the twelve months only, and the last 7 and 30 days only when it is asked for them, so Services never offers a window', () => {
+    nearMonthEnd();
+    const { unmount } = render(<MonthSelect value="2026-07" onChange={() => undefined} />);
+    expect(document.querySelectorAll('optgroup')).toHaveLength(0);
+    expect(screen.getAllByRole('option')).toHaveLength(12);
+    expect(screen.queryByRole('option', { name: /^Last \d+ days$/ })).toBeNull();
+    unmount();
+
+    render(<MonthSelect rolling value="2026-07" onChange={() => undefined} />);
+    expect(screen.getAllByRole('option')).toHaveLength(14);
+    expect(screen.getByRole('option', { name: 'Last 7 days' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Last 30 days' })).toBeInTheDocument();
+  });
 });
 
 describe('RangePicker', () => {
@@ -58,6 +71,13 @@ describe('gapsSummary', () => {
     setReportTimeZone('Asia/Makassar');
     expect(gapsSummary([gap])).toBe('2 hours with no collected data: 1 Aug 00:30\u201302:30');
   });
+
+  it('says one hour in the singular, and a span under an hour in minutes', () => {
+    const hour = { from: utc('2026-07-31T10:00:00Z'), to: utc('2026-07-31T11:00:00Z') };
+    expect(gapsSummary([hour])).toBe('1 hour with no collected data: 31 Jul 17:00\u201318:00');
+    const twenty = { from: utc('2026-07-31T10:00:00Z'), to: utc('2026-07-31T10:20:00Z') };
+    expect(gapsSummary([twenty])).toBe('20 minutes with no collected data: 31 Jul 17:00\u201317:20');
+  });
 });
 
 describe('GapsNote with spans declared not measured (IN-39)', () => {
@@ -73,8 +93,6 @@ describe('GapsNote with spans declared not measured (IN-39)', () => {
     expect(note()).toHaveTextContent(
       'Counted as up by the HCML method: 5 hours the portal is set to treat as not measured: 26 Oct 16:10\u201321:03.',
     );
-    rerender(<GapsNote gaps={undefined} windows={[declared]} profile="all-problems" />);
-    expect(note()).toHaveTextContent('No downtime counted in 5 hours the portal is set to treat as not measured: 26 Oct 16:10\u201321:03.');
   });
 
   it('puts the gaps first, and shows nothing when there are neither', () => {
@@ -112,11 +130,11 @@ describe('the pages that name the zone', () => {
     expect(screen.queryByText(/Asia\/Jakarta/)).toBeNull();
   });
 
-  it('names the zone on the Availability calendar months, and follows the server', () => {
+  it('names the zone on the calendar months of the SLA period, and follows the server', () => {
     quietBackend();
     const { container } = render(
       <MemoryRouter>
-        <Availability />
+        <Sla />
       </MemoryRouter>,
     );
     const label = () => container.querySelector('optgroup[label^="Calendar month"]')?.getAttribute('label');

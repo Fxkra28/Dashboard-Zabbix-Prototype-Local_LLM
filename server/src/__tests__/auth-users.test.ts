@@ -147,24 +147,42 @@ describe('the sign-in log (SC-19)', () => {
     expect(JSON.stringify(log)).not.toContain('viewer-pass');
   });
 
-  it('logs a failure for a wrong password and for an unknown name, the name as typed', async () => {
+  it('logs a failure for a wrong password under the name, and a name nobody holds as unknown with its length (SC-52)', async () => {
     const { signIn, events, log } = await buildAuthApp();
     await signIn('ana', 'wrong-guess-one', '203.0.113.8');
+    await signIn('ANA', 'wrong-guess-three', '203.0.113.10');
     await signIn('Nobody', 'wrong-guess-two', '203.0.113.9');
-    expect(events().map(({ level, user, outcome, ip }) => ({ level, user, outcome, ip }))).toEqual([
-      { level: 30, user: 'ana', outcome: 'failure', ip: '203.0.113.8' },
-      { level: 30, user: 'Nobody', outcome: 'failure', ip: '203.0.113.9' },
+    expect(events().map(({ level, user, nameLength, outcome, ip }) => ({ level, user, nameLength, outcome, ip }))).toEqual([
+      { level: 30, user: 'ana', nameLength: undefined, outcome: 'failure', ip: '203.0.113.8' },
+      { level: 30, user: 'ANA', nameLength: undefined, outcome: 'failure', ip: '203.0.113.10' },
+      { level: 30, user: 'unknown', nameLength: 6, outcome: 'failure', ip: '203.0.113.9' },
     ]);
     expect(JSON.stringify(log)).not.toMatch(/wrong-guess/);
+    expect(JSON.stringify(log)).not.toContain('Nobody');
   });
 
-  it('cuts a long name short and drops control characters, so a request cannot fill or forge a log line', async () => {
+  // A person who types the password into the name box must not leave it in a log that is kept for weeks (SC-52).
+  it('never writes what was typed into the name box when no account has that name, on any outcome or warning', async () => {
+    const { signIn, events, log, auth } = await buildAuthApp();
+    const typed = 'Typed-As-A-Name-By-Mistake-1';
+    for (let i = 0; i < auth.LOGIN_LOCK_AFTER; i++) await signIn(typed, 'guess', '203.0.113.30');
+    const locked = await signIn(typed, 'guess', '203.0.113.30');
+    expect(locked.statusCode).toBe(429);
+    for (let i = 0; i < auth.LOGIN_WARN_AFTER; i++) await signIn(typed, 'guess', `203.0.113.${100 + i}`);
+    expect(events().some((e) => e.outcome === 'locked' && e.user === 'unknown' && e.nameLength === typed.length)).toBe(true);
+    expect(events('sign_in_repeated_failures').length).toBeGreaterThan(0);
+    expect(events('sign_in_repeated_failures').every((e) => e.user === 'unknown' && e.nameLength === typed.length)).toBe(true);
+    expect(JSON.stringify(log)).not.toContain(typed);
+  });
+
+  it('logs a long name, or one with control characters, as unknown too, so a request cannot fill or forge a log line', async () => {
     const { signIn, events } = await buildAuthApp();
     await signIn('n'.repeat(200), 'x');
     await signIn('line one\nline two\u0000end', 'x');
-    const [long, odd] = events().map((e) => e.user as string);
-    expect(long).toBe('n'.repeat(64));
-    expect(odd).toBe('line one line two end');
+    const [long, odd] = events();
+    expect(long).toMatchObject({ user: 'unknown', nameLength: 200 });
+    expect(odd).toMatchObject({ user: 'unknown', nameLength: 21 });
+    expect(JSON.stringify(events())).not.toMatch(/line one|nnnnn/);
   });
 
   it('logs an attempt refused for a lock, as locked', async () => {

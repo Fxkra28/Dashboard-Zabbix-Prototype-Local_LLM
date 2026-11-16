@@ -351,10 +351,12 @@ describe('Services, the tree derived from the estate', () => {
     expect(api.servicesDerived).toHaveBeenCalledTimes(1);
   });
 
-  it('writes a changed month and method to the address, and leaves the defaults out', async () => {
+  // FR-53: the month is always in the address, the default included, because the default moves on the 1st and a copied link must not follow it.
+  it('writes a changed month and method to the address, and leaves the default method out', async () => {
     const user = userEvent.setup();
     open(<Services />, '/services');
     await waitFor(() => expect(api.servicesDerived).toHaveBeenCalled());
+    expect(Object.fromEntries(query())).toEqual({ month: lastClosedMonth() });
     await user.selectOptions(await screen.findByLabelText('Month'), months[5]);
     await user.click(screen.getByRole('button', { name: 'HCML report method' }));
     expect(Object.fromEntries(query())).toEqual({ month: months[5], method: 'hcml-report' });
@@ -362,6 +364,6 @@ describe('Services, the tree derived from the estate', () => {
 
     await user.selectOptions(screen.getByLabelText('Month'), lastClosedMonth());
     await user.click(screen.getByRole('button', { name: 'Strict' }));
-    expect(window.location.search).toBe('');
+    expect(Object.fromEntries(query())).toEqual({ month: lastClosedMonth() });
   });
 });

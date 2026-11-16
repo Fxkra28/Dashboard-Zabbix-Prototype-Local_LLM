@@ -14,6 +14,8 @@ import { formatPercent, formatValue } from '../../shared/lib/units';
 import { groupBySite } from '../../shared/lib/sites';
 import { NoData, orNoData } from '../../shared/components/NoData';
 import { TableWrap } from '../../shared/components/TableWrap';
+import { useReducedMotion } from '../../shared/hooks/useReducedMotion';
+import { useReveal } from '../../shared/hooks/useReveal';
 
 // The chart module carries ECharts (~550 kB). Load it when a port is opened,
 // not with the device grid most visits never get past.
@@ -66,6 +68,9 @@ export default function Network() {
   const [range, setRange] = useUrlRange(24);
   const needle = useDebounced(search.trim(), 300);
   const portsPanel = useRef<HTMLDivElement>(null);
+  const reduceMotion = useReducedMotion();
+  // A port's traffic opens below the whole table of ports (UX-62).
+  const { panel: trafficPanel, reveal: revealTraffic } = useReveal();
   /**
    * Pick a device and bring its interfaces into view: the grid is ~140 cards
    * tall. A different device starts without a port, filters or page, set in
@@ -79,7 +84,8 @@ export default function Network() {
       setStatus('');
       setPage(1);
     }
-    requestAnimationFrame(() => portsPanel.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+    // A smooth scroll beats the CSS rule that stops animation, so somebody who asked for less motion has to be asked of here (UX-52).
+    requestAnimationFrame(() => portsPanel.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' }));
   };
 
   const devices = useMemo(() => devicesQ.data ?? [], [devicesQ.data]);
@@ -121,7 +127,9 @@ export default function Network() {
   // Rows still on screen from the previous device or filter can't be opened:
   // they would graph the wrong device's port under this one's name.
   const openPort = (r: NetInterface) => {
-    if (!portsQ.stale && (r.itemids.in || r.itemids.out)) setPort(r);
+    if (portsQ.stale || !(r.itemids.in || r.itemids.out)) return;
+    setPort(r);
+    if (port?.index !== r.index) revealTraffic();
   };
 
   return (
@@ -260,6 +268,20 @@ export default function Network() {
               stale={portsQ.stale}
               updatedAt={portsQ.updatedAt}
               loadingLabel="Loading interfaces…"
+              // Outside the content that goes inert while the next page loads, so that the button pressed keeps its focus (UX-57).
+              footer={(res) =>
+                (res.rows.length > 0 || res.total > 0) && (
+                  <Pager page={page} pages={pages} onPage={setPage}>
+                    {res.rows.length > 0 ? (
+                      <>
+                        {(page - 1) * res.pageSize + 1}–{Math.min(res.total, page * res.pageSize)} of {res.total}
+                      </>
+                    ) : (
+                      <>{res.total} interfaces</>
+                    )}
+                  </Pager>
+                )
+              }
             >
               {(res) =>
                 res.rows.length ? (
@@ -329,17 +351,9 @@ export default function Network() {
                         </tbody>
                       </table>
                     </TableWrap>
-                    <Pager page={page} pages={pages} onPage={setPage}>
-                      {(page - 1) * res.pageSize + 1}–{Math.min(res.total, page * res.pageSize)} of {res.total}
-                    </Pager>
                   </>
                 ) : res.total > 0 ? (
-                  <>
-                    <div className="state">There are no interfaces on page {page}.</div>
-                    <Pager page={page} pages={pages} onPage={setPage}>
-                      {res.total} interfaces
-                    </Pager>
-                  </>
+                  <div className="state">There are no interfaces on page {page}.</div>
                 ) : (
                   <div className="state">
                     {needle || status ? 'No interfaces match this filter.' : 'No interface (net.if.*) items on this device.'}
@@ -350,9 +364,9 @@ export default function Network() {
           </div>
 
           {port && (
-            <div className="panel">
+            <div className="panel" ref={trafficPanel}>
               <div className="panel-head">
-                <h2>
+                <h2 tabIndex={-1} data-reveal-focus>
                   Traffic: {port.name}
                   {port.alias && <span className="muted"> ({port.alias})</span>}
                 </h2>

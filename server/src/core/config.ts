@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import { resolveMail, type MailSettings } from './mailConfig.js';
+import { isLocalBaseUrl } from './localHost.js';
 
 /**
  * The placeholder JWT secret. Named so `assertConfig` can refuse to start on it
@@ -242,6 +243,14 @@ export const config = {
   /** Requests per minute per IP, before the rate limiter starts returning 429. */
   rateLimitPerMinute: envNum('RATE_LIMIT_PER_MINUTE', 300),
   /**
+   * Events one person may acknowledge or close in a minute, together. At least 50, which is one full request (MAX_EVENTIDS in
+   * services/actions.ts), so a request that is allowed can always be made. 200 is four of them: a person at the console does not reach it,
+   * a script that repeats the call does (SC-51).
+   */
+  actions: {
+    eventsPerMinute: Math.max(50, Math.floor(envNum('ACTION_EVENTS_PER_MINUTE', 200))),
+  },
+  /**
    * Live screens (GET /api/stream) allowed at once, overall and for one
    * signed-in user. That route is exempt from the rate limit, so this is its
    * only cap. At least 1: a 0 would refuse every screen.
@@ -302,11 +311,12 @@ export const config = {
   },
   reports: {
     /**
-     * Default severity floor for the availability report (§18).
+     * Default severity floor of the original any-problem availability report (§18, `basis=all-problems`).
+     * The ICMP reports, the SLA page among them, do not use it.
      *
      * 2 (Warning), not 3 (Average): HCML's estate fires "High ICMP ping loss"
      * at severity 2 on essentially every trigger: every row of the 2026-06,
-     * -07 and -08 Availability Reports. A floor of 3 makes the page open empty
+     * -07 and -08 Availability Reports. A floor of 3 makes that report open empty
      * for them. Estates that alarm higher can raise this without a code change.
      */
     availabilityMinSeverity: envNum('AVAILABILITY_MIN_SEVERITY', 2),
@@ -392,11 +402,14 @@ export const config = {
      */
     enabled: aiProvider === 'anthropic' ? Boolean(aiApiKey) : Boolean(aiBaseUrl),
     /**
-     * Questions and estate data leave this machine: only the hosted Anthropic
-     * backend does that. The UI says so next to every AI answer,
-     * and a local model, on whatever address, shows nothing.
+     * Questions and estate data leave this machine's own network: the hosted Anthropic backend does, and so does a model on any
+     * host that is not local (core/localHost.ts). The UI says so next to every AI answer; a model inside shows nothing (SC-53).
      */
-    external: aiProvider === 'anthropic',
+    external: aiProvider === 'anthropic' || (aiBaseUrl !== '' && !isLocalBaseUrl(aiBaseUrl)),
+    /** The local-model copy's compose file sets this: it promises that nothing leaves, so assertConfig refuses an outside model. */
+    localOnly: (process.env.AI_LOCAL_ONLY ?? '').trim().toLowerCase() === 'true',
+    /** The owner's word that an outside model is meant, even in a local-only copy. */
+    allowRemote: (process.env.AI_ALLOW_REMOTE ?? '').trim().toLowerCase() === 'true',
     apiKey: aiApiKey,
     /** Base URL of an OpenAI-compatible server, e.g. http://localhost:11434/v1 */
     baseUrl: aiBaseUrl,
@@ -446,7 +459,7 @@ export const config = {
     /**
      * What Explain and the Assistant may spend (limits.ts, ai.ts). The per-minute and concurrency
      * numbers are at least 1, since 0 would refuse every call. A daily token budget of 0, or less,
-     * switches that budget off. The budgets count the hosted API only: a local model has no bill.
+     * switches that budget off. The budgets count the hosted API and a model outside the machine's network: a model on the machine has no bill.
      */
     limits: {
       /** Assistant questions per minute, for each signed-in user. */
@@ -463,6 +476,15 @@ export const config = {
   },
   /** A folder that outlives the container, for the portal's small file of its own (core/state.ts). Empty: nothing is kept across a restart. */
   stateDir: (process.env.PORTAL_STATE_DIR ?? '').trim(),
+
+  /** The BFF's own copy of its log (core/logFile.ts), in a folder that outlives the container. Empty folder: the log goes to stdout alone. */
+  log: {
+    dir: (process.env.LOG_DIR ?? '').trim(),
+    /** Megabytes a log file may hold before the next one is started. */
+    fileMaxMb: Math.max(1, Math.floor(envNum('LOG_FILE_MAX_MB', 20))),
+    /** How many log files are kept, the current one included: 1 to 100, since each rotation renames them all. */
+    fileKeep: Math.min(100, Math.max(1, Math.floor(envNum('LOG_FILE_KEEP', 10)))),
+  },
 
   /** Emailing the SLA report (mailConfig.ts), off until every MAIL_ setting is usable. Each is read here by name so the compose test sees it. */
   mail: resolveMail({
@@ -687,6 +709,20 @@ export function assertConfig(warn: (msg: string) => void): void {
     warn(
       `Ignoring ${aiKeyPlaceholders.join(' and ')}: the value is still the placeholder from .env.example. ` +
         'Set a real key, or leave it empty.',
+    );
+  }
+  // This copy promises that no question leaves the machine; an address in .env must not undo that without a word (SC-53).
+  if (config.ai.localOnly && config.ai.enabled && config.ai.external) {
+    if (!config.ai.allowRemote) {
+      throw new Error(
+        'This copy is set to send nothing away (AI_LOCAL_ONLY), but its AI model is outside this machine and its own network. ' +
+          'Point AI_BASE_URL at a local model, for example http://host.docker.internal:11434/v1, or set AI_ALLOW_REMOTE=true to accept ' +
+          'that every question and a summary of the estate go to that model. The page then says so beside every answer.',
+      );
+    }
+    warn(
+      'AI_ALLOW_REMOTE=true: every question and a summary of the estate go to a model outside this machine and its own network, ' +
+        'in a copy that is set to send nothing away. The page says so beside every answer.',
     );
   }
   if (!config.ai.enabled) {

@@ -35,7 +35,7 @@ export async function derivedSlaLines(): Promise<string[]> {
   const o = lastStrict.overall;
 
   const lines = [
-    `Derived SLA (target ${target}%, from ICMP triggers; Zabbix has no services):`,
+    `Derived SLA (target ${target}%, from ICMP triggers, not from Zabbix's own SLAs):`,
     `- ${last}: ${pct(o.sli, target)} strict, ${o.meeting ? 'met' : 'missed'} (${o.withData}/${o.hosts} devices with data)`,
     `- ${last} by HCML's report method: ${pct(lastReport.overall.sli, lastReport.target)} (ignores devices fully down)`,
   ];

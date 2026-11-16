@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import { config, assertConfig, mailNow, trustProxyOption } from './core/config.js';
+import { createLogStream } from './core/logFile.js';
 import { registerErrorHandler } from './http/errors.js';
 import { genReqId, registerRequestId } from './http/requestId.js';
 import { AJV_OPTIONS } from './core/schemas.js';
@@ -14,7 +15,7 @@ import { assertUsers, setupAuth } from './security/auth.js';
 import { registerRateLimit } from './http/rateLimit.js';
 import { registerHealth } from './http/health.js';
 import { registerHostCheck } from './http/hostCheck.js';
-import { closeWith, installShutdown } from './http/shutdown.js';
+import { closeWith, installCrashLog, installShutdown } from './http/shutdown.js';
 import { hostRoutes } from './routes/hosts.js';
 import { deviceRoutes } from './routes/devices.js';
 import { problemRoutes } from './routes/problems.js';
@@ -43,18 +44,27 @@ import { sliMailRoutes } from './routes/sliMail.js';
 import { sliScheduleRoutes } from './routes/sliSchedule.js';
 import { initPortalState, portalState } from './services/portalState.js';
 import { createReportSchedule } from './services/reportSchedule.js';
+import { createClosedMonthCapture, setClosedWebLogger } from './services/closedWeb.js';
+import { closedWeb, initClosedWeb } from './services/closedWebStore.js';
+import { getMonthlySli } from './services/sli.js';
 import { emailReport, sendNotice } from './services/sliMail.js';
+
+// Where the log also goes when LOG_DIR names a folder that outlives the container (SC-42); otherwise stdout alone.
+const logStream = createLogStream(config.log);
 
 const app = Fastify({
   // Fastify's own request log line, except that a `?token=` an old page may
   // still send to the live stream is redacted (logging.ts).
-  logger: { level: 'info', serializers: { req: serializeRequest } },
+  logger: { level: 'info', serializers: { req: serializeRequest }, ...(logStream ? { stream: logStream } : {}) },
   trustProxy: trustProxyOption(config.trustProxy),
   // Body schemas (schemas.ts) must not coerce types: the handlers refuse "false" and 5.
   ajv: AJV_OPTIONS,
   // The id nginx gave the request, or a new one (requestId.ts).
   genReqId,
 });
+
+// A crash, even one while the server starts, is written to the log before the process exits (BK-68).
+installCrashLog(app);
 
 // A slow report answered from an old copy because Zabbix failed is logged,
 // not silent (cache.ts).
@@ -82,6 +92,18 @@ const reportSchedule = createReportSchedule({
   log: app.log,
 });
 closeWith(app, reportSchedule);
+
+// The web check figures of the months that have closed, in a file beside the state (ADR 0016). It never fails either: with no folder nothing is kept, and it says so.
+setClosedWebLogger(app.log);
+await initClosedWeb((m) => app.log.warn(m));
+const closedMonthCapture = createClosedMonthCapture({
+  now: () => Math.floor(Date.now() / 1000),
+  timezone: config.sla.timezone,
+  store: closedWeb,
+  read: (month) => getMonthlySli(month, 'availability'),
+  log: app.log,
+});
+closeWith(app, closedMonthCapture);
 
 // X-Request-Id on every reply and `requestId` in every error body. First, so the refusals below
 // carry it too (requestId.ts).
@@ -156,6 +178,7 @@ try {
   readiness.warm(); // so the first /api/health already has an answer
   void warmUp(app.log); // the main slow views, so their first visitor does not wait (not the other reports or the SLA figures)
   reportSchedule.start();
+  closedMonthCapture.start();
   installShutdown(app);
 } catch (err) {
   app.log.error(err);

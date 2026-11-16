@@ -1,3 +1,4 @@
+import { Cancelled } from './gate.js';
 import { noteRefreshing, noteStale } from './staleness.js';
 
 /**
@@ -63,11 +64,32 @@ type Entry = {
 };
 
 /**
- * One fetch. invalidate() sets `cancelled`: whoever is already waiting still
- * gets the result, but it is not stored: it was read before the write that
- * made it out of date.
+ * One fetch. invalidate() sets `cancelled`: whoever waits still gets the result, but it is not stored (it predates the write).
+ * `readers` counts those waiting; `keepAlive` marks a background refresh, which has none and is wanted all the same.
  */
-type Flight = { promise: Promise<unknown>; cancelled: boolean };
+type Flight = {
+  promise: Promise<unknown>;
+  cancelled: boolean;
+  readers: number;
+  keepAlive: boolean;
+  /** Set when the fetch has finished, one way or the other. */
+  done: boolean;
+  /** Set when the fetch read `ctx.signal`: only then is it stopped when its last reader leaves. */
+  stoppable: boolean;
+  abandon: AbortController;
+};
+
+/** What a fetch is told about itself. Pass it on to a gate (`gate.run(job, ctx)`) so a job that waited for a place can be dropped when no reader is left. */
+export interface FetchContext {
+  /** False once every reader who gave a signal has left and none without one waits. Asking after that retires the fetch. */
+  wanted(): boolean;
+  /**
+   * Fires, with a `Cancelled`, when every reader has left a fetch that is running. Reading it says the fetch can stop, and it is then
+   * not kept past that: for a model call that holds the one slot (BK-67). Read after the last reader left, it has fired already (BK-71).
+   * A background refresh has no reader and is never told.
+   */
+  readonly signal: AbortSignal;
+}
 
 export interface CacheOptions {
   /** Serve the expired value for this long past the TTL while one background refresh runs. */
@@ -85,6 +107,11 @@ export interface CacheOptions {
    * fixed beat would otherwise meet the value a whole beat older at its next call. 0 always fetches.
    */
   maxAgeMs?: number;
+  /**
+   * Fires when this reader has left (their connection closed). They stop waiting at once with `Cancelled`; the fetch goes on for
+   * any other reader, and is dropped if it is still in line for a gate when none is left. A reader with no signal never leaves.
+   */
+  signal?: AbortSignal;
 }
 
 /** A view HCML's Zabbix takes tens of seconds to build: past its TTL, its last copy and age for 10 minutes while one refresh runs. */
@@ -181,7 +208,7 @@ function reason(err: unknown): string {
 export async function cached<T>(
   key: string,
   ttlMs: number,
-  fn: () => Promise<T>,
+  fn: (ctx: FetchContext) => Promise<T>,
   opts: CacheOptions = {},
 ): Promise<T> {
   const now = Date.now();
@@ -204,7 +231,7 @@ export async function cached<T>(
         hit.refreshing = true;
         // Nobody awaits this promise. Left unhandled, a rejection would take
         // the whole process down; caught, the stale value simply stays.
-        begin(key, fn, opts).promise.catch((err: unknown) => {
+        begin(key, fn, opts, 0, true).promise.catch((err: unknown) => {
           hit.refreshing = false;
           hit.retryAt = Date.now() + REFRESH_RETRY_MS;
           log?.warn({ key, reason: reason(err) }, 'cache: background refresh failed; keeping the stale value');
@@ -220,10 +247,15 @@ export async function cached<T>(
     }
   }
 
-  const flight = inflight.get(key) ?? begin(key, fn, opts);
+  if (opts.signal?.aborted) throw new Cancelled();
+  const joined = inflight.get(key);
+  if (joined) joined.readers++;
+  const flight = joined ?? begin(key, fn, opts, 1);
   try {
-    return (await flight.promise) as T;
+    return (await untilAborted(flight.promise, opts.signal)) as T;
   } catch (err) {
+    // This reader left: no old copy for them, and no failed fetch to report.
+    if (err instanceof Cancelled) throw err;
     // Never inside a write hold: that is exactly when an old value is wrong.
     const last = opts.staleIfError && !held ? store.get(key) : undefined;
     if (!last) throw err;
@@ -234,27 +266,75 @@ export async function cached<T>(
     noteStale(ageMs);
     log?.warn({ key, ageMs, reason: reason(err) }, 'cache: fetch failed; answering with the last cached value');
     return last.v as T;
+  } finally {
+    flight.readers--;
+    abandonIfLeft(key, flight);
   }
+}
+
+/** The last reader of a fetch that can stop has gone while it still runs: retire it, so a new reader starts afresh, and tell it. */
+function abandonIfLeft(key: string, flight: Flight): void {
+  if (flight.done || !flight.stoppable || flight.readers > 0 || flight.keepAlive) return;
+  flight.cancelled = true;
+  if (inflight.get(key) === flight) inflight.delete(key);
+  flight.abandon.abort(new Cancelled());
 }
 
 /**
  * Start a fetch and register it as the key's in-flight one. Registered before
  * `fn` runs, so that a synchronous throw inside `fn` still gets cleaned up.
  */
-function begin(key: string, fn: () => Promise<unknown>, opts: CacheOptions): Flight {
-  const flight: Flight = { promise: Promise.resolve(), cancelled: false };
+function begin(key: string, fn: (ctx: FetchContext) => Promise<unknown>, opts: CacheOptions, readers: number, keepAlive = false): Flight {
+  const flight: Flight = { promise: Promise.resolve(), cancelled: false, readers, keepAlive, done: false, stoppable: false, abandon: new AbortController() };
   inflight.set(key, flight);
+  const ctx: FetchContext = {
+    wanted: () => stillWanted(key, flight),
+    get signal() {
+      flight.stoppable = true;
+      // A fetch that asks after its last reader left (it read something first) is stopped at once (BK-71).
+      abandonIfLeft(key, flight);
+      return flight.abandon.signal;
+    },
+  };
   flight.promise = (async () => {
     try {
-      const v = await fn();
+      const v = await fn(ctx);
       if (!flight.cancelled) keep(key, v, opts);
       return v;
     } finally {
+      flight.done = true;
       // Only our own record: after an invalidate a newer fetch may own the key.
       if (inflight.get(key) === flight) inflight.delete(key);
     }
   })();
   return flight;
+}
+
+/** Whether anyone still waits for this fetch. When no one does it is retired on the spot, so a reader arriving now starts a fresh one. */
+function stillWanted(key: string, flight: Flight): boolean {
+  if (flight.readers > 0 || flight.keepAlive) return true;
+  flight.cancelled = true;
+  if (inflight.get(key) === flight) inflight.delete(key);
+  return false;
+}
+
+/** `promise`, or `Cancelled` as soon as `signal` fires. Either way `promise` is observed, so a late rejection is never unhandled. */
+function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T> {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(new Cancelled());
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      (v) => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(v);
+      },
+      (err: unknown) => {
+        signal.removeEventListener('abort', onAbort);
+        reject(err);
+      },
+    );
+  });
 }
 
 /** Store a fetched value. One bigger than the whole budget is not kept: it would only empty the cache. */

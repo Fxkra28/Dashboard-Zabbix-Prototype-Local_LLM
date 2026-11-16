@@ -58,7 +58,6 @@ const SECTIONS: Section[] = [
   {
     title: 'Reports',
     items: [
-      { to: '/reports/availability', label: 'Availability & response', icon: IconReport },
       { to: '/reports/capacity', label: 'Capacity trends', icon: IconGraph },
       { to: '/reports/noise', label: 'Alert noise', icon: IconAlert },
       { to: '/reports/top-triggers', label: 'Top 100 triggers', icon: IconReport },

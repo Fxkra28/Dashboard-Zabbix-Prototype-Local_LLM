@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { api } from '../../api';
 import Services from './Services';
-import type { ServiceNode, ServicesResponse } from '../../types';
+import type { DerivedServicesResponse, ServiceNode, ServicesResponse, SliProfile } from '../../types';
 
 const node = (name: string, over: Partial<ServiceNode> = {}): ServiceNode => ({
   serviceid: name,
@@ -145,5 +145,102 @@ describe('the derived tree when Zabbix has no services (FR-12)', () => {
     await minute();
     await settle();
     expect(services).toHaveBeenCalledTimes(1);
+  });
+
+  it('says why the tree is derived, in the words that are only true when Zabbix has no services', async () => {
+    services.mockResolvedValue(tree());
+    render(<Services />, { wrapper: BrowserRouter });
+    await settle();
+    expect(document.querySelector('.sli-banner')?.textContent).toContain('Derived from ICMP availability triggers: Zabbix has no services configured.');
+  });
+});
+
+// UX-56: the Month and Method controls were drawn in one place while a month loaded and in another once it was in, so each change took the focus from the one pressed.
+describe('the controls of the derived tree keep the keyboard focus (UX-56)', () => {
+  // Month and method are kept in the address, which one test leaves for the next.
+  beforeEach(() => window.history.replaceState(null, '', '/'));
+
+  const answer = (month: string, method: SliProfile): DerivedServicesResponse =>
+    ({ ...tree('Estate'), month, profile: method, target: 99.5, gaps: [], noDataWindows: [] }) as unknown as DerivedServicesResponse;
+
+  async function openDerived() {
+    services.mockResolvedValue(tree());
+    // Every month and method is answered after a pause, so that the page is seen loading.
+    const releases: (() => void)[] = [];
+    derived.mockImplementation(
+      (month?: string, method?: SliProfile) =>
+        new Promise<DerivedServicesResponse>((resolve) => {
+          releases.push(() => resolve(answer(month ?? '', method ?? 'availability')));
+        }),
+    );
+    render(<Services />, { wrapper: BrowserRouter });
+    await settle();
+    await act(async () => releases.shift()?.());
+    await settle();
+    return releases;
+  }
+
+  it('keeps the Month select, the same element and still focused, while the new month loads and when it has arrived', async () => {
+    const releases = await openDerived();
+    const month = screen.getByLabelText('Month') as HTMLSelectElement;
+    month.focus();
+    expect(document.activeElement).toBe(month);
+
+    const other = [...month.options].find((o) => o.value !== month.value)!.value;
+    fireEvent.change(month, { target: { value: other } });
+    await settle();
+    expect(screen.getByText('Deriving the service tree…')).toBeInTheDocument();
+    expect(screen.getByLabelText('Month')).toBe(month);
+    expect(document.activeElement).toBe(month);
+
+    await act(async () => releases.shift()?.());
+    await settle();
+    expect(screen.getByText('Estate')).toBeInTheDocument();
+    expect(screen.getByLabelText('Month')).toBe(month);
+    expect(document.activeElement).toBe(month);
+    expect(month.value).toBe(other);
+  });
+
+  it('keeps the Method button the person pressed, while the other method loads and when it has arrived', async () => {
+    const releases = await openDerived();
+    const strict = screen.getByRole('button', { name: /Strict/ });
+    const hcml = screen.getByRole('button', { name: /HCML/ });
+    hcml.focus();
+    fireEvent.click(hcml);
+    await settle();
+    expect(screen.getByText('Deriving the service tree…')).toBeInTheDocument();
+    expect(document.activeElement).toBe(hcml);
+
+    await act(async () => releases.shift()?.());
+    await settle();
+    expect(screen.getByText('Estate')).toBeInTheDocument();
+    expect(document.activeElement).toBe(hcml);
+    expect(hcml).toHaveAttribute('aria-pressed', 'true');
+    expect(strict).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('draws the controls once, whatever state the page is in', async () => {
+    const releases = await openDerived();
+    expect(screen.getAllByLabelText('Month')).toHaveLength(1);
+    const options = [...(screen.getByLabelText('Month') as HTMLSelectElement).options];
+    fireEvent.change(screen.getByLabelText('Month'), { target: { value: options[options.length - 1].value } });
+    await settle();
+    expect(screen.getAllByLabelText('Month')).toHaveLength(1);
+    await act(async () => releases.shift()?.());
+    await settle();
+    expect(screen.getAllByLabelText('Month')).toHaveLength(1);
+  });
+
+  it('still lets the person pick another month when the read of one has failed', async () => {
+    services.mockResolvedValue(tree());
+    derived.mockRejectedValueOnce(new Error('Zabbix did not answer')).mockResolvedValue(answer('2026-09', 'availability'));
+    render(<Services />, { wrapper: BrowserRouter });
+    await settle();
+    expect(screen.getByText(/Zabbix did not answer/)).toBeInTheDocument();
+    const month = screen.getByLabelText('Month') as HTMLSelectElement;
+    const other = [...month.options].find((o) => o.value !== month.value)!.value;
+    fireEvent.change(month, { target: { value: other } });
+    await settle();
+    expect(derived).toHaveBeenLastCalledWith(other, 'availability');
   });
 });

@@ -73,3 +73,39 @@ describe('useSearchPatch', () => {
     expect(query().has('sev')).toBe(false);
   });
 });
+
+// FR-53: a default that is worked out again on every render (the last closed month) must be in the address, or a copied link opens another month later.
+describe('useUrlState with keepDefault (FR-53)', () => {
+  it('writes the default into the address when the page opens without it', () => {
+    renderHook(() => useUrlState<string>('month', '2026-10', { keepDefault: true }), { wrapper });
+    expect(query().get('month')).toBe('2026-10');
+  });
+
+  it('keeps the default in the address when it is chosen again', () => {
+    at('/problems?month=2026-09');
+    const { result } = renderHook(() => useUrlState<string>('month', '2026-10', { keepDefault: true }), { wrapper });
+    act(() => result.current[1]('2026-10'));
+    expect(query().get('month')).toBe('2026-10');
+  });
+
+  it('leaves a value the address already holds alone', () => {
+    at('/problems?month=2026-09&method=hcml-report');
+    const before = window.history.length;
+    renderHook(() => useUrlState<string>('month', '2026-10', { keepDefault: true }), { wrapper });
+    expect(window.location.search).toBe('?month=2026-09&method=hcml-report');
+    expect(window.history.length).toBe(before);
+  });
+
+  it('replaces the entry instead of adding one, so Back still leaves the page in one step', () => {
+    const before = window.history.length;
+    renderHook(() => useUrlState<string>('month', '2026-10', { keepDefault: true }), { wrapper });
+    expect(window.history.length).toBe(before);
+  });
+
+  it('is off unless asked for: the plain hook still leaves its default out', () => {
+    const { result } = renderHook(() => useUrlState<string>('month', '2026-10'), { wrapper });
+    expect(query().has('month')).toBe(false);
+    act(() => result.current[1]('2026-10'));
+    expect(query().has('month')).toBe(false);
+  });
+});

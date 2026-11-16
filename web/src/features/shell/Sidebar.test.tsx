@@ -86,6 +86,19 @@ describe('the sidebar menu', () => {
   });
 });
 
+describe('the Reports section', () => {
+  it('lists no Availability & response page, which the SLA page took over, and keeps the other four', async () => {
+    vi.spyOn(api, 'me').mockResolvedValue(answer('admin', everyPage('viewer')));
+    show();
+    await screen.findByRole('link', { name: 'SLA' });
+    expect(link('Availability & response')).toBeNull();
+    expect(Object.keys(PAGE_TITLES)).not.toContain('/reports/availability');
+    for (const name of ['Capacity trends', 'Alert noise', 'Top 100 triggers', 'Inventory & ownership scorecard']) {
+      expect(link(name), name).toBeInTheDocument();
+    }
+  });
+});
+
 describe('the sidebar footer', () => {
   it('says acknowledge is the exception for an operator on a portal that has it on', async () => {
     caps.writeBack = true;

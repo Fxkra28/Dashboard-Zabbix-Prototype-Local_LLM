@@ -6,13 +6,13 @@
 
 > **Ringkasan**
 >
-> - Portal punya 19 halaman. Tiap halaman menjawab satu pertanyaan, misalnya "Apakah ada yang bermasalah sekarang?" atau "Berapa ketersediaan bulan lalu?".
+> - Portal punya 18 halaman. Tiap halaman menjawab satu pertanyaan, misalnya "Apakah ada yang bermasalah sekarang?" atau "Berapa ketersediaan bulan lalu?".
 > - Menu dibagi tiga: Monitoring, Reports dan Assistant. Halaman Login adalah satu-satunya yang bisa dibuka tanpa masuk.
-> - Lima belas halaman bisa dibuka siapa saja yang sudah masuk. Network dan Links & WAN health mulai dari peran wall, dan Inventory hanya untuk admin.
+> - Empat belas halaman bisa dibuka siapa saja yang sudah masuk. Network dan Links & WAN health mulai dari peran wall, dan Inventory hanya untuk admin.
 > - Dashboard bisa dipasang di layar dinding. Layar itu berganti tampilan sendiri, dan sebaiknya memakai akun wall, yang tidak bisa menandai masalah.
 > - Angka bulanan (SLA) dihitung portal sendiri dari riwayat masalah, dan bisa diunduh sebagai PDF atau Excel.
 
-The portal has 19 pages. This page lists them by the question each one answers, not in the order of the menu, because that is how people arrive: they have a question and want to know where it is answered. The table says where each page sits in the menu and who can open it. The sections after it say what you will see.
+The portal has 18 pages. This page lists them by the question each one answers, not in the order of the menu, because that is how people arrive: they have a question and want to know where it is answered. The table says where each page sits in the menu and who can open it. The sections after it say what you will see.
 
 | Page | Menu section | Who can open it |
 |---|---|---|
@@ -28,7 +28,6 @@ The portal has 19 pages. This page lists them by the question each one answers, 
 | Links & WAN health | Monitoring | Wall screens, operators and admins |
 | Services | Monitoring | Anyone signed in |
 | SLA | Monitoring | Anyone signed in |
-| Availability & response | Reports | Anyone signed in |
 | Capacity trends | Reports | Anyone signed in |
 | Alert noise | Reports | Anyone signed in |
 | Top 100 triggers | Reports | Anyone signed in |
@@ -38,7 +37,7 @@ The portal has 19 pages. This page lists them by the question each one answers, 
 
 The menu hides the pages your role cannot open. That is a convenience. The server refuses a page's data to a role that may not have it, whatever the menu shows. [Who can do what](who-can-do-what.md) has the roles.
 
-The pictures in this page were taken on 20 October 2026 from a copy of HCML's data in which every name and address had been replaced. The Zabbix server of that copy was switched off, so some figures read No data, which is how the portal looks when nothing is being collected. The interface has been restyled and refined since, so a page today looks a little different from its picture.
+The pictures in this page were taken on the afternoon of 12 November 2026 from a throwaway portal made from the live image, which reads HCML's own Zabbix, with every host name, address and check name replaced. The counts, severities, times and site names are real. Some devices read No data, which is how the portal shows a device that has collected nothing, and the pages have changed a little since the pictures were taken.
 
 ## Is anything wrong right now?
 
@@ -108,7 +107,7 @@ The maps HCML drew in Zabbix, shown in the page with the problems marked on them
 
 Devices grouped by site, with their network ports and the state of each port. It is the page for "which port is down on that switch?".
 
-![Network: devices grouped by site, here all reading No data](../../screenshots/network.png)
+![Network: devices grouped by site, here 82 up, 11 down and 43 with no data](../../screenshots/network.png)
 
 ### Links & WAN health
 
@@ -122,23 +121,21 @@ A tree of services built from the estate itself, because HCML's Zabbix has none 
 
 ### SLA
 
-The monthly figure. It shows Zabbix's own SLA objects when any exist, and the monthly availability that the portal works out itself, by two methods side by side. The strict method counts a device that does not answer as down and leaves out hours when nothing was collected. HCML's report method counts only high packet loss, so a device that is completely down still counts as up. [Can I trust it](can-i-trust-it.md) explains why both are shown. The page offers the month as a PDF or an Excel file.
+The monthly figure. It shows Zabbix's own SLA objects when any exist, and the monthly availability that the portal works out itself, by two methods side by side. The strict method counts a device that does not answer as down and leaves out hours when nothing was collected. HCML's report method counts only high packet loss, so a device that is completely down still counts as up. [Can I trust it](can-i-trust-it.md) explains why both are shown. The page offers the month as a PDF or an Excel file. The card "Sites below target (strict)" counts the strict method whichever method the tables use, as the report files do, and says how many sites have no data, so that "all sites at or above the target" is never said over sites nobody measured. The banner says when the figures were made, and a month that is still running is read again about every five minutes while the page is open. If the HCML method's figure cannot be read, its card says it is not available and why. The month is always in the address, so a link that is shared keeps the month it was copied on.
 
-### Availability and response
-
-How much of a period each device spent with a problem, and how long problems have waited without anyone acknowledging them. The period can be a rolling window or a calendar month. For one calendar month on the strict basis it offers the same PDF and Excel files as the SLA page.
+The period can also be the last 7 or 30 days. Those windows are for watching: they show how much of the window each device was reachable, by the same engine, up to the time the figures were made, and they have no report files, email or Explain. A window reads one method at a time, so the first time the other method is chosen it waits for its own reading. A month lists, for each device, its incidents and its longest outage as well as its downtime. The Response tab of the same page lists the problems nobody has acknowledged, by age, and the ones that have waited longest. It is about now, not about a month. The old address of the Availability and response page opens this page on the last 7 days, as that page did.
 
 ## What will run out?
 
 ### Capacity trends
 
-Processor, memory, disk and network port use for each device over a number of days, read from the hourly averages Zabbix keeps, and roughly when a rising line would reach its limit. The report is slow to build on HCML's Zabbix, so the portal keeps it for an hour and may show a copy up to a day old, and says so.
+Processor, memory, disk and network port use for each device over a number of days, read from the hourly averages Zabbix keeps, and roughly when a rising line would reach its limit. Each row has a Graph button; on the network ports a viewer does not get it, because the portal does not show a viewer interface items on the Graphs page. The report is slow to build on HCML's Zabbix, so the portal keeps it for an hour and may show a copy up to a day old, and says so.
 
 ## How complete are our records?
 
 ### Inventory and ownership scorecard
 
-For admins. It does not measure the network. It measures the records about it: how many devices have a name that follows HCML's convention, an explicit site, an owner and a criticality. The portal cannot make anyone follow a standard, but it can show the percentage rising as devices get tagged.
+For admins. It does not measure the network. It measures the records about it: how many devices have a name that follows HCML's convention, an explicit site, an owner and a criticality. The portal cannot make anyone follow a standard, but it can show the percentage rising as devices get tagged. While no device has an owner or a criticality at all, which is how HCML's Zabbix is today, the page says so, and the list of gaps opens on the naming and site gaps, the ones that can be closed now, unless there are none. The list can show every gap or one kind, and it downloads as a file named after what it holds.
 
 ## Can I just ask?
 
@@ -161,6 +158,6 @@ HCML named six goals, and each page answers one of them.
 | Deeper telecom visibility | Links & WAN health and the internet traffic meters |
 | Alerts that carry context | Explain, and Alert noise |
 | Dashboards for different roles | The roles, the three Dashboard tabs and the wall screen |
-| Automatic reports | Availability, Capacity, Top triggers and the SLA files |
+| Automatic reports | The SLA page (the month, the last 7 and 30 days and the Response tab), Capacity, Top triggers and the SLA files |
 
 Some of these goals are met only in part, and [risks, limits and costs](risks-limits-costs.md) says which and why.

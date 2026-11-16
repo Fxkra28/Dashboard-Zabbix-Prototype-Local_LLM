@@ -3,7 +3,7 @@ import { api, onSessionChange } from '../../api';
 import { useAsync } from '../../shared/hooks/useAsync';
 import type { Item } from '../../types';
 import { naturalCompare } from '../../shared/lib/sites';
-import { Loading, ErrorState } from '../../shared/components/states';
+import { Loading, ErrorState, inertWhen } from '../../shared/components/states';
 import { MAX_UNIT_SCALES, unitFamilies } from './unitScales';
 
 /** Most rows rendered at once: a core switch has ~1,200 graphable items. */
@@ -151,7 +151,7 @@ export default function ItemPicker({
   };
 
   // A failed load for this host replaces the list; a failed reload keeps it.
-  if (q.error && (!q.data || q.stale)) return <ErrorState message={q.error} />;
+  if (q.error && (!q.data || q.stale)) return <ErrorState message={q.error} onRetry={q.reload} />;
 
   return (
     <div className="item-picker">
@@ -203,9 +203,10 @@ export default function ItemPicker({
       ) : (
         // eslint-disable-next-line jsx-a11y/no-static-element-interactions -- arrow keys move between the buttons inside, which are the controls
         <div
-          // The previous host's list, dimmed and inert until this host's arrives.
+          // The previous host's list, dimmed and inert until this host's arrives (UX-58).
           className={`item-picker-list${q.stale ? ' stale' : ''}`}
           aria-busy={q.stale || undefined}
+          {...inertWhen(q.stale)}
           onKeyDown={(e) => {
             if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
             const buttons = [...e.currentTarget.querySelectorAll('button')];

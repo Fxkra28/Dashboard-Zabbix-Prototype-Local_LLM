@@ -48,7 +48,7 @@ in Zabbix, which is HCML's to make), read "cannot write" in this record as "is n
 "provably read-only" below as a statement about the code.
 
 Event ids must match `/^\d+$/` before reaching Zabbix, the message is capped at 2,048 characters, the
-acting user is logged, nine cache prefixes are invalidated with a 15-second hold, and the change is
+acting user is logged, the cache prefixes that show problem state are invalidated with a 15-second hold, and the change is
 pushed to every open SSE client immediately.
 
 ### Positive Consequences

@@ -63,16 +63,18 @@ export async function getDerivedAvailability(opts: {
   month?: string;
   profile: SliProfile;
   minSeverity: number;
+  /** Fires when the reader leaves, for the month's read (the window's is dropped by the cache). */
+  signal?: AbortSignal;
 }): Promise<AvailabilityReport> {
   const now = Math.floor(Date.now() / 1000);
   const report = opts.month
-    ? await getMonthlySli(opts.month, opts.profile)
+    ? await getMonthlySli(opts.month, opts.profile, opts.signal)
     : await computeSli({ profile: opts.profile, from: now - opts.days * 86400, to: now });
 
   return {
     from: report.from,
     to: report.end,
-    windowSeconds: report.to - report.from,
+    windowSeconds: report.end - report.from,
     minSeverity: opts.minSeverity,
     hosts: report.hosts.map((h) => ({
       hostid: h.hostid,
@@ -143,33 +145,41 @@ export async function getAvailability(
   return { from, to, windowSeconds, minSeverity, hosts, truncated, basis: 'all-problems', month: month ?? null, noDataWindows };
 }
 
-/** The original any-problem availability report, for the last `days` or for one `month`. */
-export function getAllProblemsAvailabilityReport(days: number, minSeverity: number, month?: string) {
+/** The original any-problem availability report, for the last `days` or for one `month`. `signal` fires when the reader leaves (core/cache.ts). */
+export function getAllProblemsAvailabilityReport(days: number, minSeverity: number, month?: string, signal?: AbortSignal) {
   if (!month) {
     return cached(
       `avail:all:${days}:${minSeverity}`,
       REPORT_TTL,
-      () => heavy.run(() => getAvailability(days, minSeverity)),
-      staleReport(REPORT_TTL),
+      (f) => heavy.run(() => getAvailability(days, minSeverity), f),
+      { ...staleReport(REPORT_TTL), typed: true, signal },
     );
   }
   monthWindow(month); // a month not started yet, or past event retention: 400 here, not inside the cache
   return cached(
     `avail:all:${month}:${minSeverity}`,
     REPORT_TTL,
-    () => heavy.run(() => getAvailability(days, minSeverity, month)),
-    staleReport(REPORT_TTL),
+    (f) => heavy.run(() => getAvailability(days, minSeverity, month), f),
+    { ...staleReport(REPORT_TTL), signal },
   );
 }
 
 /** The availability report derived from ICMP ping triggers: a month is cached by the engine itself, a rolling window moves with now. */
-export function getDerivedAvailabilityReport(opts: { days: number; month?: string; profile: SliProfile; minSeverity: number }) {
-  const { days, month, profile, minSeverity } = opts;
-  if (month) return getDerivedAvailability({ days, month, profile, minSeverity });
-  return cached(
+export async function getDerivedAvailabilityReport(opts: {
+  days: number;
+  month?: string;
+  profile: SliProfile;
+  minSeverity: number;
+  signal?: AbortSignal;
+}) {
+  const { days, month, profile, minSeverity, signal } = opts;
+  if (month) return getDerivedAvailability({ days, month, profile, minSeverity, signal });
+  const report = await cached(
     `avail:${profile}:${days}`,
     REPORT_TTL,
-    () => heavy.run(() => getDerivedAvailability({ days, profile, minSeverity })),
-    staleReport(REPORT_TTL),
+    (f) => heavy.run(() => getDerivedAvailability({ days, profile, minSeverity }), f),
+    { ...staleReport(REPORT_TTL), typed: true, signal },
   );
+  // The figures do not depend on the floor, so one read serves every floor; each answer says the floor its own ask named (BK-58).
+  return { ...report, minSeverity };
 }

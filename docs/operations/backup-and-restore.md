@@ -10,7 +10,7 @@ to keep it, and how to start again from it. It corrects an older claim in
 ## The logs: what they hold, where they go, how long they last
 
 The portal's own record of who did what is its log, one JSON line for each event, and it is the only one: the portal has no audit table.
-What it holds, by name and never by content: each sign-in (`sign_in`, with the name as typed and the outcome), each acknowledge or
+What it holds, by name and never by content: each sign-in (`sign_in`, with the account's name, or `unknown` for a name no account holds, and the outcome), each acknowledge or
 close (the user, the address, the event ids and the action), each use of the AI (`ai_call`: who, the kind, how it ended, the tokens), each report
 download (`report_download`) and each report email (`report_email`: who or `schedule`, the month, the formats, how many it reached and the
 domains they are in), each change to the schedule (`report_schedule_changed`) and each change or deletion of the saved list
@@ -21,12 +21,18 @@ the method, the path and the address, and not the user (tracker SC-42, kept as i
 Where it goes. Docker's `json-file` driver keeps up to five files of 50 MB for each container and overwrites the oldest, and **deletes them
 when the container is made again**, which every rebuild does. `deploy/rebuild.sh` therefore saves a compressed copy of each copy's logs first, to
 `~/.local/state/hcml-portal-logs` (`LOG_ARCHIVE_DIR`), the newest 30 of each copy (`LOG_ARCHIVE_KEEP`), readable by the user who runs it alone.
-That is the whole of the keeping: a copy on the same Mac, and nothing outside it. When the disk of the machine fills, [`full-disk.md`](full-disk.md) says what is likely to have filled it and what is safe to remove.
+The server also writes its own copy of its log, the same lines, to a file in a volume, `portal-logs` at `/var/log/portal` in the container: `bff.log`, and
+`bff.log.1` and up for the older ones. A file is closed at 20 MB (`LOG_FILE_MAX_MB`) and the oldest of ten (`LOG_FILE_KEEP`) is dropped, so the folder holds
+about 200 MB at most. The volume outlives a rebuild, since a rebuild makes the containers again and not the volumes. `docker compose down -v` deletes it, and
+so does removing the volume by hand. To read the end of it: `docker compose exec portal-bff tail -n 50 /var/log/portal/bff.log`. It holds the server's
+lines, which are the ones that say who did what; nginx's access lines are in Docker's log only. A volume is still on the same machine: it does not outlive the disk.
+When the disk of the machine fills, [`full-disk.md`](full-disk.md) says what is likely to have filled it and what is safe to remove.
 
-What is still open, and is HCML's to decide (SC-42): where the container logs go so that they outlive the machine (a volume, or HCML's log server, by
-a different Docker logging driver), for how long they are kept, and who may read them. The names typed at sign-in, the addresses people sign in
-from and the domains of the people a report goes to are personal data, and a mistyped password can end up in the name box and so in the log.
-The question to HCML IT is written down in `myown/documents/notes/hcml-it-log-keeping-question-2026-11-11.md`; the portal changes nothing until it is answered.
+What is still open, and is HCML's to decide (SC-42): where the logs go so that they outlive the machine (HCML's log server, which can collect that folder or take
+Docker's own log by a different logging driver), for how long they are kept (the two numbers above set a size, not a time), and who may read them. The account names that signed in, the addresses people sign in
+from and the domains of the people a report goes to are personal data. A build from SC-52 (15 November 2026) writes `unknown` and the length for a name that no account holds, so a
+password typed into the name box is not kept; lines written by an older build can hold one.
+The question to HCML IT is written down in `myown/documents/notes/hcml-it-log-keeping-question-2026-11-11.md`; the portal changes nothing more until it is answered.
 
 ## What the portal keeps
 
@@ -40,15 +46,15 @@ The question to HCML IT is written down in `myown/documents/notes/hcml-it-log-ke
 | Hosts, problems, history, the figures behind the SLA | Zabbix's own database | Not here | Zabbix's own backup. The portal only reads it |
 | Cached answers | The BFF's memory | No | Nothing: rebuilt on demand, and gone on every restart |
 | The saved recipients, the monthly schedule and a record of the last 24 sends | `portal-state.json` in the Docker volume `portal-state` (`hcml-portal` only) | No | Optional: addresses, a schedule and counts. Losing it means setting the schedule again and, at worst, one month sent twice |
+| The web check figures of the months that have closed, as first read | `closed-months.json` in the same volume `portal-state` (both copies) | No | Optional: a few scenario names and percentages for each of the last 36 months. Losing it loses nothing that cannot be taken again, only the claim that a figure is the old one: the next read of a closed month keeps what Zabbix says then, and the page says the day (ADR-0016) |
+| The server's own copy of its log | `bff.log` and `bff.log.1` and up, in the Docker volume `portal-logs` (both copies) | No, ignored | As HCML decides (SC-42, above): it holds the account names that signed in, and addresses. A rebuild keeps it; nothing here is needed to run the portal |
 
-The `docker-compose.yml` of `hcml-portal` declares one volume, `portal-state`, for the small file in the last row above
-([ADR-0015](../architecture/adr/0015-keep-a-small-state-file-for-recipients-and-the-schedule.md)); that of `hcml-portal-ollama` declares
-none, so there is no portal data folder to copy there. `docker compose down -v` deletes the volume, so do not run it with `-v` unless that is meant. To keep the
+The `docker-compose.yml` of each copy declares two volumes, `portal-state` for the small files of the two state rows above
+([ADR-0015](../architecture/adr/0015-keep-a-small-state-file-for-recipients-and-the-schedule.md), [ADR-0016](../architecture/adr/0016-keep-the-web-check-figures-of-closed-months.md)) and `portal-logs` for the log; in `hcml-portal-ollama` the state volume holds only `closed-months.json`. `docker compose down -v` deletes the volumes, so do not run it with `-v` unless that is meant. To keep the
 file, copy it out to a folder outside the repository, because it holds addresses and git does not ignore it: `mkdir -p ~/hcml-backup && docker run --rm -v hcml-portal_portal-state:/data:ro -v ~/hcml-backup:/backup alpine sh -c 'cp /data/portal-state.json /backup/ && chown "$1:$2" /backup/portal-state.json' sh "$(id -u)" "$(id -g)"`. The `chown` hands the copy to the person who made it: without it, Docker Engine on Linux leaves a file owned by root with mode 0600 in their folder, which they cannot read without `sudo`. Running the copy as one's own id (`--user "$(id -u):$(id -g)"`) does not work, because the portal's file is mode 0600 and belongs to the portal's user; both forms were tried on a throwaway volume on Docker Desktop for Mac (IN-70), and not on Docker Engine on Linux. To put it back, stop the portal (`docker compose stop portal-bff`), copy the file in as root and give it to the portal's user inside the container, `docker run --rm -v hcml-portal_portal-state:/data -v ~/hcml-backup:/backup:ro alpine sh -c 'cp /backup/portal-state.json /data/portal-state.json && chown 1000:1000 /data/portal-state.json && chmod 600 /data/portal-state.json'`, and start it again (`docker compose start portal-bff`). Root can read a backup that belongs to any user, so this works whatever the operator's user id is. This page used to copy the file in as user 1000, and that fails with `Permission denied` when the backup belongs to another user: it did with a file of user 1001 and mode 0600 on a throwaway volume (IN-77), the case of a Linux server whose operator is not the first user. The file the portal reads is mode 0600 and belongs to its own user, so without the `chown` and the `chmod` it cannot read what was put back. The new recipe was tried on that volume, on Docker Desktop for Mac, which maps ownership; a Linux server with Docker Engine is still to try (ask HCML for one). Each copy of
-the portal has its own `.env` files, and each needs its own backup. `hcml-portal-ollama` is not
-under git at all (checked 7 October 2026: there is no `.git` folder in it), so its compose file, its
-documents and its `.env.example` files are not versioned either. Copy that whole folder, leaving out
-`node_modules` and `dist`.
+the portal has its own `.env` files, and each needs its own backup. `hcml-portal-ollama` has a git repository of its own since
+11 November 2026 (checked on 14 November: two commits, apart from `hcml-portal`'s), which ignores its `.env` files and its
+`docker-compose.override.yml` as the other does, so those two need the backup in either copy.
 
 ## Keep an encrypted copy
 
@@ -57,7 +63,7 @@ that holds a user's old password is a copy that restores the wrong thing.
 
 ```bash
 # From the repository root. Each command asks for a passphrase twice.
-# Write outside the repository folder: git does not ignore a file named .env.enc or .env.gpg.
+# Write outside the repository folder: a tar or rsync of the folder would carry the copy along.
 mkdir -p ~/hcml-backup
 openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -in .env \
   -out ~/hcml-backup/hcml-portal.env.$(date +%F).enc
@@ -66,6 +72,9 @@ openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -in server/.env \
 ```
 
 In `hcml-portal-ollama`, use `hcml-portal-ollama` in the file names so the two never mix.
+
+`docker-compose.override.yml` is in no repository, and the copies above do not hold it. It names an address and holds no secret, so a plain copy beside them is enough:
+`cp docker-compose.override.yml ~/hcml-backup/hcml-portal.override.$(date +%F).yml`. Make one for each copy of the portal, and again after each change to the file.
 
 Then:
 
@@ -102,7 +111,9 @@ machine.
    openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in ~/hcml-backup/hcml-portal.env.2026-10-07.enc -out .env
    chmod 600 .env
    ```
-   Do the same for `server/.env` if you use a development run.
+   Do the same for `server/.env` if you use a development run. Then put `docker-compose.override.yml` back beside the compose file in each folder, from the plain copy kept with
+   the encrypted ones. With no copy, write it again from the form on [the restart page](after-a-restart.md) with the address HCML IT gives you. Without it every read of Zabbix fails from
+   HCML's network.
 3. **Compare the names.** Open `.env.example` beside `.env`: a setting named in one and missing from
    the other is a question to answer. Then read [`deploy/settings.example`](../../deploy/settings.example)
    for the non-secret settings and their defaults, and check that the values you changed from them
@@ -115,7 +126,7 @@ machine.
    if the BFF refused to start: a placeholder `JWT_SECRET`, or a user with an empty password.
 7. **Sign in as each user once.** A mistake in `PORTAL_USERS` shows here. Then, in a tab that is
    signed in, open `/bff/api/health` on the same address: `ready.ok` is `true` when Zabbix accepted
-   the token, and says why when it did not. The `curl` above shows `ready` too, as a plain `true` or
+   the token, and says why when it did not; with a token that is right and `ready.zabbix` not `ok`, look first at `docker-compose.override.yml` (step 2). The `curl` above shows `ready` too, as a plain `true` or
    `false`. Do not press Acknowledge as a test: it writes to the production Zabbix.
 8. **Open the SLA page for a past month.** The first request after a start rebuilds the figures from
    Zabbix and takes a while.

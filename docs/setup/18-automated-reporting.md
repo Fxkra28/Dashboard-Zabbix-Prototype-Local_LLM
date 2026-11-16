@@ -26,12 +26,13 @@ Zabbix stores events; turning them into uptime is arithmetic it doesn't do. The 
 
 All of it is `fetchIncidents()` in [`services/incidents.ts`](../../server/src/services/incidents.ts).
 
-Availability is then *"share of the period with no open problem at or above the chosen severity"*,
-and the page says exactly that, because it isn't the same thing as ICMP uptime.
+Availability on this basis is *"share of the period with no open problem at or above the chosen severity"*,
+which isn't the same thing as ICMP uptime. No page of the portal asks for this basis any more: the SLA page's last 7 and 30 days
+read the ICMP basis (`basis=availability`). It stays in the endpoint as `basis=all-problems`, for a caller that still asks.
 
 > The look for older outages is bounded: at most 200 triggers (`LONG_OUTAGE_LOOKUPS`). Past that the
-> report sets `truncated: true`, and the UI labels the figures a floor. Silently understating downtime
-> while looking authoritative would be worse than saying so. (A window so dense that one second holds
+> report sets `truncated: true`, which means the figures are a floor (the old Availability page said so, and a caller of this basis
+> should). Silently understating downtime while looking authoritative would be worse than saying so. (A window so dense that one second holds
 > a full page of events is refused with an error rather than reported on.) Still missed: a problem
 > that began before the look-back and was resolved after the window ended.
 
@@ -63,12 +64,10 @@ numbers. Goal 6 is *Automated reporting*, and this is its on-demand part: someon
 and the file is made. An administrator can also email the files to people they choose (*Emailing the report*, below),
 and have them go by themselves on a day of each month (*The monthly send*, below).
 
-On the page. The SLA page (its *Derived monthly SLA* view) and the Availability page each show
-three buttons in the controls row, *PDF report*, *Excel report* and *CSV report*, and a fourth, *Number and date style*, in a group of its own. The Availability page shows them
-only when the period is one calendar month and the basis is Availability (ICMP): a rolling window
-and the legacy basis have no SLA month to report. Its buttons download the same report as the SLA
-page's, not that page's own table. Both pages keep the buttons off until the figures on screen have
-loaded. A press calls `GET /api/sli/export` and saves the answer under the name the BFF sends, such
+On the page. The SLA page (its *Derived SLA* view) shows three buttons in the controls row,
+*PDF report*, *Excel report* and *CSV report*, and a fourth, *Number and date style*, in a group of its own. They show only when
+the period is a calendar month: the last 7 and 30 days have no SLA month to report. The page keeps the
+buttons off until the figures on screen have loaded. A press calls `GET /api/sli/export` and saves the answer under the name the BFF sends, such
 as `HCML_SLA_Report_2026-08.pdf`. While a file is being prepared the button reads *Preparing PDF…*
 and a second press does nothing. A failure appears next to the buttons and names the format that
 failed. The code is `web/src/features/sla/ReportDownload.tsx` and `api.sliExport` in `web/src/api/sla.ts`.
@@ -211,7 +210,7 @@ An administrator can send a month's report to people they choose, in `hcml-porta
 passes none of the mail settings, on purpose, so that nothing leaves the machine there and the buttons are never offered. This is the second half of Goal 6's on-demand
 part: the files are the ones the downloads give, and they travel by email instead of to the browser. The same report can also go by itself every month (*The monthly send*, below).
 
-On the page. An *Email report* button and a *Schedule* button sit in the controls row of the SLA page and of the Availability page, in a group
+On the page. An *Email report* button and a *Schedule* button sit in the controls row of the SLA page, in a group
 of their own beside the download buttons, and they show in the same cases. *Email report* goes off and on with the download buttons, until the figures have loaded; *Schedule* needs no figures and stays on. Only an
 administrator sees them, and only when email is set up: the page asks `GET /api/sli/email`, an administrator-only route
 that says whether email is on, from which address, the saved list of recipients, how many addresses a list may hold, which domains they may be in and whether the list survives a restart; a failed answer shows nothing. *Email report* opens a
@@ -239,7 +238,7 @@ email is off and the buttons are not offered. `PORTAL_STATE_DIR` is not a settin
 | `MAIL_ALLOWED_DOMAINS` | The only domains a report may go to, such as `hcml.co.id`, up to 20. Blank means any address, and the start-up log then says so in a warning. **Set it**: it is what keeps a stolen administrator session from sending the report to an address of its choice |
 | `MAIL_SCHEDULE` | `off` keeps the monthly send from running on this machine; blank or `on` leaves it on. Use `off` on a copy of the portal that must not send, since two copies that read the same Zabbix would both send |
 | `MAIL_FROM_NAME` | The name shown beside the sender's address, up to 64 characters, blank for `HCML Monitoring Portal`. No `<`, `>`, `"`, `\` or `@` in it, and no line break or other invisible character (a zero-width space, a right-to-left mark): a name that could be read as another sender, or as a header, turns email off. A name people know the reports by is one of the things that helps a mail program place a message from a new sender (IN-62); the sending account stays the owner's choice |
-| `PORTAL_STATE_DIR` | Where the portal keeps its small file of its own (below). The compose file sets it to `/data`, the volume `portal-state` |
+| `PORTAL_STATE_DIR` | Where the portal keeps its small files of its own: the state below and, in both copies, the web check figures of closed months (ADR-0016). The compose file sets it to `/data`, the volume `portal-state` |
 
 A setting that is present and cannot be used leaves email off, and the start-up log says which one, in a line that begins
 *Email is off*. The portal still starts: a typo in `.env` must not stop monitoring. The password is never written in

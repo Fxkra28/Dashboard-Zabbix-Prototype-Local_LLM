@@ -18,7 +18,7 @@ const THEME = arg('theme') || 'light';
 const [VW, VH] = (arg('view') || '1440x900').split('x').map(Number);
 const MOBILE = VW < 500;
 const OUT = arg('out');
-const ROUTES = (arg('routes') || '/,/problems,/sites,/hosts,/devices,/latest,/graphs,/maps,/network,/links,/services,/sla,/reports/availability,/reports/capacity,/reports/noise,/reports/top-triggers,/reports/inventory,/assistant,/no-such-page').split(',');
+const ROUTES = (arg('routes') || '/,/problems,/sites,/hosts,/devices,/latest,/graphs,/maps,/network,/links,/services,/sla,/reports/capacity,/reports/noise,/reports/top-triggers,/reports/inventory,/assistant,/no-such-page').split(',');
 if (!BASE) { console.error('Needs --base'); process.exit(2); }
 
 const profile = mkdtempSync(join(tmpdir(), 'hcml-audit-'));

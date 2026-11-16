@@ -82,6 +82,12 @@ export async function hashPassword(password: string, params: ScryptParams = SCRY
   return `scrypt.${params.N}.${params.r}.${params.p}.${salt.toString('base64url')}.${key.toString('base64url')}`;
 }
 
+/** The fewest characters a plain password may have. A hash is exempt: its length says nothing about the password inside it. */
+export const MIN_PASSWORD_LENGTH = 8;
+
+/** Whether a stored plain password is under the minimum, counted in characters. Docker compose cuts an unquoted one at its first "$" (SC-55). */
+export const isTooShort = (stored: string): boolean => parseStoredPassword(stored).kind === 'plain' && Array.from(stored).length < MIN_PASSWORD_LENGTH;
+
 /** On every short list of passwords, and the one Zabbix ships with. Compared in lower case. */
 const COMMON = ['secret', 'zabbix', 'password', 'changeme', '123456'] as const;
 

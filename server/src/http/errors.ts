@@ -7,6 +7,7 @@ import {
 } from '../clients/zabbix.js';
 import { AiBusyError, AiDisabledError, AiUpstreamError } from '../clients/ai.js';
 import { MailDisabledError, MailError } from '../clients/mail.js';
+import { Cancelled } from '../core/gate.js';
 import { StateWriteError } from '../core/state.js';
 import { BadRequestError, EmptyReportError, ScheduleUnavailableError } from '../core/validate.js';
 import { validationProblem } from '../core/schemas.js';
@@ -89,6 +90,10 @@ export function registerErrorHandler(app: FastifyInstance): void {
     }
     if (err instanceof ScheduleUnavailableError) {
       return reply.code(503).send({ error: 'schedule_unavailable', message: err.message });
+    }
+    // The reader left before their read began (gate.ts, cache.ts): nobody is there to be told, so this writes no line of its own.
+    if (err instanceof Cancelled) {
+      return reply.code(499).send({ error: 'cancelled', message: 'The read was dropped because its reader left.' });
     }
     if (err instanceof StateWriteError) {
       // `detail` is the system's code for the failure: the log gets it, the response never does.

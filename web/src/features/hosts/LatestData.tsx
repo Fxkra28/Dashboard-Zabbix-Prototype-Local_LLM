@@ -65,6 +65,11 @@ export default function LatestData() {
   const listsError = (hostsQ.data == null && hostsQ.error) || (groupsQ.data == null && groupsQ.error) || null;
   // With no host or group picked and no menu to pick from, the error is the whole story.
   const noSelectionToShow = listsError !== null && !hostid && !groupid;
+  // Only a menu that failed is read again; one that loaded stays as it is (UX-60).
+  const retryMenus = () => {
+    if (hostsQ.data == null && hostsQ.error) hostsQ.reload();
+    if (groupsQ.data == null && groupsQ.error) groupsQ.reload();
+  };
 
   const items = q.data?.items ?? [];
   const total = q.data?.total ?? items.length;
@@ -157,6 +162,9 @@ export default function LatestData() {
       {listsError && !noSelectionToShow && (
         <div className="notice warn" role="alert">
           The host and group menus could not be loaded: {listsError}
+          <button type="button" className="btn ghost sm notice-action" onClick={retryMenus}>
+            Try again
+          </button>
         </div>
       )}
 
@@ -164,10 +172,20 @@ export default function LatestData() {
         <Async
           loading={q.loading && !noSelectionToShow}
           error={noSelectionToShow ? listsError : q.error}
+          // The items poll and try again by themselves; the menus do not.
+          onRetry={noSelectionToShow ? retryMenus : undefined}
           data={noSelectionToShow ? null : q.data}
           stale={q.stale}
           updatedAt={q.updatedAt}
           loadingLabel="Loading latest data…"
+          // Outside the content that goes inert while the next page loads, so that the button pressed keeps its focus (UX-57).
+          footer={() =>
+            (items.length ? pages > 1 : total > 0) && (
+              <Pager page={page} pages={pages} onPage={setPage}>
+                Page {page} of {pages}
+              </Pager>
+            )
+          }
         >
           {() =>
             items.length ? (
@@ -238,21 +256,9 @@ export default function LatestData() {
                     </tbody>
                   </table>
                 </TableWrap>
-                {pages > 1 && (
-                  <Pager page={page} pages={pages} onPage={setPage}>
-                    Page {page} of {pages}
-                  </Pager>
-                )}
               </>
             ) : (
-              <>
-                <div className="state">{noRowsWords}</div>
-                {total > 0 && (
-                  <Pager page={page} pages={pages} onPage={setPage}>
-                    Page {page} of {pages}
-                  </Pager>
-                )}
-              </>
+              <div className="state">{noRowsWords}</div>
             )
           }
         </Async>

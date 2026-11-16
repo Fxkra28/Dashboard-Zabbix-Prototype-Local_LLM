@@ -1,7 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, type RefObject } from 'react';
 import { api } from '../../api';
 import { useAsync } from '../../shared/hooks/useAsync';
 import { useUrlState } from '../../shared/hooks/useUrlState';
+import { useReveal } from '../../shared/hooks/useReveal';
 import type { Site, SitesResponse } from '../../types';
 import { SEVERITIES } from '../../theme';
 import { SeverityCounts } from '../../shared/components/StatusBadge';
@@ -97,10 +98,12 @@ function SiteCard({
   );
 }
 
-function SiteHosts({ site }: { site: Site }) {
+function SiteHosts({ site, panel }: { site: Site; panel: RefObject<HTMLDivElement> }) {
   return (
-    <div className="panel">
-      <h2>{site.name}: hosts</h2>
+    <div className="panel" ref={panel}>
+      <h2 tabIndex={-1} data-reveal-focus>
+        {site.name}: hosts
+      </h2>
       <HostTable hosts={site.hosts} siteFrom />
     </div>
   );
@@ -132,6 +135,8 @@ export default function Sites() {
   const [search, setSearch] = useUrlState<string>('q', '', { debounceMs: 400 });
   const [problemsOnly, setProblemsOnly] = useUrlState<boolean>('attention', false);
   const [selected, setSelected] = useUrlState<string>('site', '');
+  // The hosts open below the whole grid: bring them into view, and say so to a keyboard or screen reader user (UX-62).
+  const { panel, reveal } = useReveal();
 
   const filtered = useMemo(() => {
     const list = q.data?.sites ?? [];
@@ -199,13 +204,17 @@ export default function Sites() {
                     key={s.name}
                     site={s}
                     selected={s.name === current?.name}
-                    onSelect={() => setSelected(s.name === current?.name ? '' : s.name)}
+                    onSelect={() => {
+                      const closing = s.name === current?.name;
+                      setSelected(closing ? '' : s.name);
+                      if (!closing) reveal();
+                    }}
                   />
                 ))}
               </div>
 
               {current ? (
-                <SiteHosts site={current} />
+                <SiteHosts site={current} panel={panel} />
               ) : (
                 <div className="muted" style={{ textAlign: 'center', fontSize: 13, padding: 8 }}>
                   Select a site to see its hosts.

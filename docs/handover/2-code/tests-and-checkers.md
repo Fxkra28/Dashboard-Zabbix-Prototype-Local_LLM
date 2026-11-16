@@ -4,7 +4,7 @@
 |---|---|---|---|
 | Developers | about 10 min | [Web app: the stylesheet](web-styles.md) | [Server files, one card each](files-server.md) |
 
-Two kinds of thing keep this repository true. Tests run the code and say it behaves. Checkers read the repository and say it agrees with itself: the routes with the API description, the documents with the code, the two copies with each other. `npm run verify` at the root runs both, with the type checks, the linters and the builds. This chapter says how the tests are organised, what the eleven checkers guard, and how a rule is written so that it can fail.
+Two kinds of thing keep this repository true. Tests run the code and say it behaves. Checkers read the repository and say it agrees with itself: the routes with the API description, the documents with the code, the two copies with each other. `npm run verify` at the root runs both, with the type checks, the linters and the builds. This chapter says how the tests are organised, what the twelve checkers guard, and how a rule is written so that it can fail.
 
 ## The server's tests
 
@@ -49,12 +49,13 @@ Some tests do not run the code. They read two files and fail when they disagree,
 | `live-tools.test.ts` (server) | Every page of the app is in the live audit tools' lists |
 | `handover-check.test.ts` (server) | The handbook's generator and its checker, each rule shown to fail on a one-page handbook with that fault |
 
-## The eleven checkers
+## The twelve checkers
 
-`npm run check` runs eleven checkers. They are read-only, they run in CI, and each fails with a message that names the file and the line. Seven are in `tools/check/`, four in the web app's `scripts/`.
+There are twelve checkers. `npm run check` runs eleven of them, and the twelfth, `installed.check.mjs`, is the first step of `npm run verify`. They are read-only, each fails with a message that names the file and the line, and CI runs the eleven of `npm run check` (a CI job installs fresh, so the twelfth has nothing to find there). Eight are in `tools/check/`, four in the web app's `scripts/`.
 
 | Checker | What it guards | Command |
 |---|---|---|
+| `installed.check.mjs` | The packages in each copy's `node_modules` are the versions its lock file names, so that a copy whose install drifted is reported before the tests run, and not after a green run that meant nothing (IN-80) | `npm run verify:installed` |
 | `openapi.check.ts` | `docs/api/openapi.yaml` lists exactly the routes the server registers, with their methods, parameters, guards and error answers | `npm run check:api` |
 | `erd.check.ts` | The database diagram exists in two forms, `.mmd` and `.erd`, and they say the same | `npm run check:erd` |
 | `css.check.mjs` | The stylesheet is structurally sound: no lost brace | `npm run check:styles` |
@@ -108,6 +109,6 @@ export function checkStyle(text, { chars = true, words = true } = {}) {
 
 ## What verify does
 
-`npm run verify` runs, in order, the type checks of both packages (the code and its tests), the linters with no warnings allowed, the tests of both packages, the builds of both, and then `npm run check`. It takes about five minutes. Run it before anything is committed, in each copy, since the two copies are separate folders that must hold the same code (only the hosted one is under git). CI runs the same steps, apart from the checks that need both copies, and adds an audit of the packages that ship, a scan for secrets and a build of both images. [GitHub and CI](../3-integrations/github-ci.md) has the whole list.
+`npm run verify` runs, in order, the type checks of both packages (the code and its tests), the linters with no warnings allowed, the tests of both packages, the builds of both, and then `npm run check`. It takes about five minutes. Run it before anything is committed, in each copy, since the two copies are separate folders that must hold the same code (each is a git repository of its own, the second since 11 November 2026). CI runs the same steps, apart from the checks that need both copies, and adds an audit of the packages that ship, a scan for secrets and a build of both images. [GitHub and CI](../3-integrations/github-ci.md) has the whole list.
 
 The tools in `tools/live/` are not part of `verify`. They need a running portal and, for the signed-in checks, a person's own name and password in their own shell: `signedin_check.py`, `sse_hold.py`, `page-audit.mjs`, `layout-sweep.mjs`, `keyboard-walk.mjs`, `download-check.mjs`, `load-test.mjs`, `api-timing.py` and `enforcing-csp-server.mjs`. The tools README says what each one does.

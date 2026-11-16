@@ -21,7 +21,7 @@ const flat = (rel: string) => read(rel).replace(/\s+/g, ' ');
 /** The credentials: the settings that must never appear with a value outside `.env`. */
 const SECRETS = ['JWT_SECRET', 'ZABBIX_API_TOKEN', 'ZABBIX_WRITE_TOKEN', 'PORTAL_PASS', 'PORTAL_USERS', 'PORTAL_USER', 'ANTHROPIC_API_KEY', 'AI_API_KEY', 'MAIL_PASS'];
 /** Fixed in docker-compose.yml, not read from anyone's `.env`: the port, the heap size set with the memory limit, and the folder of the state volume. */
-const NOT_SETTINGS = ['PORT', 'NODE_OPTIONS', 'PORTAL_STATE_DIR'];
+const NOT_SETTINGS = ['PORT', 'NODE_OPTIONS', 'PORTAL_STATE_DIR', 'LOG_DIR'];
 /** Settings whose default differs between the two copies, so the example shows them as comments. */
 const PER_COPY = ['WEB_PORT', 'WEB_ORIGIN', 'SESSION_COOKIE', 'AI_PROVIDER', 'AI_BASE_URL', 'MAIL_PROVIDER', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_SECURITY', 'MAIL_USER', 'MAIL_FROM', 'MAIL_TO', 'MAIL_ALLOWED_DOMAINS', 'MAIL_SCHEDULE'];
 
@@ -201,6 +201,20 @@ describe('docs/operations/backup-and-restore.md (tracker IN-24)', () => {
     expect(checklist).toContain('fresh encrypted copy');
   });
 
+  // IN-92: the override file is in no repository and no encrypted copy, and without it every read of Zabbix fails from HCML's network, so a restore that
+  // followed the steps ended at step 7 with Zabbix not ok.
+  it('puts docker-compose.override.yml back in step 2, and names it where the copy is made', () => {
+    const steps = text.split('## Restore checklist')[1]?.split('\n## ')[0]?.split(/^(?=\d+\. )/m) ?? [];
+    const putBack = steps.find((s) => s.startsWith('2. '));
+    expect(putBack, 'step 2').toBeDefined();
+    expect(putBack).toContain('docker-compose.override.yml');
+    expect(putBack).toContain('after-a-restart.md');
+    const copy = text.split('## Keep an encrypted copy')[1]?.split('\n## ')[0] ?? '';
+    expect(copy).toContain('docker-compose.override.yml');
+    expect(copy).toMatch(/no secret|not a secret|holds no secret/);
+    expect(steps.find((s) => s.startsWith('7. '))).toContain('docker-compose.override.yml');
+  });
+
   // /api/health tells only a signed-in caller whether Zabbix answers (health.test.ts). A step
   // that sent someone to look for `ready` in a bare curl would send them to a field that is not there.
   it('does not promise `ready` to the curl, which is not signed in', () => {
@@ -302,7 +316,7 @@ describe('deploy/settings.example (tracker IN-24)', () => {
 });
 
 describe('the new documents', () => {
-  it.each(['docs/operations/tls.md', 'docs/operations/backup-and-restore.md', 'deploy/settings.example'])('%s has no em or en dash', (rel) => {
+  it.each(['docs/operations/tls.md', 'docs/operations/backup-and-restore.md', 'deploy/settings.example', 'package.json', 'server/package.json', 'web/package.json'])('%s has no em or en dash', (rel) => {
     // Built from code points, so that this file holds neither character itself.
     const dashes = new RegExp(`[${String.fromCharCode(0x2013)}${String.fromCharCode(0x2014)}]`);
     expect(read(rel)).not.toMatch(dashes);

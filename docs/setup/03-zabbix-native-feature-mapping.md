@@ -19,7 +19,7 @@ portal view maps to Zabbix concepts and API methods:
 | Links & WAN health     | *(none: see [§17](17-link-wan-health.md#17-link--wan-health))* | `/api/links`           | `item.get` (icmpping / icmppingloss / icmppingsec), `history.get` (ping values) |
 | Services               | Services                        | `/api/services`                   | `service.get` (+ children, problem events), `sla.get`, `sla.getsli` |
 | SLA                    | Services → SLA                  | `/api/sla`, `/api/sla/sli`        | `sla.get`, `sla.getsli`, `service.get` |
-| Availability & response | *(none: see [§18](18-automated-reporting.md#18-automated-reporting))* | `/api/reports/availability`, `/api/reports/aging` | `event.get` (problem/recovery pairs) |
+| SLA: last 7 or 30 days, and Response | *(none: see [§18](18-automated-reporting.md#18-automated-reporting))* | `/api/reports/availability`, `/api/reports/aging` | `event.get` (problem/recovery pairs) |
 | Capacity trends        | Reports → Top 100 (adjacent)    | `/api/reports/capacity`           | `item.get`, `trend.get` → `history.get` fallback |
 | Alert noise            | *(none: see [§21](21-alert-noise-flapping.md#21-alert-noise--flapping))* | `/api/reports/noise`  | `event.get` (problem/recovery pairs, per trigger) |
 | Top 100 triggers       | Reports → Top 100 triggers      | `/api/reports/top-triggers`       | `event.get` (aggregated by trigger)         |

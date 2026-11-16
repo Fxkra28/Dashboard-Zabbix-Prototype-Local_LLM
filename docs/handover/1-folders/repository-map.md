@@ -76,7 +76,7 @@ Some files sit in the folder and are not in the repository, on purpose.
 | Path | What it holds | Why it is not committed |
 |---|---|---|
 | `.env` and `server/.env` | The real settings: users and roles, the Zabbix and model tokens, the signing secret | They are secrets. They are the one thing to back up by hand: [backup and restore](../../operations/backup-and-restore.md) |
-| `docker-compose.override.yml` | Settings that belong to one machine, such as the name the server uses for Zabbix | It names an internal address. The file is excluded locally, not through `.gitignore`. |
+| `docker-compose.override.yml` | Settings that belong to one machine, such as the name the server uses for Zabbix | It names an internal address. `.gitignore` names the file, so a clone never commits it. |
 | `pic/` | Screenshots of each copy's running portal, used to make the documents | They show real host and site names. The documents hold ten renamed images in `docs/screenshots/`. |
 | `node_modules/`, `dist/`, `*.tsbuildinfo` | Installed packages, build output, build cache | They are made from the lockfiles and the source. |
 | `HCML_SLA_Report_*` | A downloaded monthly SLA report | It names every device in the estate. |

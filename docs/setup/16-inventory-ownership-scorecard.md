@@ -73,7 +73,8 @@ the service hierarchy covers it. Scoring it per host would be a worse answer tha
 - A broken `HOST_NAME_PATTERN` doesn't take the endpoint down. An invalid regex is caught and the
   dimension reports `scored: false`, so a config typo degrades to "not measured", never a 500.
 - Groups are sorted worst-first: that's where the standardisation work is.
-- The gap list downloads as CSV, so the work can be handed to whoever owns those hosts.
+- The gap list downloads as CSV, so the work can be handed to whoever owns those hosts. The file is named after the list on screen (`hcml-inventory-gaps-naming-site-<day>.csv` for the naming and site gaps), so a short list is not taken for the whole.
+- While no host carries an owner or a criticality, the page says so and opens the list on the naming and site gaps (`?gap=basic`), unless there are none, when it opens on all gaps. `?gap=` also takes `all`, `naming`, `site`, `owner` and `criticality`; a type that is not scored reads as the list the page opens on.
 - Admin-only: this is governance, not monitoring ([§19](19-authentication-rbac.md#19-authentication--rbac)).
 
 ```bash

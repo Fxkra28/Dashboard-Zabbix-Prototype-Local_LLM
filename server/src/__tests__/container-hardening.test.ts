@@ -184,18 +184,21 @@ describe('what docker-compose.yml hands each container (SC-21)', () => {
     expect(items(block, 'tmpfs').map((t) => t.split(':')[0])).toContain('/tmp');
   });
 
-  it('lets the BFF write in one place besides /tmp, a named volume at /data that the image makes for the node user, and no other container writes anywhere', () => {
+  it('lets the BFF write in two places besides /tmp, named volumes at /var/log/portal and (hosted copy only) /data, both made by the image for the node user, and no other container writes anywhere', () => {
     const bff = service('portal-bff');
     const mounts = items(bff, 'volumes');
-    // hcml-portal-ollama sends no email and keeps nothing, so it has no volume at all.
-    expect([[], ['portal-state:/data']]).toContainEqual(mounts);
-    const makes = serverDockerfile.findIndex((l) => l === 'RUN mkdir -p /data && chown node:node /data');
+    // hcml-portal-ollama sends no email and keeps no state, so it has the log volume alone.
+    expect([['portal-logs:/var/log/portal'], ['portal-state:/data', 'portal-logs:/var/log/portal']]).toContainEqual(mounts);
+    const makes = serverDockerfile.findIndex((l) => l === 'RUN mkdir -p /data /var/log/portal && chown node:node /data /var/log/portal');
     const user = serverDockerfile.findIndex((l) => l === 'USER node');
-    if (mounts.length > 0) {
-      expect(makes, 'the image makes /data for the node user').toBeGreaterThanOrEqual(0);
-      expect(makes, 'before it drops to that user').toBeLessThan(user);
-      expect(compose.join('\n')).toMatch(/^volumes:\n {2}portal-state:\s*$/m);
-    }
+    expect(makes, 'the image makes both folders for the node user').toBeGreaterThanOrEqual(0);
+    expect(makes, 'before it drops to that user').toBeLessThan(user);
+    // The names under the file's own `volumes:`, whatever comments sit between them.
+    const top = compose.findIndex((l) => l === 'volumes:');
+    expect(top, 'a top-level volumes block').toBeGreaterThanOrEqual(0);
+    const declared = compose.slice(top + 1).filter((l) => /^ {2}\S/.test(l)).map((l) => l.trim());
+    expect(declared).toContain('portal-logs:');
+    if (mounts.length > 1) expect(declared).toContain('portal-state:');
     expect(items(service('portal-web'), 'volumes')).toEqual([]);
   });
 

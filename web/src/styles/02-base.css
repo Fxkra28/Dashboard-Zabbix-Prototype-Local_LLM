@@ -21,9 +21,9 @@
 main[tabindex='-1']:focus {
   outline: none;
 }
-/* Keeps a control reached with Shift+Tab from landing under the sticky 64px top bar. */
+/* Keeps a control reached with Shift+Tab from landing under the sticky top bar: its measured height (useTopBarHeight), 64px until it is measured, and a little air. */
 html {
-  scroll-padding-top: 72px;
+  scroll-padding-top: calc(var(--topbar-h, 64px) + var(--s-2));
 }
 
 * {

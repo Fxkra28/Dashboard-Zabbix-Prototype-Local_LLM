@@ -187,6 +187,90 @@ describe('Explain on the hosted API', () => {
   });
 });
 
+describe('a reader who left (BK-71, BK-72)', () => {
+  /** A hosted call that stays open until the signal it was given fires, then fails as the SDK does. */
+  const holdsUntilAborted = () =>
+    sdk.create.mockImplementation(
+      (_body: unknown, options: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(new Error('aborted by the signal')))),
+    );
+
+  it('asks the hosted API nothing and charges nothing when the reader had left before the call began', async () => {
+    const { humanize } = await load(HOSTED);
+    const gone = new AbortController();
+    gone.abort(new Error('reader left'));
+    const onUsage = vi.fn();
+    await expect(humanize('problem', {}, onUsage, gone.signal)).rejects.toThrow('reader left');
+    expect(sdk.create).not.toHaveBeenCalled();
+    expect(onUsage).not.toHaveBeenCalled();
+  });
+
+  it('asks the local model nothing, not even whether it speaks Ollama', async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new Error('no network'));
+    vi.stubGlobal('fetch', fetchMock);
+    const { humanize } = await load({ AI_PROVIDER: 'openai-compatible', AI_BASE_URL: 'http://localhost:11434/v1' });
+    const gone = new AbortController();
+    gone.abort(new Error('reader left'));
+    await expect(humanize('problem', {}, undefined, gone.signal)).rejects.toThrow('reader left');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('charges the question by its size when the reader leaves after the request went out, once', async () => {
+    holdsUntilAborted();
+    const { humanize } = await load(HOSTED);
+    const onUsage = vi.fn();
+    const gone = new AbortController();
+    const asked = humanize('problem', { host: 'x'.repeat(4_000) }, onUsage, gone.signal);
+    asked.catch(() => undefined);
+    await vi.waitFor(() => expect(sdk.create).toHaveBeenCalledTimes(1));
+    expect(onUsage).not.toHaveBeenCalled(); // nothing is known yet
+
+    gone.abort(new Error('reader left'));
+    await expect(asked).rejects.toThrow('reader left');
+    expect(onUsage).toHaveBeenCalledOnce();
+    expect(onUsage.mock.calls[0][0]).toBeGreaterThan(1_000); // 4,000 characters of host name alone
+  });
+
+  it('charges nothing when the reader leaves while the call waits for its place', async () => {
+    const { humanize, acquireHostedSlot } = await load({ ...HOSTED, AI_MAX_CONCURRENT: '1' });
+    const held = await acquireHostedSlot();
+    const onUsage = vi.fn();
+    const gone = new AbortController();
+    const asked = humanize('problem', {}, onUsage, gone.signal);
+    asked.catch(() => undefined);
+    await sleep();
+    gone.abort(new Error('reader left'));
+    await expect(asked).rejects.toThrow('reader left');
+    expect(sdk.create).not.toHaveBeenCalled();
+    expect(onUsage).not.toHaveBeenCalled();
+    held();
+  });
+
+  it('still charges nothing for a call the API refused, even when the reader leaves afterwards', async () => {
+    sdk.create.mockRejectedValue(new Error('no'));
+    const { humanize } = await load(HOSTED);
+    const onUsage = vi.fn();
+    const gone = new AbortController();
+    await expect(humanize('problem', {}, onUsage, gone.signal)).rejects.toThrow('no');
+    gone.abort(new Error('reader left'));
+    expect(onUsage).not.toHaveBeenCalled();
+  });
+
+  it('charges what the API billed, once, when the answer came in although the reader left', async () => {
+    let answer!: (m: unknown) => void;
+    sdk.create.mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    const { humanize } = await load(HOSTED);
+    const onUsage = vi.fn();
+    const gone = new AbortController();
+    const asked = humanize('problem', {}, onUsage, gone.signal);
+    await vi.waitFor(() => expect(sdk.create).toHaveBeenCalledTimes(1));
+    gone.abort(new Error('reader left'));
+    answer(message({ input_tokens: 300, output_tokens: 120 }));
+    await expect(asked).resolves.toMatchObject({ summary: 's' });
+    expect(onUsage).toHaveBeenCalledExactlyOnceWith(420);
+  });
+});
+
 describe('the Assistant on the hosted API', () => {
   it('reports the tokens the stream said it used: input from its start, output from its end', async () => {
     sdk.stream.mockReturnValue(

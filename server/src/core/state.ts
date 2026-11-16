@@ -6,7 +6,8 @@ import { DATES, DECIMALS, FORMAT_NAMES, SEPARATORS, type Format, type ReportStyl
 /**
  * The portal's one small file of its own, on a folder that outlives the container (PORTAL_STATE_DIR): the saved
  * recipients, the monthly schedule and a short record of what was sent. Never a report, a figure from Zabbix or a
- * password. Without the folder the portal keeps the same in memory and says that it is not kept (ADR 0003, amended).
+ * password: the web check figures of closed months have a file of their own beside it (services/closedWebStore.ts, ADR 0016).
+ * Without the folder the portal keeps the same in memory and says that it is not kept (ADR 0003, amended).
  */
 
 export const MAX_SENDS_KEPT = 24;
@@ -189,13 +190,13 @@ function trimSends(sends: SendRecord[]): SendRecord[] {
   return kept;
 }
 
-async function writeAtomic(dir: string, state: PortalState): Promise<void> {
-  const file = join(dir, FILE_NAME);
+/** Writes `value` as JSON so that a reader sees the old file or the new one whole: a temp file beside it, synced, then renamed, readable by its owner alone. */
+export async function writeJsonAtomic(file: string, value: unknown): Promise<void> {
   const tmp = `${file}.tmp`;
   try {
     const handle = await open(tmp, 'w', 0o600);
     try {
-      await handle.writeFile(`${JSON.stringify(state, null, 2)}\n`);
+      await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`);
       await handle.sync();
     } finally {
       await handle.close();
@@ -206,6 +207,8 @@ async function writeAtomic(dir: string, state: PortalState): Promise<void> {
     throw err;
   }
 }
+
+const writeAtomic = (dir: string, state: PortalState): Promise<void> => writeJsonAtomic(join(dir, FILE_NAME), state);
 
 const copy = (state: PortalState): PortalState => structuredClone(state);
 

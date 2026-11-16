@@ -52,7 +52,7 @@ Follow [change recipes](change-recipes.md), numbers 1 and 7. The field is added 
 
 ### 11. What does a restart cost a closed month's SLA?
 
-A closed month cannot change, yet a restart computes it again. The cache is in memory, so a restart loses it, and the first request pays the 20 or so Zabbix calls again. Within a run, `getMonthlySli` keeps a closed month for a day and pins it, so it cannot be pushed out of the cache, and it puts `closed` in the key, so a report built while the month was running is never kept as the final figure. The cost of a restart is on purpose, [ADR-0003](../../architecture/adr/0003-no-database.md) records it, and the warm-up does not include the SLA figures, so the first visit waits.
+A closed month changes rarely, yet a restart computes it again. It can still change, because an edited maintenance period moves past months and the readings behind the web checks age out, which is why its report is kept for a day and not for ever. The cache is in memory, so a restart loses it, and the first request pays the 20 or so Zabbix calls again. Within a run, `getMonthlySli` keeps a closed month for a day and pins it, so it cannot be pushed out of the cache, and it puts `closed` in the key, so a report built while the month was running is never kept as the final figure. The cost of a restart is on purpose, [ADR-0003](../../architecture/adr/0003-no-database.md) records it, and the warm-up does not include the SLA figures, so the first visit waits.
 
 ### 12. Make a new page that only admins may open.
 

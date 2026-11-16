@@ -2,6 +2,8 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './features/shell/Layout';
 import { Loading } from './shared/components/states';
+// Not lazy: it is no page, it only sends the old address on, and a chunk to wait for would leave "Page not found" in the title meanwhile.
+import AvailabilityRedirect from './features/sla/AvailabilityRedirect';
 
 /**
  * Every page is code-split.
@@ -25,7 +27,6 @@ const Network = lazy(() => import('./features/network/Network'));
 const Links = lazy(() => import('./features/network/Links'));
 const Services = lazy(() => import('./features/sla/Services'));
 const Sla = lazy(() => import('./features/sla/Sla'));
-const Availability = lazy(() => import('./features/sla/Availability'));
 const Capacity = lazy(() => import('./features/reports/Capacity'));
 const AlertNoise = lazy(() => import('./features/reports/AlertNoise'));
 const Inventory = lazy(() => import('./features/reports/Inventory'));
@@ -61,7 +62,7 @@ export function AppRoutes() {
         <Route path="/links" element={<Links />} />
         <Route path="/services" element={<Services />} />
         <Route path="/sla" element={<Sla />} />
-        <Route path="/reports/availability" element={<Availability />} />
+        <Route path="/reports/availability" element={<AvailabilityRedirect />} />
         <Route path="/reports/capacity" element={<Capacity />} />
         <Route path="/reports/noise" element={<AlertNoise />} />
         <Route path="/reports/top-triggers" element={<TopTriggers />} />

@@ -13,7 +13,7 @@ For every message the BFF builds a snapshot, [`services/assistantSnapshot.ts`](.
 (`problems`, `sites`, `sla`, `sli:*`, `services:tree`), so a busy conversation costs Zabbix nothing
 the pages were not already paying:
 
-- open problems, worst first, with host, age, acknowledgement state and tags, under a title that says how many of them
+- open problems, worst first, with host, age and acknowledgement state (no tags), under a title that says how many of them
   are listed;
 - facts counted over every open problem, which the list above may not hold in full: how many monitored hosts have none,
   the five busiest hosts with their counts, and the oldest problems still open;
@@ -93,7 +93,7 @@ rate-limited like any other request.
 
 ## Limits and the notice on AI answers (7 October 2026, SC-01, SC-09)
 
-- The notice. When the hosted Anthropic backend is configured (`AI_PROVIDER=anthropic`) the Assistant and Explain say, under every answer, what left the machine: "Each question, and a summary of the estate, is sent to Anthropic, an external AI service" and "To write this, the details shown here were sent to Anthropic, an external AI service". It follows `aiExternal` in `GET /api/health`. With a local model, as in hcml-portal-ollama, nothing is shown.
+- The notice. When the model is outside this machine's own network, as hosted Claude always is (`AI_PROVIDER=anthropic`), the Assistant and Explain say, under every answer, what left the machine: "Each question, and a summary of the estate, is sent to Anthropic, an external AI service" and "To write this, the details shown here were sent to Anthropic, an external AI service". For another provider they say "an external AI service" and name nobody, which is what a person sees in hcml-portal-ollama when `AI_ALLOW_REMOTE=true` lets a model outside the network through. It follows `aiExternal` in `GET /api/health`. With a local model nothing is shown.
 - Per-user limits. Each signed-in user, or each client address when sign-in is off, may make `AI_CHAT_PER_MINUTE` Assistant questions and `AI_EXPLAIN_PER_MINUTE` explanations a minute (10 each). Over it is `429 rate_limited` with `Retry-After`. The count is kept in memory, so a restart gives everyone a fresh allowance.
 - Concurrency. `AI_MAX_CONCURRENT` (4) hosted calls run at once; the next waits its turn and is told the assistant is busy after about 20 seconds. A local model still takes one at a time. That slot belongs to one BFF process: a second BFF pointed at the same Ollama does not see it, so its question would run while another is answering and wait inside Ollama, with no word to the reader. Run one BFF per Ollama server. Setting `OLLAMA_NUM_PARALLEL` in Ollama's own environment lets Ollama take several questions at once, which only matters with more than one BFF, and needs memory for each (tracker IN-21).
-- Daily token budget, hosted only. `AI_DAILY_TOKENS_PER_USER` (500,000) and `AI_DAILY_TOKENS_TOTAL` (2,000,000), counted from the tokens the API says it billed and reset at midnight in `SLA_TIMEZONE`. Used up is `429 ai_budget` with the time to midnight. `0` switches a budget off. A local model has no bill and no budget.
+- Daily token budget, for the hosted API and for a model outside this machine's network. `AI_DAILY_TOKENS_PER_USER` (500,000) and `AI_DAILY_TOKENS_TOTAL` (2,000,000), counted from the tokens the model says it used (else an estimate of what went in and out) and reset at midnight in `SLA_TIMEZONE`. Used up is `429 ai_budget` with the time to midnight. `0` switches a budget off. A model on this machine has no bill and no budget.

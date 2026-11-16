@@ -81,9 +81,9 @@ export interface IcmpItem {
 export interface IcmpReading {
   /** From a fresh `icmpping` value; absent without one. */
   up?: boolean;
-  /** `icmppingloss`, percent, when fresh. Operator views only. */
+  /** `icmppingloss`, percent, when fresh. Wall views and up. */
   loss?: number;
-  /** `icmppingsec`, seconds, when fresh. Operator views only. */
+  /** `icmppingsec`, seconds, when fresh. Wall views and up. */
   latency?: number;
   /** `up`/`down` only from a fresh `icmpping` value. */
   state: 'up' | 'down' | 'unknown';

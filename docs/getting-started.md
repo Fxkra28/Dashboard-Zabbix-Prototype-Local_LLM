@@ -21,11 +21,13 @@ groups the portal should see; *Users → API tokens* → generate and copy.
 Most first-run problems are the token, so smoke-test it before going further:
 
 ```bash
+read -rs ZBX_TOKEN   # paste the token and press Enter: nothing shows, and the shell keeps no copy in its history
 curl -s https://zabbix.hcml.co.id/zabbix/api_jsonrpc.php \
   --resolve zabbix.hcml.co.id:443:<LAN address> \
   -H 'Content-Type: application/json-rpc' \
-  -H 'Authorization: Bearer <TOKEN>' \
+  -H "Authorization: Bearer $ZBX_TOKEN" \
   -d '{"jsonrpc":"2.0","method":"host.get","params":{"output":["hostid","name"],"limit":3},"id":1}'
+unset ZBX_TOKEN
 ```
 
 On HCML's office network the name leads to a Zero Trust gateway that refuses the portal, so `--resolve`
@@ -65,7 +67,7 @@ curl -s localhost:4000/api/health
 # With sign-in off, as in the dev server/.env, you get all of this. With sign-in on, a call with no
 # session gets only ok, ts, ai, aiProvider, aiExternal, writeBack, defaults and ready as true or false (see below).
 # {"ok":true,"ts":…,"ai":false,"writeBack":false,"defaults":{…},"version":"0.1.0","startedAt":"…",
-#  "build":{"commit":"unknown","time":"unknown"},"ready":{"ok":true,"zabbix":"ok","zabbixMs":41,…},"streams":0}
+#  "build":{"commit":"unknown","time":"unknown"},"ready":{"ok":true,"zabbix":"ok","zabbixMs":41,…},"streams":0,"logFile":{…}}
 ```
 
 `ok: true` with `ai: false` is a correct, complete portal without the plain-language layer.
@@ -109,7 +111,7 @@ waiting out Docker's 10 s.
 
 With `AUTH_ENABLED=false`, an opt-in for local work (the default is `true`), there is no login and every caller is treated as
 `admin`. With it on you need `PORTAL_USER`/`PORTAL_PASS`, or `PORTAL_USERS` as comma-separated
-`name:password:role` triples, and the BFF refuses to start while any of those passwords is empty or
+`name:password:role` triples, and the BFF refuses to start while any of those passwords is empty, shorter than 8 characters (a plain one) or
 `admin`. Sign-in allows 10 attempts a minute per account from one address.
 
 **Turning auth on also requires a real `JWT_SECRET`**: the BFF refuses to boot on either value
@@ -152,13 +154,13 @@ Or one at a time:
 
 ```bash
 cd server
-npm test                                  # 2976 tests, 117 files
+npm test                                  # 3412 tests, 140 files
 npm run lint                              # eslint
 npm run typecheck
 npx tsx scripts/validate-sli.ts           # the derived SLA against HCML's published reports
 
 cd ../web
-npm test                                  # 1769 tests, 114 files, in jsdom
+npm test                                  # 2045 tests, 141 files, in jsdom
 npm run lint                              # eslint
 npm run typecheck
 npm run gen:api                           # web/src/generated/openapi.ts, from docs/api/openapi.yaml
@@ -175,7 +177,7 @@ npm run check:parity                      # the two copies match (needs both fol
 The checkers add zero dependencies: they are standalone scripts. The tests and lint of both packages, and the web's generated API types, use
 vitest, eslint and openapi-typescript, dev dependencies that never reach the built site.
 `validate-sli.ts` needs HCML's Availability Report spreadsheets in `~/Downloads` (or in `REPORT_DIR`) and a running BFF (`BFF_URL`
-says where it is, `http://127.0.0.1:4000` by default; behind nginx it is the portal's address with `/bff` added). A month with no spreadsheet is skipped with one line. With sign-in on, set `PORTAL_USER` and `PORTAL_PASSWORD` in your own shell, as for `signedin_check.py`: the script signs in once and sends the cookie. It exits 0 when every month it checked passed, 1 when one failed, and 2 when nothing was checked or the portal could not be reached or signed in to.
+says where it is, `http://127.0.0.1:4000` by default; behind nginx it is the portal's address with `/bff` added). A month with no spreadsheet is skipped with one line, and a month the portal refuses as too old (it reads the last 400 days, since Zabbix keeps events for about a year, so the default months of June to August 2026 stop working during 2027) is told so in a sentence of its own and not as a failure of the check (IN-88). With sign-in on, read `PORTAL_USER` and `PORTAL_PASSWORD` into your own shell (`read -r PORTAL_USER; read -rs PORTAL_PASSWORD; export PORTAL_USER PORTAL_PASSWORD`, which keeps the password out of its history), as for `signedin_check.py`: the script signs in once and sends the cookie. It exits 0 when every month it checked passed, 1 when one failed, and 2 when nothing was checked or the portal could not be reached or signed in to.
 
 ## When it does not work
 
@@ -185,10 +187,10 @@ says where it is, `http://127.0.0.1:4000` by default; behind nginx it is the por
 | `503 zabbix_timeout` | Zabbix did not answer within `ZABBIX_TIMEOUT_MS`, default 300 s in Docker and 10 s in a bare run |
 | `502 zabbix_error` | Unreachable, non-2xx, or a JSON-RPC error. Check `ZBX_URL` first |
 | `401 unauthorized` | The portal JWT, not the Zabbix token. Sign in again |
-| `403 csrf` | A POST sent with the session cookie, or a sign-in, without the `X-HCML-CSRF: 1` header, or from another site. A script adds the header to sign in and then sends `Authorization: Bearer` |
+| `403 csrf` | A POST, PUT, PATCH or DELETE sent with the session cookie, or a sign-in, without the `X-HCML-CSRF: 1` header, or from another site. A script adds the header to sign in and then sends `Authorization: Bearer` |
 | Signing in to one portal signs you out of the other | Both portals use the same `SESSION_COOKIE` on one host. Give each its own name |
 | BFF will not start, complains about the secret | `AUTH_ENABLED=true` with `JWT_SECRET` empty, a value published in this repo, or shorter than 32 bytes |
-| BFF will not start, complains about a password | `AUTH_ENABLED=true` with `PORTAL_PASS` empty or `admin`, or a `PORTAL_USERS` entry whose password is `admin` |
+| BFF will not start, complains about a password | `AUTH_ENABLED=true` with `PORTAL_PASS` empty, `admin` or shorter than 8 characters, or a `PORTAL_USERS` entry whose password is `admin` or that short. A password with a `$` in `.env` must be in single quotes, or compose cuts it at the `$` and it arrives short |
 | `429` on sign-in | More than 10 attempts in a minute on one account from one address, more than 300 requests in a minute from that address, or 10 failed sign-ins in a row, which lock the account from that address for 1 to 5 minutes. Wait for the time the message gives |
 | Pages load but every panel is empty | The token's role cannot see the host groups |
 

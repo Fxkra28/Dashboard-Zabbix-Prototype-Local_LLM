@@ -9,6 +9,16 @@ export default defineConfig({
     // Git ignores the file. It also holds every result, which only the counts are read from.
     reporters: ['default', 'json'],
     outputFile: { json: '.test-counts.json' },
+    // Measured only on request (`npm run test:coverage`). A report for each folder and file, and no threshold: it shows what the tests miss and fails
+    // nothing (IN-85).
+    coverage: {
+      provider: 'v8',
+      reporter: ['text'],
+      reportOnFailure: true,
+      include: ['src/**'],
+      exclude: ['src/__tests__/**'],
+      reportsDirectory: 'coverage',
+    },
     // Route tests mock '../clients/zabbix.js' per file; without isolation a mock from
     // one file would leak into the next through the ESM module cache.
     isolate: true,

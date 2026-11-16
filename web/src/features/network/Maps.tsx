@@ -78,6 +78,7 @@ export default function Maps() {
           data={listQ.data}
           updatedAt={listQ.updatedAt}
           loadingLabel="Loading maps…"
+          onRetry={listQ.reload}
         >
           {(list) =>
             !list.length ? (

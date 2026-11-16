@@ -36,14 +36,14 @@ flowchart TB
     %%  sign-out in another tab, or to a page Back restores after one, so
     %%  an unauthenticated visitor sees the chrome for one round trip.
 
-    %%  The Email report and Schedule dialogs sit on the two SLA pages.
+    %%  The Email report and Schedule dialogs sit on the SLA page.
     %%  An administrator sees them only when GET /api/sli/email says
     %%  email is on; for everyone else the buttons are not drawn.
 
     subgraph W1["1 &middot; Boot"]
         HTML["<b>index.html</b><br>served by nginx from the static build<br>Cache-Control: no-cache"]
         MAIN["<b>main.tsx</b><br>React 18 root"]
-        APP["<b>App.tsx</b><br>BrowserRouter &middot; 19 pages<br>every page is lazy()"]
+        APP["<b>App.tsx</b><br>BrowserRouter &middot; 18 pages<br>every page is lazy()"]
         CHUNK["<b>page chunk</b><br>fetched on first visit only<br>1 to 28 kB &middot; /assets/ cached 1 year"]
 
         HTML --> MAIN --> APP --> CHUNK
@@ -112,7 +112,7 @@ flowchart TB
     PAGE -->|"Dashboard and Problems"| SSE
     PAGE --> EXPLAIN
     PAGE --> ACK
-    PAGE -->|"SLA pages only"| MAILD
+    PAGE -->|"SLA page only"| MAILD
     PAGE --> BOUNDARY
     APICALL --> R401
     APICALL -.-> BFF
@@ -144,4 +144,4 @@ flowchart TB
     class ACK written
     class BFF server
     class HASROLE,R401,GUARD,HIDDEN choice
-%% source-hash: 850068276cf4
+%% source-hash: 5a491d1a4874

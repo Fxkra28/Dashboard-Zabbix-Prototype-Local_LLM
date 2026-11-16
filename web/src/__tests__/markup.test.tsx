@@ -124,7 +124,15 @@ describe('form fields (UX-26)', () => {
     const { container } = render(<MethodToggle value="availability" onChange={() => undefined} />);
     expect(container.querySelector('label')).toBeNull();
     expect(container.querySelector('.field-label')).toHaveTextContent('Method');
-    expect(screen.getByRole('group', { name: 'Calculation method' })).toBeInTheDocument();
+    // The group is named by the words on screen, so that voice control can say them (UX-55, WCAG 2.5.3).
+    expect(screen.getByRole('group', { name: 'Method' })).toBeInTheDocument();
+  });
+
+  it('names the method group by the heading it is given, such as Tables use', () => {
+    const { container } = render(<MethodToggle value="availability" onChange={() => undefined} label="Tables use" />);
+    expect(container.querySelector('.field-label')).toHaveTextContent('Tables use');
+    expect(screen.getByRole('group', { name: 'Tables use' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Calculation method' })).toBeNull();
   });
 });
 

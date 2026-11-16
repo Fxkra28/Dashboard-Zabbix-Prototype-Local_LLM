@@ -128,6 +128,8 @@ export interface SliReport {
   hosts: SliHost[];
   wanPaths: SliPath[];
   web: SliWeb[];
+  /** When the web check figures were taken, in unix seconds, once they are kept for a month that has closed (ADR 0016). Absent while they can still change. */
+  webTakenAt?: number;
   gaps: SliGap[];
   /** Spans declared not measured (SLA_NO_DATA_WINDOWS), treated as hours with no data by both methods. */
   noDataWindows: SliGap[];

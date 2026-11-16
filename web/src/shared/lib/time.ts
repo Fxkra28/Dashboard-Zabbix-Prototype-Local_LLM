@@ -125,6 +125,18 @@ export function formatDate(atMs: number, tz = reportTz): string {
   return fmt.format(new Date(atMs));
 }
 
+const longDayFormats = new Map<string, Intl.DateTimeFormat>();
+
+/** "2 November 2026": the day in `tz` with the month in words, so that nobody reads the month for the day. */
+export function formatLongDate(atMs: number, tz = reportTz): string {
+  let fmt = longDayFormats.get(tz);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-GB', { timeZone: tz, day: 'numeric', month: 'long', year: 'numeric' });
+    longDayFormats.set(tz, fmt);
+  }
+  return fmt.format(new Date(atMs));
+}
+
 const weekdayFormats = new Map<string, Intl.DateTimeFormat>();
 
 /** "Wed, 7 Oct 2026": the day in `tz`, for the wall clock. */

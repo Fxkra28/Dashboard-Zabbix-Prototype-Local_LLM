@@ -33,7 +33,8 @@
 .seg-count {
   margin-left: var(--s-1-5);
   font-size: var(--t-xs);
-  opacity: 0.75;
+  /* A colour of its own: the pair is one the checker computes, and fading the label's colour is not (UX-59). */
+  color: var(--muted);
 }
 
 .range-picker {

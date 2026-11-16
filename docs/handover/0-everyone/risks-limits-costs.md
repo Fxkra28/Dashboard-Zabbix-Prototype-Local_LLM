@@ -10,7 +10,7 @@
 > - Saat ini portal berjalan di satu mesin pada jaringan kantor HCML. Jika mesin itu mati, tidur atau keluar dari jaringan, portal tidak bisa membaca Zabbix. Pemantauan Zabbix sendiri tidak terganggu.
 > - Portal tidak bisa mengumpulkan data, tidak mengubah pemantauan, tidak punya riwayat sendiri, dan tidak bisa melihat lebih jauh dari masa simpan Zabbix.
 > - Biaya nyata ada pada token AI (salinan Claude, dengan batas harian), mesin yang menjalankannya, dan waktu orang yang merawat dua salinan.
-> - Beberapa hal masih terbuka dan daftar lengkapnya ada di tracker, termasuk kunci AI yang ditolak, repositori yang masih publik, dan salinan kedua yang belum memakai kontrol versi.
+> - Beberapa hal masih terbuka dan daftar lengkapnya ada di tracker, termasuk kunci AI yang ditolak, repositori yang masih publik, dan belum pastinya apakah repositori salinan kedua bersifat privat.
 
 ## What can go wrong
 
@@ -30,13 +30,13 @@
 
 - It cannot collect anything. Zabbix collects. If Zabbix does not measure a thing, no page can show it.
 - It cannot change how monitoring works. It can acknowledge and close a problem, and nothing more.
-- It remembers almost nothing. Everything it works out is gone when the server restarts, it keeps no saved views, and it keeps no history of who did what other than the note in Zabbix, the server's log and, for the report email, the name of whoever sent it or set the schedule in the small state file. A closed month's figure is worked out again after each restart. The one thing it keeps is a small file in the hosted copy: the people a report goes to, the monthly schedule and a record of the last 24 sends (the oldest manual one goes first).
+- It remembers almost nothing. Everything it works out is gone when the server restarts, it keeps no saved views, and it keeps no history of who did what other than the note in Zabbix, the server's log and, for the report email, the name of whoever sent it or set the schedule in the small state file. A closed month's figure is worked out again after each restart. It keeps two things: a copy of the server's log, so that a rebuild does not lose it, and, in the hosted copy, a small file with the people a report goes to, the monthly schedule and a record of the last 24 sends (the oldest manual one goes first).
 - It cannot see further back than Zabbix keeps. HCML's policy keeps raw measurements for about a month and hourly averages and events for a year, so a question about two years ago has no answer through this route.
 - It cannot send an alert. The only email it can send is the monthly SLA report, and short notices about a monthly send that failed, was missed or was partly refused, to the people an administrator chooses, when an administrator presses a button or has set the monthly send, and email has been set up.
 
 ## What is still open
 
-The complete list, with the state of each row, is [the tracker](../../../tracker.md). These are the items a non-developer should know about, as of 10 November 2026.
+The complete list, with the state of each row, is [the tracker](../../../tracker.md). These are the items a non-developer should know about, as of 15 November 2026.
 
 - **Goals only partly met.** Telephone and radio path monitoring waits on Zabbix collecting that data. Dashboards by role wait on HCML saying what each role should see. Alerts that combine several triggers are not built. Reports by email, by hand or on a monthly schedule, are built; the schedule has not run on a real first of the month yet, and HCML's own mail cannot be used until its Microsoft 365 administrator helps. See [what HCML provides](what-hcml-provides.md).
 - **The hosted AI key.** The key that the running hosted copy holds was refused by Anthropic on 16 October 2026, so Explain and the Assistant of that copy answer nothing until a valid key is put in its settings. The local-model copy is not affected.

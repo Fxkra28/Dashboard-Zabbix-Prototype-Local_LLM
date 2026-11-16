@@ -487,6 +487,8 @@ export function GraphView({
       data={current}
       updatedAt={q.updatedAt}
       loadingLabel="Loading graph…"
+      // A range that ends now polls and tries again by itself; a past one does not (UX-60).
+      onRetry={live ? undefined : q.reload}
     >
       {(g) => (
         <>

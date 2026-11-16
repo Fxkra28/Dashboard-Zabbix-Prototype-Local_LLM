@@ -45,6 +45,8 @@ const KEY = 'web.test.fail[';
 
 /** Rows of failures when the request does not say. */
 export const WEB_FAILURES_ROWS = 10;
+/** The most a request may ask for. The cached list holds this many and a request cuts it, so every `limit` shares one read (BK-61). */
+export const WEB_FAILURES_MAX_ROWS = 50;
 
 /** The scenario's name out of its item key, which Zabbix quotes when the name has a comma, a bracket or a quote in it. */
 export function scenarioName(key: string): string {
@@ -82,5 +84,8 @@ export async function getWebMonitoring(limit: number): Promise<WebMonitoringResp
   return { generatedAt: now, total: ok + unknown + failures.length, ok, failed: failures.length, unknown, failures: failures.slice(0, limit) };
 }
 
-/** Web monitoring as the route and the warm-up read it. */
-export const webMonitoringView = (limit = WEB_FAILURES_ROWS) => cached(`web-monitoring:${limit}`, 30_000, () => getWebMonitoring(limit), SLOW_VIEW);
+/** Web monitoring as the route and the warm-up read it: read once whatever `limit` is asked, and cut after. */
+export async function webMonitoringView(limit = WEB_FAILURES_ROWS): Promise<WebMonitoringResponse> {
+  const all = await cached('web-monitoring', 30_000, () => getWebMonitoring(WEB_FAILURES_MAX_ROWS), SLOW_VIEW);
+  return { ...all, failures: all.failures.slice(0, limit) };
+}

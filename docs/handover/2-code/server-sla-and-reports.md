@@ -214,17 +214,23 @@ export async function fetchTrendsSliced<T extends { itemid: string }>(
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/sli/events.ts#mapLimit sha=3da1503e1e7c -->
-`server/src/sli/events.ts:153-164`
+<!-- gen:snippet server/src/sli/events.ts#mapLimit sha=fb565ced4276 -->
+`server/src/sli/events.ts:153-170`
 
 ```ts
 export async function mapLimit<I, O>(items: I[], limit: number, fn: (item: I, index: number) => Promise<O>): Promise<O[]> {
   const out = new Array<O>(items.length);
   let next = 0;
+  let failed = false;
   const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
-    while (next < items.length) {
+    while (!failed && next < items.length) {
       const i = next++;
-      out[i] = await fn(items[i], i);
+      try {
+        out[i] = await fn(items[i], i);
+      } catch (err) {
+        failed = true;
+        throw err;
+      }
     }
   });
   await Promise.all(workers);
@@ -235,7 +241,7 @@ export async function mapLimit<I, O>(items: I[], limit: number, fn: (item: I, in
 
 1. A request may return at most `TREND_MAX_ROWS` rows, counted as items times hour marks: 35 items over a 31-day month, which is known to work against HCML's Zabbix. A year of the same items in one request ran Zabbix's PHP out of memory, and the API reports that as a bare "HTTP 500".
 2. `trendSlices` cuts the work into chunks of items and into windows that start and end on hour marks and do not overlap, so every trend row, which is stamped on the hour, falls in exactly one. A request that fits is sent whole.
-3. `fetchTrendsSliced` sends the slices through `mapLimit`, which runs at most `parallel` of them at once (`SLI_ZBX_PARALLEL`, 4 by default) and returns the results in input order.
+3. `fetchTrendsSliced` sends the slices through `mapLimit`, which runs at most `parallel` of them at once (`SLI_ZBX_PARALLEL`, 4 by default) and returns the results in input order. After one slice fails, no worker starts another: the failure is thrown, and the slices still waiting are never sent to a Zabbix that has just failed (BK-64).
 4. `onRows` takes each request's rows as they arrive and keeps nothing, so a caller that only adds them up never holds them all. A year of hourly rows for a few hundred items is millions of objects.
 
 Tests: `sli-engine.test.ts`.
@@ -245,7 +251,7 @@ Tests: `sli-engine.test.ts`.
 `server/src/sli/engine.ts`. Replay one trigger's history across the window.
 
 <!-- gen:snippet server/src/sli/engine.ts#initialState sha=8b2b87698a8c -->
-`server/src/sli/engine.ts:206-216`
+`server/src/sli/engine.ts:208-218`
 
 ```ts
 export function initialState(
@@ -263,7 +269,7 @@ export function initialState(
 <!-- /gen -->
 
 <!-- gen:snippet server/src/sli/engine.ts#intervalsFor sha=f0b5907906b6 -->
-`server/src/sli/engine.ts:170-193`
+`server/src/sli/engine.ts:172-195`
 
 ```ts
 export function intervalsFor(
@@ -302,7 +308,7 @@ export function intervalsFor(
 `server/src/sli/engine.ts`. Two judgements about data.
 
 <!-- gen:snippet server/src/sli/engine.ts#wasMeasured sha=212711fcefd8 -->
-`server/src/sli/engine.ts:251-254`
+`server/src/sli/engine.ts:253-256`
 
 ```ts
 export function wasMeasured(items: { state?: string; lastclock?: string }[], hostDisabled: boolean): boolean {
@@ -313,7 +319,7 @@ export function wasMeasured(items: { state?: string; lastclock?: string }[], hos
 <!-- /gen -->
 
 <!-- gen:snippet server/src/sli/engine.ts#coveredFromTrends sha=59962f9b7fce -->
-`server/src/sli/engine.ts:260-269`
+`server/src/sli/engine.ts:262-271`
 
 ```ts
 export function coveredFromTrends(
@@ -408,7 +414,7 @@ Tests: `sli-maintenance.test.ts`.
 `server/src/sli/engine.ts`. The one function that makes a report. It is 254 lines, so it is quoted in parts.
 
 <!-- gen:snippet server/src/sli/engine.ts#computeSli lines=9-28 sha=ae21acdaf1f8 -->
-`server/src/sli/engine.ts:561-580` (lines 9 to 28 of computeSli)
+`server/src/sli/engine.ts:563-582` (lines 9 to 28 of computeSli)
 
 ```ts
 const { from, to } = req.month
@@ -440,7 +446,7 @@ const triggerNames = strict ? config.sla.availabilityTriggers : config.sla.repor
 4. `triggerNames` is the list of triggers that count, which is the difference between the two profiles.
 
 <!-- gen:snippet server/src/sli/engine.ts#computeSli lines=30-37 sha=ae21acdaf1f8 -->
-`server/src/sli/engine.ts:582-589` (lines 30 to 37 of computeSli)
+`server/src/sli/engine.ts:584-591` (lines 30 to 37 of computeSli)
 
 ```ts
 // HCML's report lists too.
@@ -455,7 +461,7 @@ const triggers = await counted<ZTrigger[]>(counter, 'trigger.get', {
 <!-- /gen -->
 
 <!-- gen:snippet server/src/sli/engine.ts#computeSli lines=49-81 sha=ae21acdaf1f8 -->
-`server/src/sli/engine.ts:601-633` (lines 49 to 81 of computeSli)
+`server/src/sli/engine.ts:603-635` (lines 49 to 81 of computeSli)
 
 ```ts
   hostids.length
@@ -500,7 +506,7 @@ counter.calls++;
 4. In the strict profile, `icmpCoverage` then reads the trends of the ping items and works out, for each host, the hours in which it collected. It fills the last hour or two, which have no trends yet, from raw history, bounded to six hours; when trends stopped being written for longer than that, only the hour in progress is read, so that hour is not counted as no data. It also finds the estate's gaps: hours in which fewer than 10 percent of the items that collected anything collected data. A gap is the estate's, not a host's, so a host is not blamed for an hour nobody collected in.
 
 <!-- gen:snippet server/src/sli/engine.ts#computeSli lines=122-153 sha=ae21acdaf1f8 -->
-`server/src/sli/engine.ts:674-705` (lines 122 to 153 of computeSli)
+`server/src/sli/engine.ts:676-707` (lines 122 to 153 of computeSli)
 
 ```ts
 
@@ -539,7 +545,7 @@ for (const [hostid, meta] of hostMeta) {
 <!-- /gen -->
 
 <!-- gen:snippet server/src/sli/engine.ts#computeSli lines=154-178 sha=ae21acdaf1f8 -->
-`server/src/sli/engine.ts:706-730` (lines 154 to 178 of computeSli)
+`server/src/sli/engine.ts:708-732` (lines 154 to 178 of computeSli)
 
 ```ts
 const denominator = strict ? coveredSec : measurable;
@@ -585,7 +591,7 @@ Tests: `sli-engine.test.ts` for the arithmetic, and `sli-cache.test.ts` for the 
 `server/src/sli/engine.ts`. Pairs the legs of a redundant WAN path.
 
 <!-- gen:snippet server/src/sli/engine.ts#buildWanPaths sha=f10664c15cd0 -->
-`server/src/sli/engine.ts:830-874`
+`server/src/sli/engine.ts:832-876`
 
 ```ts
 function buildWanPaths(
@@ -709,7 +715,7 @@ const hostNode = (h: SliHost): DerivedServiceNode => {
 1. The tree is the estate at the root, then "Business services" (the web checks and the `WEB :` and `SERVER :` hosts), then one node for each site, then each site's device classes, then the hosts. In a site, the WAN links come first and their legs are grouped into their paths. Hosts with no site go under "Unassigned".
 2. `hostNode` makes the leaf for a host. Its status is the severity of its worst open problem, or -1 when it has none, and it carries the host's SLA for the month and its data status.
 3. Every group node takes its figure from `aggregate` over its hosts, and `finish` fills in the worst status below it, the number of descendants, and the top five problems of its children when it has none of its own.
-4. The tree is the root with its totals, and says where it comes from: `source: 'derived'`, the month, the profile, the target, whether the month is closed, and the gaps. `getDerivedServices`, at the end of the file, reads the month's report and the open problems and builds it.
+4. The tree is the root with its totals, and says where it comes from: `source: 'derived'`, the month, the profile, the target, whether the month is closed, and the gaps. `getDerivedServices`, at the end of the file, reads the month's report and the open problems and builds it. It is cached for every reader, so the month's read follows the fetch's own signal and not the signal of the reader who started it: a reader who leaves while the month waits for a place does not take the read from one who stays (BK-77).
 
 Tests: `api-hygiene.test.ts` checks its shape against the API description.
 
@@ -719,11 +725,11 @@ Tests: `api-hygiene.test.ts` checks its shape against the API description.
 
 `server/src/services/sli.ts`. The one place a report is asked for, so that every caller shares it.
 
-<!-- gen:snippet server/src/services/sli.ts#getMonthlySli sha=0e3319c525b3 -->
-`server/src/services/sli.ts:35-49`
+<!-- gen:snippet server/src/services/sli.ts#getMonthlySli sha=0aa68f4f09a2 -->
+`server/src/services/sli.ts:36-55`
 
 ```ts
-export function getMonthlySli(month: string, profile: SliProfile): Promise<SliReport> {
+export function getMonthlySli(month: string, profile: SliProfile, signal?: AbortSignal): Promise<SliReport> {
   const { from, to } = monthBounds(month, config.sla.timezone);
   const now = Math.floor(Date.now() / 1000);
   // Before the gate: a month nobody can report is refused at once, and does not wait for a place behind cold months (BK-50).
@@ -734,20 +740,37 @@ export function getMonthlySli(month: string, profile: SliProfile): Promise<SliRe
   const closed = phase === 'closed';
   const ttl = closed ? 86_400_000 : 300_000;
   const key = `derived-sli:${profile}:${month}:${phase}`;
-  // A closed month costs a full recompute and cannot change: pinned, so a run
+  // The web check figures of a closed month are kept as first read (closedWeb.ts, BK-60); a month still running, or settling, is not.
+  const compute = async () => {
+    const report = await computeSli({ month, profile });
+    return closed ? freezeWeb(report) : report;
+  };
+  // A closed month costs a full recompute and changes rarely: pinned, so a run
   // of graph keys cannot push it out of the cache.
-  return cached(key, ttl, () => sliReads.run(() => computeSli({ month, profile })), { staleMs: ttl, staleIfError: true, pin: closed });
+  return cached(key, ttl, (f) => sliReads.run(compute, f), { staleMs: ttl, staleIfError: true, pin: closed, signal });
 }
 ```
 <!-- /gen -->
 
-1. A closed month cannot change once Zabbix has had ten minutes (`SETTLE_SECONDS`) for its last values, so its report is kept a day and pinned, which keeps a run of graph keys from pushing it out of the cache. The current month moves, and so do the ten minutes after it, so those are kept five minutes. A report that is not cached is computed behind `sliReads`, a gate of two (`SLI_AT_ONCE`), so that a caller who asks for every month of both profiles at once starts two reads and the rest wait (BK-50); a cached report does not wait, and two callers for one key still share one computation.
+1. A closed month stops moving once Zabbix has had ten minutes (`SETTLE_SECONDS`) for its last values, with two exceptions: an edited maintenance period changes past months, and the readings behind the web checks age out (the engine's own floor is 31 days, `historyFloor`). The web check figures are the exception to that, and are kept (below). So its report is kept a day, not for ever, and pinned, which keeps a run of graph keys from pushing it out of the cache. The current month moves, and so do the ten minutes after it, so those are kept five minutes. A report that is not cached is computed behind `sliReads`, a gate of two (`SLI_AT_ONCE`), so that a caller who asks for every month of both profiles at once starts two reads and the rest wait (BK-50); a cached report does not wait, and two callers for one key still share one computation. A caller whose reader leaves while the read waits for a place drops it from the line, unless another caller still waits for the same month (BK-59). The report file passes its reader's signal to both of its reads, and the service tree passes the signal of its own fetch, which fires only when every reader of the tree has gone, since the tree is cached for all of them (BK-77).
 2. For as long again after that, the old report is answered at once while a new one is computed in the background, and if the new one fails the old one is served. A report takes seconds to compute, so nobody should wait for it twice.
 3. The key holds the phase as well as the month: `open`, `settling` (the month has ended and Zabbix is still getting its last values, which the monthly send waits for) or `closed`. A report computed in the first two must not be kept for a day as that month's final figure.
 4. A month that cannot be reported, one that has not started or is older than about a year, is refused with a 400 before the gate (`checkPeriodStart`), so it never waits for a place behind cold months. `forgetMonthlySli` drops what is kept for a month, in both methods and every phase, and the email path calls it when a report came back empty, so the next try reads Zabbix again (BK-51).
 5. `parseProfile` in the same file turns the `profile` query value into a profile, or the default, or a 400.
+6. The report of a closed month passes through `freezeWeb` before it is cached, and only then: the web check figures of the strict method are kept and given back, with `webTakenAt` (ADR-0016, BK-60).
 
 Tests: `sli-cache.test.ts` and `sla-summary.test.ts`.
+
+### freezeWeb and closedWebStore
+
+`server/src/services/closedWeb.ts` and `server/src/services/closedWebStore.ts`. The web check figures of a closed month change after it has closed, because the readings behind them age out of Zabbix. Since 16 November 2026 (ADR-0016, BK-60) they are kept as they were when first read.
+
+1. `freezeWeb` is called with the report of a month that has closed and settled. For the strict method it looks for the month in the store: when it is there, the kept figures and the time they were taken (`webTakenAt`) replace the engine's, and everything else in the report is the engine's own; when it is not, it keeps the figures it has and says when. HCML's method has no web checks and is left alone, and a month still running is never kept.
+2. The store is the file `closed-months.json` beside the state in `PORTAL_STATE_DIR`: at most 36 months, written whole to a temporary file and renamed, and read with the same care as the state (a file it cannot read, or of another version, is put aside, and a bad month is dropped). A store with no folder keeps nothing, since figures in memory would not outlive a restart; the report is then as the engine made it and the page keeps its older sentence.
+3. `createClosedMonthCapture` checks once an hour, and two minutes after start-up, whether the month that has just closed is kept, and reads it if not, so that the figures kept are those of the day it closed and not of whoever opens the page first. A failed read is tried again at the next check.
+4. The page and the report files say when: "The web check figures of this month are those taken on ...". The hosts' own figures are not kept, so a corrected maintenance period still corrects them.
+
+Tests: `closed-web-store.test.ts`, `closed-web-freeze.test.ts` and `export-sla-report.test.ts`.
 
 ### fileFor
 
@@ -860,26 +883,34 @@ return { incidents, from, to, truncated: ended.partial };
 
 `server/src/services/availability.ts`. How much of a window each host spent in a problem state.
 
-<!-- gen:snippet server/src/services/availability.ts#getDerivedAvailabilityReport sha=c3a143da5724 -->
-`server/src/services/availability.ts:166-175`
+<!-- gen:snippet server/src/services/availability.ts#getDerivedAvailabilityReport sha=7c9e366f7aa0 -->
+`server/src/services/availability.ts:168-185`
 
 ```ts
-export function getDerivedAvailabilityReport(opts: { days: number; month?: string; profile: SliProfile; minSeverity: number }) {
-  const { days, month, profile, minSeverity } = opts;
-  if (month) return getDerivedAvailability({ days, month, profile, minSeverity });
-  return cached(
+export async function getDerivedAvailabilityReport(opts: {
+  days: number;
+  month?: string;
+  profile: SliProfile;
+  minSeverity: number;
+  signal?: AbortSignal;
+}) {
+  const { days, month, profile, minSeverity, signal } = opts;
+  if (month) return getDerivedAvailability({ days, month, profile, minSeverity, signal });
+  const report = await cached(
     `avail:${profile}:${days}`,
     REPORT_TTL,
-    () => heavy.run(() => getDerivedAvailability({ days, profile, minSeverity })),
-    staleReport(REPORT_TTL),
+    (f) => heavy.run(() => getDerivedAvailability({ days, profile, minSeverity }), f),
+    { ...staleReport(REPORT_TTL), typed: true, signal },
   );
+  // The figures do not depend on the floor, so one read serves every floor; each answer says the floor its own ask named (BK-58).
+  return { ...report, minSeverity };
 }
 ```
 <!-- /gen -->
 
 1. There are two bases. `availability`, the default, goes through the SLA engine: a device is down while its ICMP triggers are in problem, and hours with no data are left out. A month is served from `getMonthlySli`. A rolling window of days is computed by `computeSli` with a `from` and a `to`.
 2. `all-problems` is the original report. Any open problem at or above the severity floor counts as downtime, read through `fetchIncidents`, with the overlaps merged so none is counted twice. The floor is `AVAILABILITY_MIN_SEVERITY`, 2 by default, because HCML's estate raises "High ICMP ping loss" at severity 2 on essentially every trigger.
-3. A rolling-window answer is kept `REPORT_TTL`, two minutes, through the `heavy` gate and with `staleReport`. A month uses the cache of the engine.
+3. A rolling-window answer is kept `REPORT_TTL`, two minutes, through the `heavy` gate and with `staleReport`, under a key made of the method and the days, which is `typed`: a viewer may ask for any number of days, so at most 150 such entries are kept and they go first (BK-70). The severity floor is not in the key, because the derived figures do not use it: one read serves every floor, and each answer says the floor its own ask named (BK-58). A reader who leaves while the read waits for a place drops it from the line (BK-59). A month uses the cache of the engine.
 
 Tests: `incidents-before-window.test.ts`.
 
@@ -914,16 +945,16 @@ if (stillOpen && Math.max(longest, openAge) > CHRONIC_SECONDS) flags.push('chron
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/noise.ts#getNoiseReport sha=cb48a2d3342c -->
+<!-- gen:snippet server/src/services/noise.ts#getNoiseReport sha=a8001040f3e6 -->
 `server/src/services/noise.ts:149-157`
 
 ```ts
-export async function getNoiseReport(days: number, minSeverity: number, top: number) {
+export async function getNoiseReport(days: number, minSeverity: number, top: number, signal?: AbortSignal) {
   const report = await cached(
     `noise:${days}:${minSeverity}`,
     REPORT_TTL,
-    () => heavy.run(() => getNoise(days, minSeverity)),
-    staleReport(REPORT_TTL),
+    (f) => heavy.run(() => getNoise(days, minSeverity), f),
+    { ...staleReport(REPORT_TTL), typed: true, signal },
   );
   return topNoise(report, top);
 }
@@ -933,7 +964,7 @@ export async function getNoiseReport(days: number, minSeverity: number, top: num
 1. Each trigger gets its incidents from `fetchIncidents`, and then its median duration, which is the median and not the mean so that one long outlier does not hide forty short firings, the count of short ones, the share that were acknowledged, and its longest duration. The longest is found with a loop and not with `Math.max(...list)`, which throws at about 125,000 arguments: one trigger that flaps every minute for three months would otherwise turn the whole report into a 500.
 2. Three flags say what to look at. `flapping` is `NOISE_MIN_COUNT` (5) or more firings with a median under `NOISE_SHORT_SECONDS` (300). `unactioned` is the same count with none acknowledged. `chronic` is a trigger still open for more than a day, whether by its longest incident or by the real age of the open one.
 3. The triggers are sorted by count and then by total duration, and the report adds a Pareto line: how much of all the alerts the loudest five produce.
-4. `getNoiseReport` keeps the full report once for each pair of days and severity, so `top` only cuts what is sent, through `topNoise`. It runs through the `heavy` gate and with `staleReport`.
+4. `getNoiseReport` keeps the full report once for each pair of days and severity, so `top` only cuts what is sent, through `topNoise`. The key is `typed`, since a viewer may ask for any days and severity: at most 150 such entries are kept and they go first (BK-70). It runs through the `heavy` gate and with `staleReport`, and a reader who leaves while it waits for a place drops it from the line (BK-59).
 
 ### getAgingReport
 

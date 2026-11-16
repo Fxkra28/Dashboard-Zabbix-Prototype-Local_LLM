@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { api } from '../../api';
-import Availability from './Availability';
 import Sla from './Sla';
 import type { AvailabilityReport, SliGroup, SliReport } from '../../types';
 
@@ -95,12 +94,14 @@ describe('the SLA page headline cards', () => {
   });
 });
 
-describe('the Availability page headline cards', () => {
+describe('the headline cards of a rolling window on the SLA page', () => {
   it('print a missed overall and category figure as they are, not as the 99% target', async () => {
+    vi.spyOn(api, 'slaSource').mockResolvedValue({ real: false, slas: 0, services: 0 } as never);
     vi.spyOn(api, 'availability').mockResolvedValue(availability);
+    window.history.replaceState(null, '', '/sla?month=d7');
     render(
       <BrowserRouter>
-        <Availability />
+        <Sla />
       </BrowserRouter>,
     );
     await screen.findByText('Overall · Strict');

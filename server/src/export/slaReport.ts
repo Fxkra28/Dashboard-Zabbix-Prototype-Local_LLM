@@ -9,13 +9,18 @@ import type { BarChart, Cell, Kpi, Note, ReportDoc, Table, Tone } from './types.
  * config and no clock but the one it is handed, so the same two reports always
  * give the same document. The wording is the SLA page's (features/sla/Sli.tsx
  * and features/sla/Sla.tsx), so a report and the screen it came from say the same
- * thing; export-sla-report.test.ts fails if a copied sentence drifts.
+ * thing; export-sla-report.test.ts fails if one of the three copied constants below drifts.
  */
 
 const NO_DATA = 'No data';
 
 /** Copied from web/src/features/sla/Sli.tsx: the browser bundle cannot be imported here. */
-export const DERIVED_BANNER = 'Derived from ICMP availability triggers: Zabbix has no services configured';
+export const DERIVED_SLA_BANNER = 'Derived from ICMP availability triggers, not from Zabbix’s own SLAs';
+export const WEB_AGING_NOTE =
+  'The web check figures of a month that has closed can change later, as the readings behind them age out, and some can turn to No data.';
+/** Around the date the figures of a closed month were taken, when they are kept (ADR 0016): copied from web/src/features/sla/Sli.tsx like the others. */
+export const WEB_KEPT_NOTE_BEFORE = 'The web check figures of this month are those taken on';
+export const WEB_KEPT_NOTE_AFTER = 'and kept as they were. Readings that had aged out by then are not counted.';
 export const METHOD_NOTE =
   'HCML’s report counts only high ping loss, so a device that is completely down still counts as up; ' +
   'the strict figure counts unreachable devices and leaves out hours with no collected data.';
@@ -310,12 +315,18 @@ function pathsTable(strict: SliReport, style: ReportStyle): Table {
   };
 }
 
-function webTable(strict: SliReport, style: ReportStyle): Table {
+/** Of a month that has closed: when its figures were taken and that they are kept, else that they can still change. Nothing for a month still running. */
+function webNote(strict: SliReport, at: Clock, d: DateStyle): string {
+  if (strict.webTakenAt !== undefined) return ` ${WEB_KEPT_NOTE_BEFORE} ${dateText(at(strict.webTakenAt), d)}, ${WEB_KEPT_NOTE_AFTER}`;
+  return strict.closed ? ` ${WEB_AGING_NOTE}` : '';
+}
+
+function webTable(strict: SliReport, style: ReportStyle, at: Clock): Table {
   const target = strict.target;
   return {
     title: 'Web checks',
     sheet: 'Web checks',
-    caption: 'Strict method only: HCML’s report method does not measure web checks.',
+    caption: `Strict method only: HCML’s report method does not measure web checks.${webNote(strict, at, style.date)}`,
     columns: [
       { header: 'Scenario', kind: 'text', weight: 6 },
       { header: 'SLA (strict)', kind: 'percent', weight: 2 },
@@ -470,7 +481,7 @@ function computedNote(strict: SliReport, hcml: SliReport, at: Clock, d: DateStyl
   const s = strict.basis;
   const h = hcml.basis;
   const lines = [
-    `${DERIVED_BANNER}. Computed in the portal from each device’s ICMP triggers, monthly in ${strict.timezone} time; nothing is written to Zabbix.`,
+    `${DERIVED_SLA_BANNER}. Computed in the portal from each device’s ICMP triggers, monthly in ${strict.timezone} time; nothing is written to Zabbix.`,
     `Strict method: a device is down while any of these triggers is in problem: ${s.triggers.join(', ')}. HCML’s method counts only ${h.triggers.join(', ')}.`,
     `Hours in which nothing was collected are ${byMethods(GAP_POLICY[s.gapPolicy], GAP_POLICY[h.gapPolicy])}.`,
     `A device with too little collected data is ${byMethods(NO_DATA_POLICY[s.noDataPolicy], NO_DATA_POLICY[h.noDataPolicy])}.`,
@@ -522,7 +533,7 @@ export function buildSlaReportDoc(
       groupTable('By site', 'Site', strict, hcml, (r) => r.sites, style),
       deviceTable(strict, hcml, style),
       pathsTable(strict, style),
-      webTable(strict, style),
+      webTable(strict, style, at),
       neverMeasuredTable(strict),
     ],
     notes: [readNote(strict, style), computedNote(strict, hcml, at, d)],

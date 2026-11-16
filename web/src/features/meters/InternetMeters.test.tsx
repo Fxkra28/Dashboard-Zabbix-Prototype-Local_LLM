@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { api } from '../../api';
+import { resetAuthProbe } from '../../shared/hooks/useAuth';
+import type { Role } from '../../types';
 import InternetMeters from './InternetMeters';
 import { useMeters } from './useMeters';
 import { meter, response, without } from '../../__tests__/meters';
@@ -9,6 +11,12 @@ import { meter, response, without } from '../../__tests__/meters';
 /** The Internet traffic section: what it asks for, and what it says when the dashboard answers well, badly or not at all. */
 
 afterEach(() => vi.restoreAllMocks());
+
+/** Who is signed in: the role decides whether a setting's name is shown (UX-53). */
+const signedInAs = (role: Role) => {
+  resetAuthProbe();
+  vi.spyOn(api, 'me').mockResolvedValue({ authEnabled: true, user: { name: 'x', role }, expiresIn: 3600 });
+};
 
 /** The Dashboard holds the request (useMeters.ts) and hands it to the section; so does this. */
 function Held({ page }: { page?: { index: number; pages: number } }) {
@@ -65,12 +73,24 @@ describe('InternetMeters', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it('says what to set when Zabbix has no dashboard of that name', async () => {
+  it('says what to set when Zabbix has no dashboard of that name, to an administrator, who can set it', async () => {
+    signedInAs('admin');
     vi.spyOn(api, 'netMeters').mockResolvedValue(response([], { found: false, dashboard: 'Global view' }));
     show();
     expect(await screen.findByText(/no dashboard named “Global view”/)).toBeInTheDocument();
-    expect(screen.getByText(/INTERNET_METERS_DASHBOARD/)).toBeInTheDocument();
+    expect(await screen.findByText(/INTERNET_METERS_DASHBOARD/)).toBeInTheDocument();
+    expect(screen.queryByText(/Ask the portal admin/)).toBeNull();
     expect(screen.queryByRole('list')).toBeNull();
+  });
+
+  // A wall screen or an operator cannot set a server setting, so the page tells them whom to ask and keeps the name out of their sight.
+  it.each<Role>(['wall', 'operator'])('tells %s to ask the portal admin, and shows no setting name', async (role) => {
+    signedInAs(role);
+    vi.spyOn(api, 'netMeters').mockResolvedValue(response([], { found: false, dashboard: 'Global view' }));
+    show();
+    expect(await screen.findByText(/no dashboard named “Global view”/)).toBeInTheDocument();
+    expect(await screen.findByText(/Ask the portal admin which Zabbix dashboard holds the gauges/)).toBeInTheDocument();
+    expect(screen.queryByText(/INTERNET_METERS_DASHBOARD/)).toBeNull();
   });
 
   it('says so when the dashboard has no gauge widgets', async () => {

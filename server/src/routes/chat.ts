@@ -23,7 +23,7 @@ export async function chatRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(202).send({ warming: true });
   });
 
-  // Limited per user, and a hosted answer is charged to the daily token budget (limits.ts).
+  // Limited per user, and an answer from the hosted API or a model outside the network is charged to the daily token budget (limits.ts).
   app.post('/api/chat', { schema: { body: chatBody }, preHandler: aiGuard('chat') }, async (req, reply) => {
     if (!config.ai.enabled) {
       return reply.code(503).send({ error: 'ai_disabled', message: 'AI not configured' });

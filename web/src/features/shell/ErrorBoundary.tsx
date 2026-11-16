@@ -21,9 +21,14 @@ export default class ErrorBoundary extends Component<{ children: ReactNode }, { 
     if (!error) return this.props.children;
     return (
       <div className="panel">
-        <div className="state error">
+        {/* An alert, so a screen reader says the page broke (UX-55). The engine's own words are for an administrator, and kept closed. */}
+        <div className="state error" role="alert">
           <div className="state-title">This page hit an error</div>
-          <div className="mono state-detail">{error.message || String(error)}</div>
+          <div className="state-hint">The page could not be drawn.</div>
+          <details className="state-hint">
+            <summary>Technical detail</summary>
+            <div className="mono state-detail">{error.message || String(error)}</div>
+          </details>
           <div className="muted state-hint">Other pages still work. Reloading fetches the latest version of the portal.</div>
           <button className="btn state-action" onClick={() => window.location.reload()}>
             Reload

@@ -45,7 +45,7 @@ Today the portals run on one developer's Mac on HCML's office network, which has
 
 HCML's Zabbix answers small questions in about a tenth of a second and large ones in tens of seconds. The cause measured on 29 October 2026 is its database server: the disk was busy 87 percent of the time all week, and the database programs used about 3 of 64 gigabytes of memory, with the database settings left at the defaults of the operating system. The portal now asks Zabbix for less and keeps what it reads, and it shows an older copy, saying how old it is, while a new one is built. What remains is Zabbix's own speed, and only HCML's IT team can change that. A request with the details is kept outside the repository.
 
-The first visit to each page right after the portal starts is the slow one, until the portal has read its main views once, which takes four to six minutes (about four on 30 October, six on 2 November). On 30 October 2026, opening all 19 pages for the first time right after a start took about four and a half minutes in all, the slowest page about a minute. A few minutes later the same round took half a minute.
+The first visit to each page right after the portal starts is the slow one, until the portal has read its main views once, which takes four to six minutes (about four on 30 October, six on 2 November). On 30 October 2026, opening every page for the first time right after a start took about four and a half minutes in all, the slowest page about a minute. A few minutes later the same round took half a minute.
 
 ## Goals that wait on HCML
 

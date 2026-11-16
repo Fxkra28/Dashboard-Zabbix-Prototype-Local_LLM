@@ -2,6 +2,7 @@ import type { FastifyRequest } from 'fastify';
 import type { OnUsage } from '../clients/ai.js';
 import { chargeTo, type AiKind } from '../clients/limits.js';
 import { config } from '../core/config.js';
+import { Cancelled } from '../core/gate.js';
 
 /**
  * Who used what. Sign-in and write-back already name the person; these lines name who asked the AI and who
@@ -19,7 +20,7 @@ export type AiOutcome = 'answered' | 'not_found' | 'failed' | 'aborted';
 
 /**
  * One use of the AI, charged to the daily budget as it finishes and logged once when it ends. `tokens` is
- * what the hosted API billed: 0 for an answer from the cache and for a local model.
+ * what the hosted API or a model outside the network billed: 0 for an answer from the cache and for a model on this machine.
  */
 export function aiUse(req: FastifyRequest, kind: AiKind) {
   const charge = chargeTo(req);
@@ -47,7 +48,8 @@ export function aiUse(req: FastifyRequest, kind: AiKind) {
         done(outcomeOf(result));
         return result;
       } catch (err) {
-        done('failed');
+        // A reader who left (BK-59, BK-67) is not a model that failed.
+        done(err instanceof Cancelled ? 'aborted' : 'failed');
         throw err;
       }
     },

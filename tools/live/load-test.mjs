@@ -1,8 +1,11 @@
 // Closed-loop load test of read endpoints: N clients, each firing its next request as soon as the last one ends.
 const BASE = process.argv[2]; const CLIENTS = Number(process.argv[3] || 20); const SECONDS = Number(process.argv[4] || 20);
+// The month that has just closed in Asia/Jakarta (UTC+7, no daylight saving), as signedin_check.py works it out: the portal refuses a month more than about 400 days back,
+// so a fixed one stops working. MONTH names another.
+const MONTH = process.env.MONTH || (() => { const d = new Date(Date.now() + 7 * 3600e3); const m = d.getUTCMonth(); return m === 0 ? `${d.getUTCFullYear() - 1}-12` : `${d.getUTCFullYear()}-${String(m).padStart(2, '0')}`; })();
 // A host to ask Latest data about: HOSTID, or the first host the BFF lists.
 const HOSTID = process.env.HOSTID || (await (await fetch(BASE + '/api/hosts')).json())[0]?.hostid;
-const MIX = ['/api/problems', '/api/hosts/overview', '/api/sites', '/api/stats', '/api/freshness', '/api/sli?month=2026-08&profile=hcml-report', `/api/latest?hostid=${HOSTID}&page=1&pageSize=100`, '/api/net/devices', '/api/links', '/api/reports/problems-by-group', '/api/graph?itemids=63855&month=2026-09', '/api/reports/noise?days=30&top=100'];
+const MIX = ['/api/problems', '/api/hosts/overview', '/api/sites', '/api/stats', '/api/freshness', `/api/sli?month=${MONTH}&profile=hcml-report`, `/api/latest?hostid=${HOSTID}&page=1&pageSize=100`, '/api/net/devices', '/api/links', '/api/reports/problems-by-group', `/api/graph?itemids=63855&month=${MONTH}`, '/api/reports/noise?days=30&top=100'];
 const lat = []; let errors = 0; const codes = {}; const end = Date.now() + SECONDS * 1000;
 // warm every endpoint once so the figures are of the cached path, then measure
 for (const u of MIX) await fetch(BASE + u, { headers: { 'Accept-Encoding': 'gzip' } }).then((r) => r.arrayBuffer());

@@ -83,6 +83,36 @@ describe('Tabs', () => {
     expect(tab('Overview')).toHaveFocus();
   });
 
+  // UX-50: Alt, Ctrl or Cmd with an arrow is the browser's Back and Forward, as FR-44 made it on the SLA tabs.
+  it.each([
+    ['Alt', '{Alt>}{ArrowRight}{/Alt}'],
+    ['Alt', '{Alt>}{ArrowLeft}{/Alt}'],
+    ['Control', '{Control>}{ArrowRight}{/Control}'],
+    ['Meta', '{Meta>}{ArrowLeft}{/Meta}'],
+    ['Alt', '{Alt>}{Home}{/Alt}'],
+    ['Meta', '{Meta>}{End}{/Meta}'],
+  ])('does not take %s with an arrow, Home or End: the tab stays, and the browser gets the key (%s)', async (_modifier, keys) => {
+    const onChange = vi.fn();
+    const user = userEvent.setup();
+    const seen: boolean[] = [];
+    render(<Harness onChange={onChange} />);
+    // keydown reaches the document after the tab list: the browser's own shortcut is the default action, which preventDefault would cancel.
+    document.addEventListener('keydown', (e) => seen.push(e.defaultPrevented), { once: true });
+    tab('Overview').focus();
+    await user.keyboard(keys);
+    expect(onChange).not.toHaveBeenCalled();
+    expect(tab('Overview')).toHaveFocus();
+    expect(seen).toEqual([false]);
+  });
+
+  it('still walks with a plain arrow after a modified one', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    tab('Overview').focus();
+    await user.keyboard('{Alt>}{ArrowRight}{/Alt}{ArrowRight}');
+    expect(tab('Internet traffic')).toHaveFocus();
+  });
+
   it('leaves the other keys alone (Enter and Space press the focused tab, as for any button)', async () => {
     const onChange = vi.fn();
     const user = userEvent.setup();

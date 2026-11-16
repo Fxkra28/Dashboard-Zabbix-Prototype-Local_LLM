@@ -31,7 +31,7 @@ Four things about the Docker path that are easy to get wrong, and were:
    it is one of the two values published in this repo or shorter than 32 bytes. An authenticated
    portal signing tokens with a value published in this repo looks perfectly healthy while anyone
    can forge an admin token, so this fails loudly rather than warning. `PORTAL_PASS` has no default
-   either (it was `admin`), and the BFF also exits while any user's password is empty or `admin`.
+   either (it was `admin`), and the BFF also exits while any user's password is empty, is `admin`, or is a plain password shorter than 8 characters.
 2. `ZBX_URL` defaults to HCML's Zabbix, `https://zabbix.hcml.co.id/zabbix/api_jsonrpc.php`. From
    HCML's office network that name leads to a Zero Trust gateway that refuses the portal, so a
    `docker-compose.override.yml`, kept on the machine and out of git, maps it to Zabbix's LAN
@@ -58,14 +58,14 @@ Verify the chain any time:
 ```bash
 curl localhost:4000/api/health                  # BFF alive (dev)
 curl localhost:8082/bff/api/health              # browser → nginx → BFF (prod)
-curl -sI localhost:8082/reports/availability    # 200 = SPA fallback works on deep links
+curl -sI localhost:8082/sla                     # 200 = SPA fallback works on deep links
 ```
 
 Beyond localhost, and backups. The Docker path speaks plain HTTP and publishes only on
 `127.0.0.1`. To reach the portal from another machine, put TLS in front of it and set `WEB_ORIGIN`
 to the `https://` address and `TRUST_PROXY=2`:
 [`docs/operations/tls.md`](../operations/tls.md) has an nginx, a Caddy and a Traefik recipe, with
-HSTS. The portal's only state is its `.env` files:
+HSTS. The portal's only state is its `.env` files, apart from the web check figures of closed months kept on a volume (`portal-state`) and a copy of the server's log kept on another (`portal-logs`):
 [`docs/operations/backup-and-restore.md`](../operations/backup-and-restore.md) says how to keep an
 encrypted copy and how to restore from it, and `deploy/settings.example` lists every non-secret
 setting with its default.

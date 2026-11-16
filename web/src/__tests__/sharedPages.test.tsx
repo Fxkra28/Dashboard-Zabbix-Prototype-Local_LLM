@@ -44,13 +44,13 @@ describe('the pager on Latest data', () => {
     const user = userEvent.setup();
     open(<LatestData />, '/latest?hostid=1&page=2');
     expect(await screen.findByText('Page 2 of 3')).toHaveClass('muted');
-    expect(screen.getByRole('button', { name: '‹ Prev' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '‹ Prev' })).not.toHaveAttribute('aria-disabled');
 
     await user.click(screen.getByRole('button', { name: 'Next ›' }));
     expect(query().get('page')).toBe('3');
     expect(await screen.findByText('Page 3 of 3')).toBeInTheDocument();
     expect(api.latest).toHaveBeenCalledWith(expect.objectContaining({ hostid: '1', page: 3 }));
-    expect(screen.getByRole('button', { name: 'Next ›' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next ›' })).toHaveAttribute('aria-disabled', 'true');
   });
 
   it('has no pager when the list fits on one page', async () => {
@@ -83,14 +83,14 @@ describe('the pager on Network', () => {
     // Page 1 is the default, so it leaves the address.
     expect(query().has('page')).toBe(false);
     expect(await screen.findByText('1\u201350 of 130')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '‹ Prev' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: '‹ Prev' })).toHaveAttribute('aria-disabled', 'true');
     expect(api.netInterfaces).toHaveBeenCalledWith(expect.objectContaining({ hostid: '1', page: 1 }));
   });
 
   it('stops at the last page', async () => {
     open(<Network />, '/network?hostid=1&page=3');
     expect(await screen.findByText('101\u2013130 of 130')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Next ›' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next ›' })).toHaveAttribute('aria-disabled', 'true');
   });
 });
 

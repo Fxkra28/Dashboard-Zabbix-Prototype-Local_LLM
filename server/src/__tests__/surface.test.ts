@@ -1,3 +1,5 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { sep } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
 import { requiredRole } from '../security/auth.js';
@@ -43,7 +45,11 @@ async function registerAll() {
     import('../routes/chat.js').then((m) => m.chatRoutes),
     import('../routes/sli.js').then((m) => m.sliRoutes),
     import('../routes/sliExport.js').then((m) => m.sliExportRoutes),
+    import('../routes/sliMail.js').then((m) => m.sliMailRoutes),
   ]);
+  // The schedule route takes the scheduler it asks, as index.ts hands it; the surface does not call it.
+  const { sliScheduleRoutes } = await import('../routes/sliSchedule.js');
+  const schedule = { availability: vi.fn(), next: vi.fn(), problem: vi.fn() };
 
   const app = Fastify({ logger: false });
   const routes: string[] = [];
@@ -56,18 +62,35 @@ async function registerAll() {
   });
 
   for (const plugin of plugins) await app.register(plugin);
+  await app.register(sliScheduleRoutes, { schedule });
   await app.ready();
   return { app, routes };
 }
 
+/** The route modules `registerAll` mounts, by file name. */
+const MOUNTED = [
+  'hosts', 'devices', 'problems', 'history', 'net', 'meters', 'topHosts', 'webMonitoring', 'stream', 'reports', 'maps', 'sla',
+  'explain', 'sites', 'services', 'inventory', 'links', 'analytics', 'actions', 'chat', 'sli', 'sliExport', 'sliMail', 'sliSchedule',
+];
+
 describe('API surface', () => {
-  it('registers exactly the 39 route-module endpoints', async () => {
+  // IN-82: the surface test once mounted 22 of the 24 modules, so the six routes that send a report or keep the schedule were pinned by nothing.
+  it('mounts every route module there is, so that a new one cannot be left out of the pins below', () => {
+    const files = readdirSync(new URL('../routes', import.meta.url))
+      .filter((f) => f.endsWith('.ts'))
+      .map((f) => f.slice(0, -3))
+      .sort();
+    expect(files).toEqual([...MOUNTED].sort());
+  });
+
+  it('registers exactly the 45 route-module endpoints', async () => {
     // Plus /api/health and /api/ready (health.ts), POST /api/auth/login, GET
     // /api/auth/me, POST /api/auth/refresh and POST /api/auth/logout, which live in
-    // auth.ts, 45 endpoints in total.
+    // auth.ts, 51 endpoints in total.
     const { app, routes } = await registerAll();
     expect(routes.sort()).toMatchInlineSnapshot(`
       [
+        "DELETE /api/sli/recipients",
         "GET /api/chat/warm",
         "GET /api/devices",
         "GET /api/explain/problem",
@@ -102,27 +125,38 @@ describe('API surface', () => {
         "GET /api/sla/sli",
         "GET /api/sla/source",
         "GET /api/sli",
+        "GET /api/sli/email",
         "GET /api/sli/export",
+        "GET /api/sli/schedule",
         "GET /api/stats",
         "GET /api/stream",
         "POST /api/chat",
         "POST /api/problems/acknowledge",
+        "POST /api/sli/email",
+        "PUT /api/sli/recipients",
+        "PUT /api/sli/schedule",
       ]
     `);
     await app.close();
   });
 
-  it('has exactly one endpoint that writes to Zabbix', async () => {
+  it('has exactly one endpoint that writes to Zabbix, and pins every other route that is not a GET', async () => {
     // The portal is read-only except acknowledge/close (setup.md §20). A new
     // non-GET route appearing here is a design change, not a detail: it is
-    // either a Zabbix write (and must then be gated like acknowledge) or,
-    // like /api/chat, a POST only because its input (the conversation) travels
-    // in the body, and performs no write at all. Both are pinned so neither
-    // can drift in unnoticed.
+    // a Zabbix write (and must then be gated like acknowledge), or it sends a
+    // report or keeps the portal's own list and schedule (administrators only,
+    // below), or, like /api/chat, it is a POST only because its input (the
+    // conversation) travels in the body, and performs no write at all. All are
+    // pinned so none can drift in unnoticed.
     const { app, routes } = await registerAll();
-    expect(routes.filter((r) => !r.startsWith('GET ')).sort()).toEqual([
+    const notGet = routes.filter((r) => !r.startsWith('GET ')).sort();
+    expect(notGet).toEqual([
+      'DELETE /api/sli/recipients',
       'POST /api/chat',
       'POST /api/problems/acknowledge',
+      'POST /api/sli/email',
+      'PUT /api/sli/recipients',
+      'PUT /api/sli/schedule',
     ]);
     await app.close();
   });
@@ -135,10 +169,23 @@ describe('API surface', () => {
       return acc;
     }, {});
 
-    expect(byRole.admin).toEqual(['/api/reports/inventory']);
+    // The routes that send a report out of the portal, and set who gets it and when, are the administrator's (IN-82).
+    expect([...new Set(byRole.admin)].sort()).toEqual(['/api/reports/inventory', '/api/sli/email', '/api/sli/recipients', '/api/sli/schedule']);
     expect(byRole.wall?.sort()).toEqual(['/api/links', '/api/net/devices', '/api/net/interfaces', '/api/net/meters']);
     expect(byRole.operator).toEqual(['/api/problems/acknowledge']);
     await app.close();
+  });
+
+  // IN-94: the folders were listed by hand and left out clients/, where zbxWrite lives, and index.ts. Every source file is read, in any folder, a new one included.
+  it('calls the Zabbix write in one module only, the one that acknowledges and closes', () => {
+    const sources = (readdirSync(new URL('../', import.meta.url), { recursive: true }) as string[])
+      .map((f) => f.split(sep).join('/'))
+      .filter((f) => f.endsWith('.ts') && !f.startsWith('__tests__/'))
+      // The one that defines it.
+      .filter((f) => f !== 'clients/zabbix.ts');
+    expect(sources).toEqual(expect.arrayContaining(['index.ts', 'clients/mail.ts', 'routes/actions.ts', 'core/config.ts']));
+    const asked = sources.filter((f) => /\bzbxWrite\b/.test(readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')));
+    expect(asked).toEqual(['routes/actions.ts']);
   });
 });
 

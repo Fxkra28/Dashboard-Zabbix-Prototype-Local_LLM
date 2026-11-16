@@ -33,7 +33,7 @@ export const ACTION_MESSAGE = 4;
 /** Zabbix caps acknowledge messages at 2048 characters. */
 export const MAX_MESSAGE = 2048;
 
-/** Most event ids one request may act on: a slip or a script cannot close a whole estate. */
+/** Most event ids one request may act on: a slip cannot close a whole estate. What a person may do in a minute is `config.actions.eventsPerMinute` (security/actionLimit.ts). */
 export const MAX_EVENTIDS = 50;
 
 /** The event ids a body names, for the log only: at most MAX_EVENTIDS, each cut short, whatever the body holds. */

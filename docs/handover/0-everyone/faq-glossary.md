@@ -32,7 +32,7 @@
 
 **Where does a device's site come from?** The portal decides it from four signals, strongest first: an explicit site tag, the device's name, its inventory record and its host group. The Sites page shows which signal decided each device. The more devices carry an explicit tag, the fewer guesses the portal makes.
 
-**Can I download the monthly report?** Yes, as a PDF to print or send or as an Excel file to sort and total. Both buttons are on the SLA page. The Availability page offers them when the period is one calendar month on the strict basis. The files list every device by name, so treat them as estate data: they are never put in the repository.
+**Can I download the monthly report?** Yes, as a PDF to print or send or as an Excel file to sort and total. Both buttons are on the SLA page, for the month it shows. A window of the last 7 or 30 days has no files. The files list every device by name, so treat them as estate data: they are never put in the repository.
 
 **Can I use it on a phone or a tablet?** The pages adapt to a narrow screen, the menu shrinks to a strip, and controls are made large enough to touch where the pointer is a finger. The portal is designed for a desk and a wall.
 
@@ -124,6 +124,7 @@
 |---|---|
 | BFF | Backend for frontend. The server part of the portal. It sits between the browser and Zabbix, holds the tokens and keeps the copies |
 | Container, Docker | A packaged program, and the tool that runs it. The portal is two containers: one serves the pages, one is the server |
+| Volume | A folder that Docker keeps outside the containers, so that what is in it is still there after a rebuild. The portal uses one for its own copy of its log, and the hosted copy one more for the saved report addresses and the schedule |
 | Settings file | The file on the server that holds the accounts, the tokens and the secrets. It is the one thing to back up |
 | TLS | The secure connection behind the padlock in a browser. The portal does not provide it, and has to have it put in front of it |
 | The two copies | The portal in two folders: one asks Claude, one asks a model on the machine. The code is the same |

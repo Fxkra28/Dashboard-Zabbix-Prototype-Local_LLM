@@ -481,6 +481,50 @@ export function checkTsx(source, file, tokens, exceptions = TSX_EXCEPTIONS) {
   return problems;
 }
 
+/**
+ * Every var(--x) the stylesheet and the code use names something that is defined: a declaration `--x:` anywhere in the stylesheet, an `@property`, a
+ * `'--x':` or `['--x' as string]:` key of an inline style, or a setProperty('--x') call. A name nothing defines draws nothing, and the browser does not say so: the Response tab's bars had no
+ * colour for two months, because `--primary-light` was removed from the tokens on 23 September (UX-48). A var() with a fallback is let through,
+ * since its author gave it one. `files` is [{ file, source }], the code under src/ less its tests.
+ */
+export function checkUndefinedVars(css, files = []) {
+  const uncomment = (text) => text.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '));
+  const sheet = uncomment(css);
+  const defined = new Set();
+  for (const m of sheet.matchAll(/(--[\w-]+)\s*:/g)) defined.add(m[1]);
+  for (const m of sheet.matchAll(/@property\s+(--[\w-]+)/g)) defined.add(m[1]);
+  for (const { source } of files) {
+    for (const m of source.matchAll(/['"`](--[\w-]+)['"`]\s*:/g)) defined.add(m[1]);
+    for (const m of source.matchAll(/\[\s*['"`](--[\w-]+)['"`]/g)) defined.add(m[1]);
+    for (const m of source.matchAll(/setProperty\(\s*['"`](--[\w-]+)['"`]/g)) defined.add(m[1]);
+  }
+  const problems = [];
+  const use = /var\(\s*(--[\w-]+)\s*([,)])/g;
+  const lineOf = (text, at) => text.slice(0, at).split('\n').length;
+  for (const m of sheet.matchAll(use)) {
+    if (m[2] === ',' || defined.has(m[1])) continue;
+    problems.push(`line ${lineOf(sheet, m.index)}: var(${m[1]}) is used but nothing defines it`);
+  }
+  for (const { file, source } of files) {
+    // Lines of comment are not code; a trailing comment is left alone, which is rare and would only be a name in prose.
+    const code = source.split('\n').map((l) => (/^\s*(\/\/|\*|\/\*)/.test(l) ? '' : l)).join('\n');
+    for (const m of code.matchAll(use)) {
+      if (m[2] === ',' || defined.has(m[1])) continue;
+      problems.push(`${file} line ${lineOf(code, m.index)}: var(${m[1]}) is used but nothing defines it`);
+    }
+  }
+  return problems;
+}
+
+/** The code under `dir` (.ts and .tsx, not tests, not the file made from the API contract), as { file, source } with `file` relative to `root`. */
+function codeFiles(dir, root = dir) {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) return name === '__tests__' || name === 'generated' ? [] : codeFiles(path, root);
+    return /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name) ? [{ file: path.slice(root.length + 1).split('\\').join('/'), source: readFileSync(path, 'utf8') }] : [];
+  });
+}
+
 function tsxFiles(dir) {
   return readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);
@@ -608,6 +652,20 @@ function selfTest() {
   eq('an inline line height off the scale is caught', inline(`style={{ lineHeight: 1.55 }}`), 1);
   eq('an inline z-index is caught', inline(`style={{ zIndex: 3 }}`), 1);
 
+  // A var(--x) that nothing defines draws nothing: the Response tab's bars had no colour for two months (UX-48)
+  const undefinedIn = (stylesheet, files = []) => checkUndefinedVars(stylesheet, files);
+  eq('a variable that nothing defines is caught', undefinedIn(':root { --a: 1; } .x { color: var(--b); }').length, 1);
+  eq('a variable a :root block defines is let through', undefinedIn(':root { --a: 1; } .x { color: var(--a); }'), []);
+  eq('a variable a rule of its own defines is let through', undefinedIn('.x { --w: 3px; } .y { width: var(--w); }'), []);
+  eq('a variable with a fallback is let through, since the author gave it one', undefinedIn('.x { color: var(--nope, #fff); }'), []);
+  eq('a variable a style object sets is let through', undefinedIn('.x { width: var(--bar); }', [{ file: 'A.tsx', source: `<i style={{ '--bar': w }} />` }]), []);
+  eq('a variable a computed key sets is let through', undefinedIn('.x { color: var(--s); }', [{ file: 'A.tsx', source: `<i style={{ ['--s' as string]: c }} />` }]), []);
+  eq('a variable setProperty sets is let through', undefinedIn('.x { top: var(--topbar-h); }', [{ file: 'a.ts', source: `el.style.setProperty('--topbar-h', h)` }]), []);
+  eq('the line of the stylesheet is named', undefinedIn('.a { }\n.x { color: var(--gone); }')[0]?.startsWith('line 2: var(--gone)'), true);
+  eq('a use in an inline style is caught, with its file and line', undefinedIn(':root { --a: 1; }', [{ file: 'Foo.tsx', source: `const a = 1;\n<div style={{ background: 'var(--gone)' }} />` }]), ['Foo.tsx line 2: var(--gone) is used but nothing defines it']);
+  eq('a use in a comment is not a use', undefinedIn('/* var(--gone) */ .x { }'), []);
+  eq('the same name is reported once for each place', undefinedIn('.x { a: var(--g); b: var(--g); }').length, 2);
+
   // and it must fail when a token goes illegible
   const bad = parseTokens(css.replace('--text: #1b2733;', '--text: #eeeeee;'));
   const badProblems = checkContrast(bad).filter((p) => p.includes('--text on --bg'));
@@ -656,7 +714,10 @@ async function main() {
     const { raw, where } = readSheet(file);
     const css = raw.replace(/\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '));
     const blocks = parseTokens(css);
+    // The code beside this stylesheet, for what it defines and what it uses. `--no-tsx` leaves it out for a stylesheet checked alone.
+    const code = !process.argv.includes('--no-tsx') && file.endsWith(join('src', 'styles')) ? codeFiles(join(file, '..')) : [];
     const problems = [
+      ...checkUndefinedVars(css, code),
       ...checkContrast(blocks),
       ...checkRawColors(css),
       ...checkRawSizes(css, blocks.get(':root') ?? new Map()),

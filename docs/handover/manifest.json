@@ -31,6 +31,7 @@
       "state": "complete",
       "pages": [
         "repository-map.md",
+        "tech-stack.md",
         "server.md",
         "web.md",
         "tools-deploy-docs.md",
@@ -76,7 +77,8 @@
         "sign-in.md",
         "reports-exports.md",
         "operations.md",
-        "github-ci.md"
+        "github-ci.md",
+        "github-repository.md"
       ]
     },
     {
@@ -101,6 +103,7 @@
         "choices-compared.md",
         "history.md",
         "open-items.md",
+        "open-problems.md",
         "glossary.md",
         "how-the-handbook-is-kept-true.md"
       ]

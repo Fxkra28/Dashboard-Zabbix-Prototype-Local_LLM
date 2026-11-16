@@ -8,6 +8,7 @@ import { aiGuard } from '../clients/limits.js';
 import { aiUse } from '../security/audit.js';
 import { explainDerivedSla, explainProblem, explainZabbixSla, type SlaAnswer } from '../services/explain.js';
 import { singleValues } from '../core/schemas.js';
+import { readerGone } from '../core/readerGone.js';
 
 const PROBLEM_QUERY = singleValues('eventid');
 const outcomeOf = (answer: object) => ('notFound' in answer ? ('not_found' as const) : ('answered' as const));
@@ -20,7 +21,8 @@ export async function explainRoutes(app: FastifyInstance): Promise<void> {
     if (!config.ai.enabled) throw new AiDisabledError();
 
     const eventid = requireId((req.query as { eventid?: string }).eventid, 'eventid');
-    const answer = await aiUse(req, 'explain').run((onUsage) => explainProblem(eventid, onUsage), outcomeOf);
+    const signal = readerGone(reply);
+    const answer = await aiUse(req, 'explain').run((onUsage) => explainProblem(eventid, onUsage, signal), outcomeOf);
     if ('notFound' in answer) return reply.code(404).send({ error: 'not_found', message: answer.notFound });
     return answer;
   });
@@ -44,15 +46,16 @@ export async function explainRoutes(app: FastifyInstance): Promise<void> {
       scope?: string;
     };
 
+    const signal = readerGone(reply);
     let answer: SlaAnswer | { notFound: string };
     if (q.source === 'derived') {
       const month = q.month ? parseMonth(q.month) : currentMonth(config.sla.timezone);
       const profile = parseProfile(q.profile);
-      answer = await aiUse(req, 'explain').run((onUsage) => explainDerivedSla({ month, profile, scope: q.scope || 'overall' }, onUsage), outcomeOf);
+      answer = await aiUse(req, 'explain').run((onUsage) => explainDerivedSla({ month, profile, scope: q.scope || 'overall' }, onUsage, signal), outcomeOf);
     } else {
       const slaid = requireId(q.slaid, 'slaid');
       const serviceid = optionalId(q.serviceid, 'serviceid');
-      answer = await aiUse(req, 'explain').run((onUsage) => explainZabbixSla(slaid, serviceid, onUsage), outcomeOf);
+      answer = await aiUse(req, 'explain').run((onUsage) => explainZabbixSla(slaid, serviceid, onUsage, signal), outcomeOf);
     }
     if ('notFound' in answer) return reply.code(404).send({ error: 'not_found', message: answer.notFound });
     return answer;

@@ -38,13 +38,13 @@ The access log has one line for each request, with the request id as `rid=`, the
 |---|---|---|
 | Image | Built from `server/`, with the commit and the time as build arguments | Built from `web/` |
 | Reachable at | Port 4000 on the compose network only | `127.0.0.1:8081` (or 8082) on the host |
-| Filesystem | Read-only, with a 16 MB `/tmp` | Read-only, with a 64 MB `/tmp` |
+| Filesystem | Read-only, with a 16 MB `/tmp` and a volume for its log (the hosted copy has a second, for its state) | Read-only, with a 64 MB `/tmp` |
 | Privileges | All capabilities dropped, no new privileges, and the `node` user | The same, and nginx as an unprivileged user |
 | Limits | 2 GB of memory, 2 processors, and Node's heap capped at 1280 MB | 256 MB, 1 processor |
 | Health check | Every 10 s, the server's `/api/health` | Every 30 s, the front page |
 | Start order | First | After the server is healthy |
 | Restart | `unless-stopped` | `unless-stopped` |
-| Logs | JSON files of 50 MB, five kept | The same |
+| Logs | JSON files of 50 MB, five kept, and the server's own copy in the `portal-logs` volume | JSON files of 50 MB, five kept |
 
 `init: true` on the server means a stop signal reaches Node, and the server closes its streams and exits inside the ten seconds Docker allows. The compose file refuses to start without `JWT_SECRET`, and the server refuses a value that is published in the repository or shorter than 32 bytes. Both Dockerfiles pin their base image by tag and digest and install from the lockfile with `npm ci`, so two builds of one commit give the same bytes. A `.dockerignore` in each package keeps the host's installed packages out, because ones built for a Mac would replace the ones built for Linux.
 

@@ -11,11 +11,16 @@ import { zabbixAnswer } from './helpers/fakeZabbix.js';
  * documents, read from its JSON copy (web/src/generated/openapi.json), as the server has no YAML parser.
  */
 
-const { zbxMock } = vi.hoisted(() => ({ zbxMock: vi.fn() }));
+const { zbxMock, zbxWriteMock, mailer } = vi.hoisted(() => ({ zbxMock: vi.fn(), zbxWriteMock: vi.fn(), mailer: { verify: vi.fn(), send: vi.fn() } }));
 vi.mock('../clients/zabbix.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../clients/zabbix.js')>();
-  return { ...actual, zbx: zbxMock };
+  return { ...actual, zbx: zbxMock, zbxWrite: zbxWriteMock };
 });
+// The mail server is a stand-in: the file is held to the answer a send gets, and nothing leaves the test.
+vi.mock('../clients/mail.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../clients/mail.js')>()),
+  createMailer: vi.fn(() => mailer),
+}));
 // A model that answers at once, so Explain is held to the file too. No request leaves the test.
 vi.mock('../clients/ai.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../clients/ai.js')>();
@@ -99,8 +104,16 @@ const BODY: Record<string, object> = {
   '/api/auth/logout': {},
   '/api/problems/acknowledge': { eventids: ['109'], acknowledge: true },
   '/api/sli/email': { month: '2026-09', formats: ['pdf'] },
+  '/api/sli/recipients': { recipients: ['ana@example.org'] },
   '/api/sli/schedule': { enabled: true, day: 1, time: '00:00', formats: ['pdf'], recipients: ['ana@example.org'], notify: [] },
 };
+
+/**
+ * Operations that are allowed to answer something other than a 2xx in this harness, and what they answer. Every other operation must
+ * succeed, so that its success body is held to the file too (IN-84): with the write token and the mail unset, three of them once
+ * answered 503 or 400 and were accepted as "documented".
+ */
+const NOT_2XX: Record<string, { status: number; why: string }> = {};
 
 /** Sign-out and renewal end the session they are sent with, so each gets one of its own. */
 const OWN_SESSION = new Set(['/api/auth/refresh', '/api/auth/logout']);
@@ -122,7 +135,13 @@ beforeAll(async () => {
     PORTAL_USERS: 'ana:viewer-pass:viewer,olu:operator-pass:operator,adi:admin-pass:admin',
     PORTAL_USER: 'admin',
     PORTAL_PASS: 'a-long-real-password',
-    ZABBIX_WRITE_TOKEN: '',
+    // Write-back and the report email are on, so that the operations behind them answer their success and not their 503.
+    ZABBIX_WRITE_TOKEN: 'test-only-write-token',
+    MAIL_PROVIDER: 'gmail',
+    MAIL_USER: 'portal.reports@example.com',
+    MAIL_PASS: 'not-a-real-password',
+    MAIL_TO: 'ana@example.org',
+    MAIL_ALLOWED_DOMAINS: 'example.org',
     AI_PROVIDER: 'openai-compatible',
     AI_BASE_URL: 'http://127.0.0.1:9/v1',
     ANTHROPIC_API_KEY: '',
@@ -131,6 +150,9 @@ beforeAll(async () => {
     vi.stubEnv(key, value);
   }
   zbxMock.mockImplementation(zabbixAnswer);
+  zbxWriteMock.mockResolvedValue({ eventids: ['109'] });
+  mailer.verify.mockResolvedValue(undefined);
+  mailer.send.mockResolvedValue({ accepted: 1, refused: 0 });
 
   const { AJV_OPTIONS } = await import('../core/schemas.js');
   const { registerErrorHandler } = await import('../http/errors.js');
@@ -207,8 +229,12 @@ describe('every answer fits docs/api/openapi.yaml (BK-14)', () => {
         method: method.toUpperCase() as 'GET',
         url: path + (SAMPLE[path] ?? ''),
         headers: page(session),
-        ...(method === 'get' ? {} : { payload: BODY[path] ?? {} }),
+        // A DELETE has no body, and the server refuses a JSON content type with an empty one.
+        ...(method === 'get' || method === 'delete' ? {} : { payload: BODY[path] ?? {} }),
       });
+      const expected = NOT_2XX[`${method} ${path}`];
+      if (expected) expect(res.statusCode, expected.why).toBe(expected.status);
+      else expect(res.statusCode, `it must succeed here, so that its success body is held to the file: ${res.body.slice(0, 200)}`).toBeLessThan(300);
       const answer = documented(op, res.statusCode);
       expect(answer, `${res.statusCode} is not documented for it: ${res.body.slice(0, 200)}`).not.toBeNull();
       const type = String(res.headers['content-type'] ?? '').split(';')[0];

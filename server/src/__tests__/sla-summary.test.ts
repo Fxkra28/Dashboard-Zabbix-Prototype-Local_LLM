@@ -30,6 +30,13 @@ describe('derivedSlaLines', () => {
     expect(text).not.toContain('99.00%');
   });
 
+  it('says the figures are not Zabbix\'s own SLAs, and never that Zabbix has no services, which is false when its service data failed to load', async () => {
+    vi.mocked(getMonthlySli).mockResolvedValue(report(99.4) as never);
+    const lines = await derivedSlaLines();
+    expect(lines[0]).toBe("Derived SLA (target 99%, from ICMP triggers, not from Zabbix's own SLAs):");
+    expect(lines.join('\n')).not.toMatch(/no services/);
+  });
+
   it('keeps two decimals for an ordinary figure and says no data for a missing one', async () => {
     vi.mocked(getMonthlySli).mockResolvedValue(report(99.384, { sites: [], hosts: [] }) as never);
     expect((await derivedSlaLines()).join('\n')).toContain('99.38% strict, met');

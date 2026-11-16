@@ -128,6 +128,7 @@ export function ProblemExplainPanel({
         stale={q.stale}
         updatedAt={q.updatedAt}
         loadingLabel="Reading the alert…"
+        onRetry={q.reload}
       >
         {(x) => (
           <>
@@ -233,6 +234,7 @@ export function SlaExplainPanel(
         stale={q.stale}
         updatedAt={q.updatedAt}
         loadingLabel="Reading the SLA…"
+        onRetry={q.reload}
       >
         {(x) => (
           <>

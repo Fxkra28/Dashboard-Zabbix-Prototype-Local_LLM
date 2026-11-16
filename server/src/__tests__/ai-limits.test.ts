@@ -227,6 +227,101 @@ describe('the daily token budget of the hosted API', () => {
   });
 });
 
+// SC-53: the bill follows where the model is. A gateway outside this machine's network may charge, so the budget counts it too.
+describe('the daily token budget of a gateway outside the network', () => {
+  it('is enforced for a model on a public host, as for the hosted API', async () => {
+    const { ask } = await portal(
+      { AI_PROVIDER: 'openai-compatible', AI_BASE_URL: 'https://gateway.example.com/v1', AI_DAILY_TOKENS_PER_USER: '1000', AI_DAILY_TOKENS_TOTAL: '0', AI_CHAT_PER_MINUTE: '50' },
+      { chat: 1_200, explain: 0 },
+    );
+    expect((await ask('ana')).statusCode).toBe(200);
+    const refused = await ask('ana');
+    expect(refused.statusCode).toBe(429);
+    expect(refused.json().error).toBe('ai_budget');
+  });
+});
+
+// BK-67: the local model has one slot, so one person's waiting or running call must not be able to hold it for everybody.
+describe('one model call at a time for each person (BK-67)', () => {
+  /** A model that answers when the test lets it. */
+  function pending(mocks: { humanize: { mockImplementation: (f: never) => unknown } }) {
+    const waiting: Array<() => void> = [];
+    mocks.humanize.mockImplementation((async () => {
+      await new Promise<void>((resolve) => waiting.push(resolve));
+      return EXPLANATION;
+    }) as never);
+    return { finishAll: () => waiting.splice(0).forEach((f) => f()), count: () => waiting.length };
+  }
+  const settle = () => new Promise<void>((r) => setTimeout(r, 20));
+
+  it('refuses a second call while a person has one waiting or running, in words they can act on, and leaves everyone else alone', async () => {
+    const { explainProblem, ask, mocks } = await portal({ ...LOCAL_ENV, AI_EXPLAIN_PER_MINUTE: '20', AI_CHAT_PER_MINUTE: '20' });
+    const model = pending(mocks);
+    const first = explainProblem('ana', '1');
+    await settle();
+    expect(model.count()).toBe(1);
+
+    for (const refused of [await ask('ana'), await explainProblem('ana', '2')]) {
+      expect(refused.statusCode).toBe(429);
+      expect(refused.json()).toEqual({ error: 'rate_limited', message: 'Your last question is still being answered. Ask again when it has finished.' });
+      expect(Number(refused.headers['retry-after'])).toBeGreaterThanOrEqual(1);
+    }
+    expect(model.count()).toBe(1); // the refused calls never reached the model
+
+    const other = explainProblem('olu', '3');
+    await settle();
+    expect(model.count()).toBe(2); // another person is not held back by ana's call
+    model.finishAll();
+    expect((await first).statusCode).toBe(200);
+    expect((await other).statusCode).toBe(200);
+  });
+
+  it('lets the person ask again as soon as the call has finished, and a refusal does not count against them', async () => {
+    const { explainProblem, mocks } = await portal({ ...LOCAL_ENV, AI_EXPLAIN_PER_MINUTE: '20' });
+    const model = pending(mocks);
+    const first = explainProblem('ana', '1');
+    await settle();
+    expect((await explainProblem('ana', '2')).statusCode).toBe(429);
+    model.finishAll();
+    expect((await first).statusCode).toBe(200);
+
+    const again = explainProblem('ana', '2');
+    await settle();
+    expect(model.count()).toBe(1);
+    model.finishAll();
+    expect((await again).statusCode).toBe(200);
+  });
+
+  it('does not hold a person for ever if a response never reports that it closed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() });
+    try {
+      const { explainProblem, mocks } = await portal({ ...LOCAL_ENV, AI_EXPLAIN_PER_MINUTE: '20' });
+      const model = pending(mocks);
+      const first = explainProblem('ana', '1');
+      await settle();
+      expect((await explainProblem('ana', '2')).statusCode).toBe(429);
+      vi.setSystemTime(Date.now() + 10 * 60_000);
+      const later = explainProblem('ana', '3');
+      await settle();
+      expect(model.count()).toBe(2);
+      model.finishAll();
+      expect([(await first).statusCode, (await later).statusCode]).toEqual([200, 200]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('is for a model that takes one call at a time: the hosted API takes a few at once', async () => {
+    const { explainProblem, mocks } = await portal();
+    const model = pending(mocks);
+    const calls = [explainProblem('ana', '1'), explainProblem('ana', '2')];
+    await settle();
+    expect(model.count()).toBe(2);
+    model.finishAll();
+    expect((await Promise.all(calls)).map((r) => r.statusCode)).toEqual([200, 200]);
+  });
+});
+
 describe('MinuteLimit', () => {
   it('lets max calls through, then names the seconds left, and opens a new minute when it is over', async () => {
     vi.resetModules();

@@ -2,9 +2,9 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Everyone | about 9 min | [Exercises](../4-working/exercises.md) | [Choices compared](choices-compared.md) |
+| Everyone | about 10 min | [Exercises](../4-working/exercises.md) | [Choices compared](choices-compared.md) |
 
-Fifteen decisions shape the portal. Each is recorded in full in `docs/architecture/adr/`, in a fixed form that names the options that were considered and at least one cost. This page says each in a few lines, in plain words, so that you can see the whole shape at once and open the record when you need the argument. A decision here that you want to change is a decision to write another record about: [the contributing guide](../../contributing.md) says when.
+Sixteen decisions shape the portal. Each is recorded in full in `docs/architecture/adr/`, in a fixed form that names the options that were considered and at least one cost. This page says each in a few lines, in plain words, so that you can see the whole shape at once and open the record when you need the argument. A decision here that you want to change is a decision to write another record about: [the contributing guide](../../contributing.md) says when.
 
 ## What the portal is, and is not
 
@@ -18,7 +18,7 @@ React, TypeScript and Vite in the browser, and Fastify and TypeScript on the ser
 
 ### No database
 
-Two copies of one number is the usual way to ship a wrong dashboard, and anything stored has to be backed up and kept in step. So the portal stores almost nothing. Each value is worked out for the request and held in memory, in one map capped at 500 entries or about 64 MB, with a lifetime from 15 seconds to 24 hours for each key. The cache joins simultaneous misses into one read, so twenty screens cost one read of Zabbix. The cost is that the `.env` files hold the portal's secrets and settings and nothing else backs them up, and that a restart loses every cached answer, including a closed month's SLA. The one exception, added on 4 November 2026, is a small state file in the hosted copy for the people a report goes to and the monthly schedule ([ADR-0015](../../architecture/adr/0015-keep-a-small-state-file-for-recipients-and-the-schedule.md)). [ADR-0003](../../architecture/adr/0003-no-database.md).
+Two copies of one number is the usual way to ship a wrong dashboard, and anything stored has to be backed up and kept in step. So the portal stores almost nothing. Each value is worked out for the request and held in memory, in one map capped at 500 entries or about 64 MB, with a lifetime from 15 seconds to 24 hours for each key. The cache joins simultaneous misses into one read, so twenty screens cost one read of Zabbix. The cost is that the `.env` files hold the portal's secrets and settings and nothing else backs them up, and that a restart loses every cached answer, including a closed month's SLA. The exceptions are two small files on a Docker volume: the one added on 4 November 2026 in the hosted copy, for the people a report goes to and the monthly schedule ([ADR-0015](../../architecture/adr/0015-keep-a-small-state-file-for-recipients-and-the-schedule.md)), and the one added on 16 November 2026 in both copies, for the web check figures of closed months ([ADR-0016](../../architecture/adr/0016-keep-the-web-check-figures-of-closed-months.md)). [ADR-0003](../../architecture/adr/0003-no-database.md).
 
 ### Keep asking Zabbix, and do not copy its data
 
@@ -56,7 +56,7 @@ No script on the page should be able to read the credential, and no credential s
 
 ### A model layer that does not depend on one provider, and two copies of one tree
 
-Whether estate data leaves the machine must be a visible choice. So there is one layer for the plain-language features, and a setting picks hosted Claude or a local model, and the two deployments are two folders that share one source tree (only the hosted one is under git), so that the comparison between them is fair. The cost is two deployments to keep in step for ever. [ADR-0005](../../architecture/adr/0005-provider-neutral-ai-layer.md).
+Whether estate data leaves the machine must be a visible choice. So there is one layer for the plain-language features, and a setting picks hosted Claude or a local model, and the two deployments are two folders that share one source tree (each is a git repository of its own), so that the comparison between them is fair. The cost is two deployments to keep in step for ever. [ADR-0005](../../architecture/adr/0005-provider-neutral-ai-layer.md).
 
 ### The server by layer, the web app by feature, the checks in one place
 
@@ -69,6 +69,10 @@ The portal can send the monthly report to people, through any mail account that 
 ### Keep a small state file for the recipients, the schedule and what was sent
 
 The owner asked that the sender choose who gets the report and that it go by itself on the first of each month. Both need the portal to remember something, so it keeps one small file on a Docker volume: the saved addresses, the schedule, and a record of the last 24 sends with counts and no address. The cost is that the portal now has state to back up, the container writes to one folder, and a stolen administrator sign-in could send the report to an address of its choice unless the domains are limited in the settings. [Decision record 15](../../architecture/adr/0015-keep-a-small-state-file-for-recipients-and-the-schedule.md) has the options and the reasons.
+
+### Keep the web check figures of a closed month as they were first read
+
+The web check figures of a month that has closed change after it has closed, because the readings behind them age out of HCML's Zabbix, so a report made a week later gave other numbers. The owner chose on 16 November 2026 to keep them: the first time the portal reads a month after it has closed, it writes the web check figures to a second small file on the same Docker volume and gives them back from then on, with the day they were taken. Only these figures are kept, not the hosts' figures, which still follow a corrected maintenance period. The cost is that the portal now keeps a derived figure of HCML's on disk, which an earlier rule of the owner's said it would not, that a month first read late is kept late, and that both copies now have a state volume. [Decision record 16](../../architecture/adr/0016-keep-the-web-check-figures-of-closed-months.md) has the options and the reasons.
 
 ### Stop polling from a development machine
 

@@ -362,18 +362,19 @@ Tests: `light-reads.test.ts`.
 
 ### explainProblem
 
-<!-- gen:snippet server/src/services/explain.ts#explainProblem sha=8cab4be92087 -->
-`server/src/services/explain.ts:97-122`
+<!-- gen:snippet server/src/services/explain.ts#explainProblem sha=d19f7ae92aa9 -->
+`server/src/services/explain.ts:97-124`
 
 ```ts
-export async function explainProblem(eventid: string, onUsage: OnUsage): Promise<ProblemExplanation | NotFound> {
+export async function explainProblem(eventid: string, onUsage: OnUsage, signal?: AbortSignal): Promise<ProblemExplanation | NotFound> {
   const listed = (await cachedProblems()).find((p) => p.eventid === eventid);
   if (!listed) return { notFound: 'No open problem with that eventid: it may have been resolved.' };
 
   const acknowledged = listed.acknowledged === '1';
   const resolved = Boolean(listed.r_eventid && listed.r_eventid !== '0');
   const state = `${acknowledged ? 'ack' : 'unack'}:${resolved ? 'resolved' : 'open'}`;
-  return cached(`explain:problem:${eventid}:${state}`, 3_600_000, async () => {
+  // The model call stops when every reader of this explanation has left, so a closed tab does not keep the one slot (BK-67).
+  return cached(`explain:problem:${eventid}:${state}`, 3_600_000, async (f) => {
     // The list leaves operational data out (queries.ts), so it is read here for this one problem.
     const [problem] = await withOpdata([listed]);
     return humanize(
@@ -389,8 +390,9 @@ export async function explainProblem(eventid: string, onUsage: OnUsage): Promise
         tags: problem.tags ?? [],
       },
       onUsage,
+      f.signal,
     );
-  });
+  }, { signal });
 }
 ```
 <!-- /gen -->
@@ -398,8 +400,8 @@ export async function explainProblem(eventid: string, onUsage: OnUsage): Promise
 1. The problem is looked up in the shared list. One that is no longer there gives a `notFound`, which the route turns into a 404 with "No open problem with that eventid: it may have been resolved."
 2. The cache key is the event id and its state, acknowledged or not, resolved or not. A given problem's meaning does not change, so an answer is kept an hour. But the explanation says whether someone has acknowledged it, and a key by event alone would go on saying "not acknowledged" for an hour after someone had.
 3. The shared list leaves out operational data, so `withOpdata` reads it here for this one problem. The notification text, which is the trigger name with its data, is what the team receives.
-4. `humanize`, in `clients/ai.ts`, sends the facts to the model with a fixed schema that both providers enforce, and checks that the answer is complete before returning it. The start time goes as the clock of the SLA zone with its name, such as `Wed, 7 Oct 2026, 15:00 WIB (Asia/Jakarta)`, because that is how the portal shows it; a UTC string would be seven hours off.
-5. The route wraps the call in `aiUse`, which logs one `ai_call` line when it ends: who asked, from where, `explain`, how it ended (`answered`, `not_found` or `failed`) and the tokens the hosted model billed. An answer from the cache costs none. The line never holds the facts or the answer.
+4. `humanize`, in `clients/ai.ts`, sends the facts to the model with a fixed schema that both providers enforce, and checks that the answer is complete before returning it. It is given the flight's `signal`, which the cache raises when the last reader of this explanation has left, so a closed tab stops a call that waits for the slot or runs, and does not keep the one slot busy for everybody (BK-67). While another reader is still there, the call goes on. If the reader left while the operational data was still being read, before the call asked for its signal, the signal it is given has already fired, and `humanize` refuses it before it asks for a slot or a probe (BK-71). The start time goes as the clock of the SLA zone with its name, such as `Wed, 7 Oct 2026, 15:00 WIB (Asia/Jakarta)`, because that is how the portal shows it; a UTC string would be seven hours off.
+5. The route wraps the call in `aiUse`, which logs one `ai_call` line when it ends: who asked, from where, `explain`, how it ended (`answered`, `not_found`, `aborted` for a reader who left, or `failed`) and the tokens the hosted model billed. An answer from the cache costs none. The line never holds the facts or the answer.
 
 ### explainDerivedSla and the no-data answer
 
@@ -445,7 +447,7 @@ export function pickScope(report: SliReport, scope: string): { group: SliGroup; 
 1. With nothing measured, the only honest answer is "no data". Asked to explain an empty list of figures, a model would announce that the target was met, with confidence, from nothing. So `noDataExplanation` builds the answer without a model call.
 2. `pickScope` cuts one scope out of a derived report: the whole estate, a site (`site:3`), or a report category (`category:Cisco IOS by SNMP`). An unknown scope is a 404.
 3. `explainDerivedSla` then gives the model the target, the period, the method of the profile, the figure, the number of devices measured, without data, below target and never measured, and the twelve worst devices with their downtime and error budget. The server compares the figure with the target itself and writes the words of the pill, "On target" or "Below the target", so the model only explains; when its verdict is the other one, its explanation and advice are replaced by a sentence that names the figure and the target (BK-33). The answer is kept five minutes, since the figure moves as the month goes on. `explainZabbixSla` does the same for one of Zabbix's own SLAs.
-4. The routes, `/api/explain/problem` and `/api/explain/sla`, run behind `aiGuard('explain')`, which limits a user and refuses when the daily token budget is spent. `chargeTo(req)` adds what a hosted answer cost to that budget. When AI is switched off the route throws `AiDisabledError`, so the message names the setting to fix.
+4. The routes, `/api/explain/problem` and `/api/explain/sla`, run behind `aiGuard('explain')`, which limits a user and refuses when the daily token budget is spent. `chargeTo(req)` adds what an answer from the hosted API or from a model outside the network cost to that budget. When AI is switched off the route throws `AiDisabledError`, so the message names the setting to fix.
 
 Tests: `ai-limits.test.ts`.
 
@@ -752,8 +754,8 @@ export async function buildFocus(question: string): Promise<{ sites: string[]; h
 
 ### streamAnswer
 
-<!-- gen:snippet server/src/services/assistantAnswer.ts#streamAnswer sha=eaa4d2d3cbfa -->
-`server/src/services/assistantAnswer.ts:170-212`
+<!-- gen:snippet server/src/services/assistantAnswer.ts#streamAnswer sha=4332052a70f4 -->
+`server/src/services/assistantAnswer.ts:203-245`
 
 ```ts
 export async function* streamAnswer(
@@ -781,8 +783,8 @@ export async function* streamAnswer(
       return;
     }
     const messages = [{ role: 'system', content: system }, ...turns];
-    if (await usesOllamaNative()) yield* streamOllama(messages, combined, onStats);
-    else yield* streamOpenAiCompatible(messages, combined);
+    if (await usesOllamaNative()) yield* streamOllama(messages, combined, onStats, onUsage);
+    else yield* streamOpenAiCompatible(messages, combined, onUsage);
   } catch (err) {
     // The timeout covers the whole answer, not just the first byte, so one that fires mid-stream
     // becomes a readable error instead of the bare DOMException ("The operation was aborted due to
@@ -804,7 +806,7 @@ export async function* streamAnswer(
 
 1. It refuses with `AiDisabledError` when AI is off. Otherwise it builds the system text as `systemText(snapshot)`, then the focus, then the language line.
 2. Then it waits for its turn. A local model handles one request at a time (`acquireModelSlot`), and a hosted one `AI_MAX_CONCURRENT` (`acquireHostedSlot`). The timeout, `AI_TIMEOUT_MS`, starts only once the model is this answer's, because waiting for another answer is not this one being slow.
-3. The hosted provider streams through the Anthropic SDK (`streamAnthropic`), up to `ANSWER_MAX_TOKENS`, 700 tokens, and reports what it was billed, so the daily budget is charged what the provider says. For a local model, `usesOllamaNative` picks Ollama's own `/api/chat` or an OpenAI-compatible stream.
+3. The hosted provider streams through the Anthropic SDK (`streamAnthropic`), up to `ANSWER_MAX_TOKENS`, 700 tokens, and reports what it was billed, so the daily budget is charged what the provider says. For a local model, `usesOllamaNative` picks Ollama's own `/api/chat` or an OpenAI-compatible stream. A model outside the network is charged as well (BK-69): the OpenAI-compatible stream is asked for its counts (`stream_options`), Ollama sends its two counts at the end, and a model that sends none is charged by the size of the question and the answer. A call the model refused costs nothing, and one that was stopped part-way costs what was written.
 4. The timeout covers the whole answer, so one that fires part-way through becomes a readable `AiUpstreamError` that says which setting to raise. A reader who presses Stop is not a failure and is passed through. The slot is always released in `finally`.
 5. The function is an async generator: the route sends each piece to the page as it arrives, which is why the answer appears while it is being written.
 
@@ -833,11 +835,11 @@ export function cleanAnswer(raw: string): string {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/assistantAnswer.ts#readOpenAiStream sha=a66e904c0b18 -->
-`server/src/services/assistantAnswer.ts:52-81`
+<!-- gen:snippet server/src/services/assistantAnswer.ts#readOpenAiStream sha=2a2206d45f16 -->
+`server/src/services/assistantAnswer.ts:52-82`
 
 ```ts
-export async function* readOpenAiStream(body: ReadableStream<Uint8Array>): AsyncGenerator<string> {
+export async function* readOpenAiStream(body: ReadableStream<Uint8Array>, onCounts?: (counts: ModelCounts) => void): AsyncGenerator<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
@@ -853,12 +855,13 @@ export async function* readOpenAiStream(body: ReadableStream<Uint8Array>): Async
         if (!line.startsWith('data:')) continue;
         const data = line.slice(5).trim();
         if (data === '[DONE]') return;
-        let frame: { choices?: { delta?: { content?: string | null } }[] };
+        let frame: { choices?: { delta?: { content?: string | null } }[]; usage?: { total_tokens?: number; prompt_tokens?: number; completion_tokens?: number } | null };
         try {
           frame = JSON.parse(data);
         } catch {
           continue; // a partial or malformed frame; the next one carries on
         }
+        if (frame.usage) onCounts?.({ total: frame.usage.total_tokens, prompt: frame.usage.prompt_tokens, completion: frame.usage.completion_tokens });
         const piece = frame.choices?.[0]?.delta?.content;
         if (piece) yield piece;
       }
@@ -871,7 +874,7 @@ export async function* readOpenAiStream(body: ReadableStream<Uint8Array>): Async
 <!-- /gen -->
 
 1. `cleanAnswer` takes out a `<think>` block that a reasoning model may send, normalises line breaks, and removes a last sentence that is only a habitual sign-off, such as "For more details, check the Problems page" or its Indonesian form. It looks at the last sentence alone, and only when it is 160 characters or fewer and matches one of the two patterns, so a page that is named because the snapshot lacked the data survives.
-2. `readOpenAiStream` turns an OpenAI-style event stream into pieces of text. Each frame is `data: {json}` and the stream ends with `data: [DONE]`. A partial or malformed frame is skipped, and the next one carries on. A reasoning frame with empty content is dropped, so only what the reader should see is yielded. The reader is cancelled when the loop ends.
+2. `readOpenAiStream` turns an OpenAI-style event stream into pieces of text. Each frame is `data: {json}` and the stream ends with `data: [DONE]`. A partial or malformed frame is skipped, and the next one carries on. A reasoning frame with empty content is dropped, so only what the reader should see is yielded. A frame that carries `usage`, which a model outside the network is asked for, goes to `onCounts` and is not text. The reader is cancelled when the loop ends.
 
 Tests: `chat.test.ts`.
 
@@ -959,7 +962,7 @@ export function parseTurns(body: unknown): ChatTurn[] | null {
 
 `server/src/routes/chat.ts`. The answer is a `text/event-stream`, in the same framing as `/api/stream`, so it appears as it is generated and the page does not sit through a long silence.
 
-<!-- gen:snippet server/src/routes/chat.ts#chatRoutes lines=29-57 sha=8a5ff15c5d03 -->
+<!-- gen:snippet server/src/routes/chat.ts#chatRoutes lines=29-57 sha=c3ce83ad05b8 -->
 `server/src/routes/chat.ts:39-67` (lines 29 to 57 of chatRoutes)
 
 ```ts
@@ -995,7 +998,7 @@ reply.raw.on('close', () => {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/routes/chat.ts#chatRoutes lines=59-108 sha=8a5ff15c5d03 -->
+<!-- gen:snippet server/src/routes/chat.ts#chatRoutes lines=59-108 sha=c3ce83ad05b8 -->
 `server/src/routes/chat.ts:69-118` (lines 59 to 108 of chatRoutes)
 
 ```ts
@@ -1052,7 +1055,7 @@ try {
 ```
 <!-- /gen -->
 
-1. The route is a POST, because the conversation travels in the body, but it writes nothing: the model is read-only by construction. It runs behind `aiGuard('chat')`, and a hosted answer is charged to the daily token budget through `aiUse`, which also logs one `ai_call` line when the answer ends: who asked, from where, `chat`, how it ended (`answered`, `failed` or `aborted`) and the tokens billed, and never the question or the answer.
+1. The route is a POST, because the conversation travels in the body, but it writes nothing: the model is read-only by construction. It runs behind `aiGuard('chat')`, and an answer from the hosted API or from a model outside the network is charged to the daily token budget through `aiUse`, which also logs one `ai_call` line when the answer ends: who asked, from where, `chat`, how it ended (`answered`, `failed` or `aborted`) and the tokens billed, and never the question or the answer.
 2. It writes the raw stream itself (`reply.hijack()`), and sends four kinds of event. `context` says what the model was shown. `token` is one piece of the answer, to be joined in order. `done` says the answer is finished, with the model's time, the wait for its first token, and the cleaned text that the page should keep in place of the raw tokens. `error` says the model failed part-way, or was busy with another question.
 3. A reader who navigates away must not leave the model generating for nobody. The abort listens on the response and not on the request: by the time the handler runs, Fastify has consumed the JSON body, so the request's `close` has already fired and would abort every answer before the first token.
 4. The snapshot comes from `getSnapshot` and the focus from `buildFocus`. A focus is garnish: when it fails, the snapshot still answers the question. When the first token arrives, `noteModelRead` records that the model has read the whole prompt, snapshot included.

@@ -2,7 +2,7 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Operators and developers | about 9 min | [Zabbix](zabbix.md) | [nginx, Docker and TLS](nginx-docker-tls.md) |
+| Operators and developers | about 10 min | [Zabbix](zabbix.md) | [nginx, Docker and TLS](nginx-docker-tls.md) |
 
 ## What it is for
 
@@ -51,6 +51,8 @@ Neither feature touches Zabbix's configuration. The model has no tools.
 | `AI_PROVIDER` | `anthropic` | `anthropic`, or `openai-compatible` for a local server |
 | `ANTHROPIC_API_KEY`, `AI_API_KEY` | none | The hosted key. Without it the model features are off. A local server usually needs none |
 | `AI_BASE_URL` | none, and in the local copy `http://host.docker.internal:11434/v1` | Where a local server answers. Without it a local copy has no model |
+| `AI_LOCAL_ONLY` | none | Set to `true` by the local-model copy's compose file. The server then refuses to start when `AI_BASE_URL` names a model outside this machine and its own network |
+| `AI_ALLOW_REMOTE` | none | `true` is the owner's word that an outside model is meant, in a copy with `AI_LOCAL_ONLY`: the server starts with a warning, and the page says beside every answer that the question left the network |
 | `AI_MODEL` | See above | The model name |
 | `AI_TIMEOUT_MS` | 30000 hosted, 120000 local | How long one call may take |
 | `AI_MAX_RETRIES` | 1 | Retries by the SDK, hosted only |
@@ -60,13 +62,13 @@ Neither feature touches Zabbix's configuration. The model has no tools.
 | `AI_TEMPERATURE`, `AI_TOP_P` | 0.7, 0.8 | Sampling for the native API, stated and not left to the server. They are Qwen3's recommendation for answers without thinking |
 | `AI_CHAT_PER_MINUTE`, `AI_EXPLAIN_PER_MINUTE` | 10, 10 | Questions and explanations a minute for each signed-in user |
 | `AI_MAX_CONCURRENT` | 4 | Hosted calls in flight at once |
-| `AI_DAILY_TOKENS_PER_USER`, `AI_DAILY_TOKENS_TOTAL` | 500000, 2000000 | The daily token budgets, hosted only. `0` switches a budget off |
+| `AI_DAILY_TOKENS_PER_USER`, `AI_DAILY_TOKENS_TOTAL` | 500000, 2000000 | The daily token budgets, for hosted Claude and for a model outside the machine's network. `0` switches a budget off |
 
 ## Limits, in the order a request meets them
 
-1. **The guard.** `aiGuard` runs first. Too many calls this minute answers 429 `rate_limited` with a retry time. A used-up daily budget answers 429 `ai_budget` with the time to midnight in `SLA_TIMEZONE`. The count lives in memory, so a restart gives everyone a fresh allowance.
-2. **The slot.** A local model takes one request at a time, in arrival order, because a second one would wait inside Ollama with no word to the reader. A request that would wait about twenty seconds is told the assistant is busy, as a 503 `ai_busy` with `Retry-After`. Hosted calls wait for one of `AI_MAX_CONCURRENT` places. The slot belongs to one server process, so run one server for each Ollama.
-3. **The budget.** A hosted call is charged what the API says it billed, input including the part read from its cache, and output. The count resets at midnight in the reporting zone.
+1. **The guard.** `aiGuard` runs first. Too many calls this minute answers 429 `rate_limited` with a retry time. A used-up daily budget answers 429 `ai_budget` with the time to midnight in `SLA_TIMEZONE`. With a local model each person may have one call waiting or running at a time, so one person cannot keep the single slot busy for everyone: a second answers 429 `rate_limited` with "Your last question is still being answered. Ask again when it has finished." (BK-67). The count lives in memory, so a restart gives everyone a fresh allowance.
+2. **The slot.** A local model takes one request at a time, in arrival order, because a second one would wait inside Ollama with no word to the reader. A request that would wait about twenty seconds is told the assistant is busy: Explain answers 503 `ai_busy` with `Retry-After`, and the Assistant, whose stream has already begun with a 200, sends the same sentence as an `error` event. Hosted calls wait for one of `AI_MAX_CONCURRENT` places. A person who closes the page, or the tab, while a call waits for the slot or runs gives it up: Explain stops when its last reader leaves, as the Assistant does (BK-67). The slot belongs to one server process, so run one server for each Ollama.
+3. **The budget.** A hosted call is charged what the API says it billed, input including the part read from its cache, and output. A call whose reader leaves after the request went out is charged by the size of the question, as an estimate of its input, since the hosted account may still be billed for it; one whose reader left before the request went out is charged nothing (BK-72). The count resets at midnight in the reporting zone.
 4. **The cache.** An explanation of a problem is kept for an hour and one of an SLA figure for five minutes, shared by every screen, so five clicks on one problem are one call.
 
 ## What the person sees when it fails
@@ -83,15 +85,15 @@ The viewer gets a fixed sentence, and the log keeps the cause.
 | The AI model gave an answer the portal could not use. Try again. | An empty or unusable answer |
 | The assistant is busy answering another question. Try again in a moment. | The local slot, above |
 
-The server's health check reports whether a local model is up, and the pages show "The AI model is not answering right now" before a click that would only fail. For the hosted provider the state is `not_checked`, because a probe would be billed.
+The server's health check reports whether a local model is up, and whether the model server has the model installed: it compares `AI_MODEL` with the names the server lists, `:latest` being understood. The pages show "The AI model is not answering right now" when it is down, and "The AI model is not installed on the model server" when it answers but lacks the model (a forgotten `ollama pull`, a mistyped name), before a click that would only fail. For the hosted provider the state is `not_checked`, because a probe would be billed.
 
 ## The notice that text left the machine
 
-`GET /api/health` carries `aiProvider` and `aiExternal`. When the provider is Anthropic, every Explain and Assistant answer says what was sent and to whom ([data in and out](../0-everyone/data-in-and-out.md) quotes the sentences). A local model on any address shows nothing, because nothing left the machine.
+`GET /api/health` carries `aiProvider` and `aiExternal`. When the provider is Anthropic, every Explain and Assistant answer says what was sent and to whom ([data in and out](../0-everyone/data-in-and-out.md) quotes the sentences). A model on this machine, on a private or link-local address, on a single-word name or on a name that ends `.local`, `.internal`, `.lan`, `.home.arpa` or `.localdomain` shows nothing, because nothing left the machine's own network. A model on any other address counts as outside: the notice is shown (SC-53). The daily token budget is counted for hosted Claude and for a model at an outside address: by the tokens the model reports (`usage.total_tokens`, or Ollama's `prompt_eval_count` plus `eval_count`), else by an estimate of what went in and out, for a buffered call and a streamed one alike (BK-69). A model on the machine is not counted.
 
 ## How to check it
 
-- `GET /api/health` shows `ai` (on or off), `aiProvider` and `aiExternal`. Signed in, `ready.model` shows `off`, `not_checked`, `ok` or `down`.
+- `GET /api/health` shows `ai` (on or off), `aiProvider` and `aiExternal`. Signed in, `ready.model` shows `off`, `not_checked`, `ok`, `down` or `missing` (the model server answers but does not list `AI_MODEL`).
 - On the host with Ollama: `ollama list` shows the installed models and `ollama ps` the loaded one with how long it stays.
 - Do not test the hosted copy by clicking Explain on a real problem, since each click sends that problem's text out. Use a made-up one.
 - A refused key shows in the server's log as a 401 from Anthropic, with the hint to replace the key and recreate the server.

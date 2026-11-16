@@ -13,15 +13,17 @@
 #                  container, :latest, which is what `docker compose up` would start.
 #                  Run it once the check that needs a sign-in has passed.
 #
-# It refuses to run from a tree whose server/, web/ (their tests apart, which no image holds) or
-# docker-compose.yml differ from HEAD: the build is named by the commit, and a name that lies is worse
-# than none. A folder with no git is built too, labelled "unknown", and gets no live tag. It saves the logs of the
+# It first asks Docker whether it is installed and running, so that a stopped Docker Desktop is said at once and not after minutes of tests.
+# Docker gets 20 seconds to answer; REBUILD_DOCKER_TIMEOUT sets another number of seconds.
+# It refuses to run from a copy whose server/, web/ (their tests apart, which no image holds) or
+# docker-compose.yml differ from its own HEAD: each copy is a repository of its own, and the build is named by its commit, since a name that lies is worse
+# than none. A copy with no git is built too, labelled "unknown", and gets no live tag. It runs `npm run verify` in each copy, one after the other. It saves the logs of the
 # running containers (LOG_ARCHIVE_DIR, default ~/.local/state/hcml-portal-logs, the newest LOG_ARCHIVE_KEEP of each
 # project, default 30), since a new container starts with an empty log. It tags the images it replaces
 # rollback-<day><month>, builds with BUILD_COMMIT and BUILD_TIME, waits for both containers of each copy to be healthy
 # and asks what an anonymous caller can see. A copy that fails those checks stops the run before the next copy is
-# touched. On a clean tree it makes the annotated tag live-<date> in this repository (it never pushes it: that is yours
-# to do). Then it prints the check that needs a sign-in, which it cannot make. It does not mark last-good: a build that
+# touched. For each copy with a clean tree it makes the annotated tag live-<date> in that copy's own repository (it never pushes it: that is yours
+# to do). Then it prints the check that needs a sign-in, which it cannot make, with the expectations of each copy. It does not mark last-good: a build that
 # has passed the checks it can make may still fail that one.
 set -euo pipefail
 
@@ -73,6 +75,35 @@ if [ "$(project_of "$ROOT")" = hcml-portal ] && [ -f "$PARENT/hcml-portal-ollama
   COPIES+=("$PARENT/hcml-portal-ollama")
 fi
 
+# A stopped Docker Desktop (IN-43) made every later command fail, after verify had run for minutes, and the help then said no image existed (IN-86).
+# Docker gets REBUILD_DOCKER_TIMEOUT seconds (20) to answer. macOS has no timeout command, and an alarm does not stop the Docker CLI, a Go program that
+# ignores SIGALRM, so the call runs in the background and is ended with TERM, then KILL, when the time is up (IN-89).
+DOCKER_TIMEOUT=${REBUILD_DOCKER_TIMEOUT:-20}
+case $DOCKER_TIMEOUT in '' | *[!0-9]* | ???????*) DOCKER_TIMEOUT=20 ;; esac
+DOCKER_TIMEOUT=$((10#$DOCKER_TIMEOUT))
+[ "$DOCKER_TIMEOUT" -ge 1 ] || DOCKER_TIMEOUT=20
+docker_answers() {
+  local pid waited=0
+  docker info >/dev/null 2>&1 &
+  pid=$!
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$waited" -ge $((DOCKER_TIMEOUT * 10)) ]; then
+      # Grouped, so that bash 3.2's "Terminated" notice for the call it was told to end does not reach the screen.
+      {
+        kill -s TERM "$pid"
+        sleep 1
+        kill -s KILL "$pid"
+        wait "$pid"
+      } 2>/dev/null || true
+      return 1
+    fi
+    if sleep 0.1 2>/dev/null; then waited=$((waited + 1)); else sleep 1; waited=$((waited + 10)); fi
+  done
+  wait "$pid"
+}
+command -v docker >/dev/null 2>&1 || fail "Docker is not installed here: no docker command is on the PATH. Install Docker Desktop, or put docker on the PATH, then run this again. Nothing was changed."
+docker_answers || fail "Docker is not running (docker info failed or did not answer within $DOCKER_TIMEOUT seconds). Start Docker Desktop, wait until it says it is running, then run this again. Nothing was changed."
+
 # The images that run now become the ones a later failed run points back to. Not part of a build: it asks for no git.
 # The image is the one the container runs, by its id: :latest can have moved on since, after a build by hand or a rollback tag moved without `up`.
 if [ "$MARK" -eq 1 ]; then
@@ -102,30 +133,38 @@ if [ "$MARK" -eq 1 ]; then
   exit 0
 fi
 
-HAVE_GIT=1
-if git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
-  SHA=$(git -C "$ROOT" rev-parse --short HEAD)
-  # What goes into the images: server/ and web/, less their tests, and the compose file.
-  IMAGE_FILES=(server web docker-compose.yml ':(exclude,glob)**/__tests__/**' ':(exclude,glob)**/*.test.ts' ':(exclude,glob)**/*.test.tsx')
-  CHANGED=$(git -C "$ROOT" status --porcelain -- "${IMAGE_FILES[@]}" | wc -l | tr -d ' ')
-  LABEL=$SHA
-  if [ "$CHANGED" -gt 0 ]; then
-    [ "$DIRTY_OK" -eq 1 ] ||
-      fail "server/, web/ (apart from their tests) or docker-compose.yml differ from $SHA ($CHANGED paths). Commit them, or pass --allow-dirty for a build labelled $SHA-dirty."
-    LABEL="$SHA-dirty"
+# Each copy is a repository of its own (the second since 11 November 2026), so each is judged, labelled and tagged by its own HEAD (IN-81).
+# What goes into the images: server/ and web/, less their tests, and the compose file.
+IMAGE_FILES=(server web docker-compose.yml ':(exclude,glob)**/__tests__/**' ':(exclude,glob)**/*.test.ts' ':(exclude,glob)**/*.test.tsx')
+SHAS=()
+LABELS=()
+for C in "${COPIES[@]}"; do
+  if git -C "$C" rev-parse --git-dir >/dev/null 2>&1; then
+    sha=$(git -C "$C" rev-parse --short HEAD)
+    changed=$(git -C "$C" status --porcelain -- "${IMAGE_FILES[@]}" | wc -l | tr -d ' ')
+    label=$sha
+    if [ "$changed" -gt 0 ]; then
+      [ "$DIRTY_OK" -eq 1 ] ||
+        fail "$(basename "$C"): server/, web/ (apart from their tests) or docker-compose.yml differ from $sha ($changed paths). Commit them with git add -A, not git commit -a, so that the new files go in, or pass --allow-dirty for a build labelled $sha-dirty."
+      label="$sha-dirty"
+    fi
+  else
+    # A folder with no git has no commit to name the build and nothing to compare the tree with.
+    sha=unknown
+    label=unknown
+    say "$C is not a git checkout, so its build is labelled \"unknown\" and no live tag is made."
   fi
-else
-  # A folder with no git has no commit to name the build and nothing to compare the tree with.
-  HAVE_GIT=0
-  SHA=unknown
-  LABEL=unknown
-  say "$ROOT is not a git checkout, so this build is labelled \"unknown\" and no live tag is made."
-fi
+  SHAS+=("$sha")
+  LABELS+=("$label")
+done
 TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # The month: the web image takes the operating system's fixes again when it changes (IN-75).
 ROUND=$(date -u +%Y-%m)
 
-say "Build $LABEL, $TIME, for: $(for c in "${COPIES[@]}"; do basename "$c"; done | tr '\n' ' ')"
+say "Build ${LABELS[0]}, $TIME, for: $(for c in "${COPIES[@]}"; do basename "$c"; done | tr '\n' ' ')"
+for i in "${!COPIES[@]}"; do
+  if [ "$i" -gt 0 ]; then say "  $(basename "${COPIES[$i]}") is labelled ${LABELS[$i]}"; fi
+done
 if [ "$DRY" -eq 1 ]; then say "Dry run: nothing is changed."; fi
 
 if [ "${#COPIES[@]}" -gt 1 ]; then
@@ -134,9 +173,12 @@ if [ "${#COPIES[@]}" -gt 1 ]; then
   run node "$ROOT/tools/check/parity.check.mjs"
 fi
 if [ "$VERIFY" -eq 1 ]; then
-  say ""
-  say "Gate: npm run verify (typecheck, lint, tests, builds, the checkers)"
-  run npm --prefix "$ROOT" run verify
+  # One copy after the other: two at once make the slower tests time out. Each copy is tested as it is, with its own installed packages (IN-81).
+  for C in "${COPIES[@]}"; do
+    say ""
+    say "Gate: npm run verify in $(basename "$C") (typecheck, lint, tests, builds, the checkers)"
+    run npm --prefix "$C" run verify
+  done
 fi
 # A .env line docker cannot parse stopped the 26 October rebuild only after the images were tagged
 # (tracker IN-38). Docker's message can quote that line, and a secret with it, so only its number is shown.
@@ -145,10 +187,13 @@ for C in "${COPIES[@]}"; do
   say "Gate: docker can read the settings of $(basename "$C")"
   if out=$(docker compose --project-directory "$C" config --quiet 2>&1); then
     say "  ok"
-  else
+  elif printf '%s' "$out" | grep -q '\.env'; then
     # No line number in the message makes grep fail, and under pipefail that would end the script with no word.
     at=$(printf '%s' "$out" | grep -oE 'line [0-9]+' | head -1) || true
-    fail "docker cannot read the settings of $(basename "$C")${at:+ ($at of its .env)}. Fix it in an editor; docker's own message is not shown, as it may quote a secret."
+    fail "docker cannot read the settings of $(basename "$C")${at:+ (Docker names $at of its .env)}. Fix it in an editor; docker's own message is not shown, as it may quote a secret."
+  else
+    # Only a message about a .env file can quote a secret; one about docker-compose.yml is shown, so that the operator is sent to the right file (IN-90).
+    fail "docker cannot read the settings of $(basename "$C"). Docker says: $(printf '%s' "$out" | head -c 400 | tr '\n' ' ')"
   fi
 done
 
@@ -254,7 +299,9 @@ expect() { # what, wanted, got
 }
 status_of() { curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$@" || true; }
 
+N=-1
 for C in "${COPIES[@]}"; do
+  N=$((N + 1))
   P=$(project_of "$C")
   say ""
   say "== $P"
@@ -268,7 +315,7 @@ for C in "${COPIES[@]}"; do
       say "no $IMG:latest yet, so nothing is kept for a rollback"
     fi
   done
-  if ! run env BUILD_COMMIT="$LABEL" BUILD_TIME="$TIME" APK_ROUND="$ROUND" docker compose --project-directory "$C" up -d --build; then
+  if ! run env BUILD_COMMIT="${LABELS[$N]}" BUILD_TIME="$TIME" APK_ROUND="$ROUND" docker compose --project-directory "$C" up -d --build; then
     say ""
     say "docker compose could not bring $P up."
     rollback_help "$P"
@@ -304,8 +351,11 @@ for C in "${COPIES[@]}"; do
   fi
   say "  bundle: $(curl -s --max-time 20 "$BASE/" | grep -o 'index-[A-Za-z0-9_-]*\.js' | head -1)"
   say "  build:  $(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$P-portal-bff-1" | grep -E '^BUILD_(COMMIT|TIME)=' | tr '\n' ' ')"
+  # The copy that exists so that nothing leaves the machine is checked for exactly that: no mail, and a model that is local and answers (IN-79).
+  EXPECT=''
+  if [ "$P" = hcml-portal-ollama ]; then EXPECT=' --expect-mail off --expect-ai local'; fi
   SIGNIN="$SIGNIN
-  PORTAL_USER=... PORTAL_PASSWORD=... python3 -I tools/live/signedin_check.py $BASE"
+  python3 -I tools/live/signedin_check.py $BASE$EXPECT"
   # A build that starts and is bad must not replace the next copy too: the first copy is the canary.
   if [ "$FAILED" -ne 0 ] && [ "$C" != "${COPIES[${#COPIES[@]} - 1]}" ]; then
     say ""
@@ -323,27 +373,31 @@ if [ "$FAILED" -ne 0 ]; then
   exit 1
 fi
 
-if [ "$HAVE_GIT" -eq 1 ] && [ "$LABEL" = "$SHA" ]; then
+# A live tag for each copy whose tree is clean, in that copy's own repository.
+for i in "${!COPIES[@]}"; do
+  C=${COPIES[$i]}
+  if [ "${LABELS[$i]}" != "${SHAS[$i]}" ] || [ "${SHAS[$i]}" = unknown ]; then continue; fi
   TAG="live-$(date +%Y-%m-%d)"
   n=1
-  while git -C "$ROOT" rev-parse -q --verify "refs/tags/$TAG" >/dev/null; do
+  while git -C "$C" rev-parse -q --verify "refs/tags/$TAG" >/dev/null; do
     n=$((n + 1))
     TAG="live-$(date +%Y-%m-%d)-$n"
   done
   say ""
   # The build is live by now: a tag that cannot be made (git has no name and address for this account) must not read as a failed run.
-  if run git -C "$ROOT" tag -a "$TAG" "$SHA" -m "Live from $TIME: built from $SHA"; then
-    say "The tag is local. To make it public: git push origin $TAG"
+  if run git -C "$C" tag -a "$TAG" "${SHAS[$i]}" -m "Live from $TIME: built from ${SHAS[$i]}"; then
+    say "The tag is local, in $(basename "$C"). To make it public: git -C $C push origin $TAG"
   else
-    say "Could not make the tag $TAG: git needs a name and address (git config user.name, git config user.email). The build is live."
+    say "Could not make the tag $TAG in $(basename "$C"): git needs a name and address (git config user.name, git config user.email). The build is live."
   fi
-fi
+done
 
 say ""
 if [ "$DRY" -eq 1 ]; then
   say "Dry run: nothing was changed."
 else
-  say "Still yours, because it needs a sign-in: open the Dashboard and Problems on each portal, then$SIGNIN"
+  say "Still yours, because it needs a sign-in: open the Dashboard and Problems on each portal. Then read the sign-in into the shell, which keeps the password out of its history, and run the check on each:"
+  say "  read -r PORTAL_USER; read -rs PORTAL_PASSWORD; export PORTAL_USER PORTAL_PASSWORD$SIGNIN"
   say ""
   say "When those pass, keep these images as the ones to go back to with: deploy/rebuild.sh --mark-good"
 fi

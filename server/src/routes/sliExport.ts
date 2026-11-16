@@ -1,7 +1,9 @@
 import type { FastifyInstance } from 'fastify';
 import { config } from '../core/config.js';
 import { BadRequestError } from '../core/validate.js';
+import { readerGone } from '../core/readerGone.js';
 import { auditDownload } from '../security/audit.js';
+import { sliExportGuard } from '../security/heavyLimit.js';
 import { currentMonth, parseMonth } from '../sli/time.js';
 import { getMonthlySli } from '../services/sli.js';
 import { FORMATS, fileFor, fileNameFor, parseFormat, parseStyle } from '../services/sliExport.js';
@@ -11,7 +13,7 @@ const EXPORT_QUERY = singleValues('month', 'format', 'decimal', 'date', 'separat
 const ACCEPTED = Object.keys(EXPORT_QUERY.properties);
 
 export async function sliExportRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/api/sli/export', { schema: { querystring: EXPORT_QUERY } }, async (req, reply) => {
+  app.get('/api/sli/export', { schema: { querystring: EXPORT_QUERY }, preHandler: sliExportGuard }, async (req, reply) => {
     const q = req.query as Record<string, string | undefined>;
     // A misspelt or bracketed month would otherwise be ignored, and the current month served in its place.
     if (Object.keys(q).some((key) => !ACCEPTED.includes(key))) {
@@ -22,9 +24,11 @@ export async function sliExportRoutes(app: FastifyInstance): Promise<void> {
     const format = parseFormat(q.format);
     const style = parseStyle(q);
 
+    // A reader who leaves while a month still waits for a place drops that read, as for /api/sli (BK-59).
+    const signal = readerGone(reply);
     const [strict, hcml] = await Promise.all([
-      getMonthlySli(month, 'availability'),
-      getMonthlySli(month, 'hcml-report'),
+      getMonthlySli(month, 'availability', signal),
+      getMonthlySli(month, 'hcml-report', signal),
     ]);
     const body = fileFor(format, strict, hcml, new Date(), style);
     auditDownload(req, { report: 'sla', month, format, bytes: body.length });

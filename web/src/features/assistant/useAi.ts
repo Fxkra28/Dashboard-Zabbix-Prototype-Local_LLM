@@ -16,12 +16,6 @@ interface Capabilities {
   /** Which backend answers, as the server names it; null until it has said. */
   aiProvider: string | null;
   writeBack: boolean;
-  /**
-   * Severity floor the availability report uses when none is chosen. Comes
-   * from the server so the two cannot disagree: the right value is
-   * site-specific (HCML's estate alarms at 2, not 3) and belongs in one place.
-   */
-  availabilityMinSeverity: number;
   /** The server has answered. Before that `ai` and `writeBack` read false only because nothing is known. */
   known: boolean;
   /** The last health call got no answer: the BFF is down or restarting. */
@@ -33,7 +27,6 @@ const UNKNOWN: Capabilities = {
   aiExternal: false,
   aiProvider: null,
   writeBack: false,
-  availabilityMinSeverity: 2,
   known: false,
   failed: false,
 };
@@ -55,7 +48,6 @@ export function loadCapabilities(): Promise<Capabilities> {
         aiExternal: Boolean(h.aiExternal),
         aiProvider: h.aiProvider ?? null,
         writeBack: Boolean(h.writeBack),
-        availabilityMinSeverity: h.defaults?.availabilityMinSeverity ?? UNKNOWN.availabilityMinSeverity,
         known: true,
         failed: false,
       });

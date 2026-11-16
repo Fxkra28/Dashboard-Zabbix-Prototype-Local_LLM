@@ -2,9 +2,9 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Developers | about 5 min | [Web app files, one card each](files-web.md) | [The A to Z index of names](symbols.md) |
+| Developers | about 6 min | [Web app files, one card each](files-web.md) | [The A to Z index of names](symbols.md) |
 
-Every file of the checkers, the handbook generator and the other tools has one card on this page, 25 in all, grouped by folder and in alphabetical order. A card is the file in a few lines. The sentence under its heading says what the file is for and where the handbook walks through it, and a person wrote it. The block below that sentence is written by `npm run handover:build` from the code, so it cannot drift: the file's size, its exports with the first sentence of each comment, what it imports, who imports it, and which tests import it.
+Every file of the checkers, the handbook generator and the other tools has one card on this page, 26 in all, grouped by folder and in alphabetical order. A card is the file in a few lines. The sentence under its heading says what the file is for and where the handbook walks through it, and a person wrote it. The block below that sentence is written by `npm run handover:build` from the code, so it cannot drift: the file's size, its exports with the first sentence of each comment, what it imports, who imports it, and which tests import it.
 
 Use the page when you know a file name and want to know what it is for and what would be hit if you changed it. The A to Z index of every name is [the symbols page](symbols.md). The same cards for the server and for the web app are [Server files](files-server.md) and [Web app files](files-web.md).
 
@@ -15,7 +15,7 @@ Use the page when you know a file name and want to know what it is for and what 
 Rebuilds both portals from the commit, checks their settings first, tags the old images, and checks the new ones. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card deploy/rebuild.sh -->
-349 lines, 0 exports. Imported by 0 files.
+403 lines, 0 exports. Imported by 0 files.
 
 Imports: none
 
@@ -103,29 +103,33 @@ Imported by: none
 Fails when a count the documents state is not the count the code has. Walked through in [Tests and checkers](tests-and-checkers.md).
 
 <!-- gen:card tools/check/facts.check.mjs -->
-657 lines, 19 exports. Imported by 0 files.
+733 lines, 23 exports. Imported by 0 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `toNumber` | function | 44 | `function toNumber(text)` | A count written as digits (with a thousands comma) or as a word, or null. |
-| `countEndpoints` | function | 67 | `function countEndpoints(root)` | The routes the BFF registers: `app.get(`, `app.post(` and the like at the start of a line, in the files that register any. |
-| `countRouteModules` | function | 83 | `function countRouteModules(root)` | Route modules: `await app.register(somethingRoutes)` in index.ts, with or without options after the name. |
-| `zabbixCalls` | function | 90 | `function zabbixCalls(root)` | Every Zabbix method named as a string in server/src outside tests and comments: method -> file -> [lines], and which are written. |
-| `environmentVariables` | function | 115 | `function environmentVariables(root)` | The environment variables server/src reads: `process.env.NAME`, `process.env['NAME']` and `envNum('NAME', ...)`, outside tests. |
-| `documentedVariables` | function | 127 | `function documentedVariables(readme)` | The names in backticks in the Configuration section of a README. |
-| `countErd` | function | 135 | `function countErd(text)` | Entities and relationships of an erDiagram, and of the ERD-Database tables. |
-| `countConceptual` | function | 147 | `function countConceptual(text)` | The rows of the entity and association tables of ERD-Conceptual.md. |
-| `testCounts` | function | 192 | `function testCounts(root)` | How many tests the last `npm test` ran, from the file each package's vitest config has it write (`.test-counts.json`, which git ignores). |
-| `gatherFacts` | function | 209 | `function gatherFacts(root)` | Everything the code says, by name. |
-| `RULES` | constant | 251 | `const RULES` | The statements to look for. |
-| `checkText` | function | 325 | `function checkText(text, facts)` | The statements in `text` that the code contradicts, with their line numbers, how many were checked, and how many were left alone because their... |
-| `openapiEndpoints` | function | 362 | `function openapiEndpoints(text)` | Endpoints of docs/api/openapi.yaml as "METHOD /path", read the way openapi.check does: a path at two spaces, a method at four. |
-| `endpointTableRows` | function | 378 | `function endpointTableRows(text)` | Rows of the endpoint table of setup/05, as "METHOD /path" with the query string cut off. |
-| `citedLines` | function | 385 | `function citedLines(cell)` | "file:line" and ":line" tokens of one cell of the call table, as file -> [lines]. |
-| `checkCallTable` | function | 403 | `function checkCallTable(text, calls)` | The table of calls in ERD-Database.md against the lines of server/src: one problem for each method that differs. |
-| `checkTracker` | function | 430 | `function checkTracker(text)` | The rows of the tracker (a row is a table row whose first cell is a mark) and what is wrong with them. |
-| `checkOpenItemsTotals` | function | 461 | `function checkOpenItemsTotals(text, totals)` | The sentence at the head of the open-items page that gives the tracker's totals. |
-| `checkFacts` | function | 468 | `function checkFacts(root)` |  |
+| `toNumber` | function | 45 | `function toNumber(text)` | A count written as digits (with a thousands comma) or as a word, or null. |
+| `countEndpoints` | function | 68 | `function countEndpoints(root)` | The routes the BFF registers: `app.get(`, `app.post(` and the like at the start of a line, in the files that register any. |
+| `countRouteModules` | function | 84 | `function countRouteModules(root)` | Route modules: `await app.register(somethingRoutes)` in index.ts, with or without options after the name. |
+| `zabbixCalls` | function | 91 | `function zabbixCalls(root)` | Every Zabbix method named as a string in server/src outside tests and comments: method -> file -> [lines], and which are written. |
+| `environmentVariables` | function | 116 | `function environmentVariables(root)` | The environment variables server/src reads: `process.env.NAME`, `process.env['NAME']` and `envNum('NAME', ...)`, outside tests. |
+| `documentedVariables` | function | 128 | `function documentedVariables(readme)` | The names in backticks in the Configuration section of a README. |
+| `countErd` | function | 136 | `function countErd(text)` | Entities and relationships of an erDiagram, and of the ERD-Database tables. |
+| `countConceptual` | function | 148 | `function countConceptual(text)` | The rows of the entity and association tables of ERD-Conceptual.md. |
+| `testCounts` | function | 193 | `function testCounts(root)` | How many tests the last `npm test` ran, from the file each package's vitest config has it write (`.test-counts.json`, which git ignores). |
+| `countsNote` | function | 210 | `const countsNote = (judged) =>` | What the checker adds to its line when it could not judge the test counts, so that a green run is not read as more than it was (IN-87). |
+| `countPages` | function | 214 | `function countPages(app)` | The pages App.tsx routes. |
+| `gatherFacts` | function | 221 | `function gatherFacts(root)` | Everything the code says, by name. |
+| `RULES` | constant | 262 | `const RULES` | The statements to look for. |
+| `checkText` | function | 336 | `function checkText(text, facts)` | The statements in `text` that the code contradicts, with their line numbers, how many were checked, and how many were left alone because their... |
+| `openapiEndpoints` | function | 373 | `function openapiEndpoints(text)` | Endpoints of docs/api/openapi.yaml as "METHOD /path", read the way openapi.check does: a path at two spaces, a method at four. |
+| `endpointTableRows` | function | 389 | `function endpointTableRows(text)` | Rows of the endpoint table of setup/05, as "METHOD /path" with the query string cut off. |
+| `citedLines` | function | 396 | `function citedLines(cell)` | "file:line" and ":line" tokens of one cell of the call table, as file -> [lines]. |
+| `checkCallTable` | function | 414 | `function checkCallTable(text, calls)` | The table of calls in ERD-Database.md against the lines of server/src: one problem for each method that differs. |
+| `checkTracker` | function | 441 | `function checkTracker(text)` | The rows of the tracker (a row is a table row whose first cell is a mark) and what is wrong with them. |
+| `checkOpenItemsTotals` | function | 472 | `function checkOpenItemsTotals(text, totals)` | The sentence at the head of the open-items page that gives the tracker's totals. |
+| `openItemOwners` | function | 480 | `function openItemOwners(text)` | The rows of the open-items page that only HCML, or only the owner, can close. |
+| `checkOpenProblems` | function | 493 | `function checkOpenProblems(page, items)` | A comment before each table of the open-problems page names its rows: they must be the ones the open-items page gives to HCML alone and to the... |
+| `checkFacts` | function | 513 | `function checkFacts(root)` |  |
 
 Imports: none
 
@@ -170,6 +174,20 @@ Packages: `node:fs`, `node:path`, `node:url`
 Imported by: none
 <!-- /gen -->
 
+### `tools/check/installed.check.mjs`
+
+Reads each lock file against the `package.json` of what is installed, and names every package that is not the version the lock file says. A copy whose `npm ci` was never run can pass its own tests on older packages than the ones the images are built from, which is what it exists to stop (IN-80). It is the first step of `npm run verify`, and it never installs anything.
+
+<!-- gen:card tools/check/installed.check.mjs -->
+50 lines, 0 exports. Imported by 0 files.
+
+Imports: none
+
+Packages: `node:fs`, `node:path`, `node:url`
+
+Imported by: none
+<!-- /gen -->
+
 ### `tools/check/links.check.mjs`
 
 Fails on a broken relative link or a line citation that runs past its file. Walked through in [Tests and checkers](tests-and-checkers.md).
@@ -196,24 +214,24 @@ Imported by: none
 Fails when the API description and the routes the server registers disagree. Walked through in [Tests and checkers](tests-and-checkers.md).
 
 <!-- gen:card tools/check/openapi.check.ts -->
-802 lines, 14 exports. Imported by 0 files.
+831 lines, 14 exports. Imported by 0 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
-| `Route` | interface | 45 | `interface Route` |  |
-| `routesIn` | function | 61 | `function routesIn(source: string, where = '<memory>'): Route[]` | Every route registration in a TypeScript source file. |
-| `specPaths` | function | 90 | `function specPaths(yaml: string): string[]` | Path keys under `paths:` in an OpenAPI document, in file order. |
-| `toTemplate` | function | 110 | `const toTemplate = (path: string): string =>` | A route's `:id` as the spec writes it, `{id}`. |
-| `paramsOf` | function | 113 | `const paramsOf = (path: string): string[] =>` | The parameter names in a path, in order, from the route form or the spec form. |
-| `SpecOp` | interface | 118 | `interface SpecOp` |  |
-| `specOperations` | function | 212 | `function specOperations(yaml: string): SpecOp[]` | Every operation under `paths:`: its method, path, whether it opts out of security, the status codes it documents and the path parameters it declares. |
-| `cutDescriptions` | function | 242 | `function cutDescriptions(yaml: string): { line: number; entry: string }[]` | The lines where YAML cuts a description short. |
-| `Guard` | interface | 302 | `interface Guard` |  |
-| `guardIn` | function | 314 | `function guardIn(source: string): Guard \| null` | The guard's two tables, read out of the source that holds them (`PUBLIC_ROUTES` and `ROUTE_RULES` in auth.ts), or null when either is missing: a... |
-| `RoleEntry` | interface | 328 | `interface RoleEntry` | One entry of the Roles table: a path, with the method it names if it names one, and whether a star made it stand for everything below. |
-| `rolesTable` | function | 339 | `function rolesTable(yaml: string): Map<string, RoleEntry[]> \| null` | The `### Roles` table in the spec's description: for each role, the paths its row names in backticks (`/api/net/*` stands for everything below... |
-| `compareRoles` | function | 361 | `function compareRoles(table: Map<string, RoleEntry[]>, ops: SpecOp[], guard: Guard): string[]` | The Roles table against the guard's rules, both ways: every path the table names has the role of its row, and every operation the rules put above... |
-| `compare` | function | 385 | `function compare(routes: Route[], ops: SpecOp[], guard: Guard)` | Everything the registered routes and the spec must agree on, as a list of problems (empty when they agree), plus how many operations the guard... |
+| `Route` | interface | 46 | `interface Route` |  |
+| `routesIn` | function | 64 | `function routesIn(source: string, where = '<memory>'): Route[]` | Every route registration in a TypeScript source file. |
+| `specPaths` | function | 100 | `function specPaths(yaml: string): string[]` | Path keys under `paths:` in an OpenAPI document, in file order. |
+| `toTemplate` | function | 120 | `const toTemplate = (path: string): string =>` | A route's `:id` as the spec writes it, `{id}`. |
+| `paramsOf` | function | 123 | `const paramsOf = (path: string): string[] =>` | The parameter names in a path, in order, from the route form or the spec form. |
+| `SpecOp` | interface | 128 | `interface SpecOp` |  |
+| `specOperations` | function | 222 | `function specOperations(yaml: string): SpecOp[]` | Every operation under `paths:`: its method, path, whether it opts out of security, the status codes it documents and the path parameters it declares. |
+| `cutDescriptions` | function | 252 | `function cutDescriptions(yaml: string): { line: number; entry: string }[]` | The lines where YAML cuts a description short. |
+| `Guard` | interface | 312 | `interface Guard` |  |
+| `guardIn` | function | 324 | `function guardIn(source: string): Guard \| null` | The guard's two tables, read out of the source that holds them (`PUBLIC_ROUTES` and `ROUTE_RULES` in auth.ts), or null when either is missing: a... |
+| `RoleEntry` | interface | 338 | `interface RoleEntry` | One entry of the Roles table: a path, with the method it names if it names one, and whether a star made it stand for everything below. |
+| `rolesTable` | function | 349 | `function rolesTable(yaml: string): Map<string, RoleEntry[]> \| null` | The `### Roles` table in the spec's description: for each role, the paths its row names in backticks (`/api/net/*` stands for everything below... |
+| `compareRoles` | function | 371 | `function compareRoles(table: Map<string, RoleEntry[]>, ops: SpecOp[], guard: Guard): string[]` | The Roles table against the guard's rules, both ways: every path the table names has the role of its row, and every operation the rules put above... |
+| `compare` | function | 395 | `function compare(routes: Route[], ops: SpecOp[], guard: Guard)` | Everything the registered routes and the spec must agree on, as a list of problems (empty when they agree), plus how many operations the guard... |
 
 Imports: none
 
@@ -405,7 +423,7 @@ Imported by: `tools/check/handover.check.mjs`, `tools/handover/lib/model.mjs`, `
 Times every read endpoint, cold and warm, with its size raw and compressed. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card tools/live/api-timing.py -->
-51 lines, 0 exports. Imported by 0 files.
+61 lines, 0 exports. Imported by 0 files.
 
 Imports: none
 
@@ -473,7 +491,7 @@ Imported by: none
 Puts a steady load on the cached read endpoints and reports requests a second and latency. Walked through in [Tests and checkers](tests-and-checkers.md).
 
 <!-- gen:card tools/live/load-test.mjs -->
-22 lines, 0 exports. Imported by 0 files.
+25 lines, 0 exports. Imported by 0 files.
 
 Imports: none
 
@@ -499,7 +517,7 @@ Imported by: none
 Signs in through nginx and checks health, the reports, the downloads, the stream and the problem list. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card tools/live/signedin_check.py -->
-224 lines, 0 exports. Imported by 0 files.
+272 lines, 0 exports. Imported by 0 files.
 
 Imports: none
 

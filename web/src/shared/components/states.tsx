@@ -45,7 +45,7 @@ const ROLE_REFUSAL = /needs the "(\w+)" role; you are signed in as "(\w+)"/;
 const FOR_ROLE: Record<string, string> = { viewer: 'viewers', wall: 'wall screens', operator: 'operators', admin: 'admins' };
 const withArticle = (word: string) => (/^[aeiou]/i.test(word) ? `an ${word}` : `a ${word}`);
 
-export function ErrorState({ message }: { message: string }) {
+export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   const { role } = useAuth();
   // A page above the signed-in role has not failed to load, so it is said calmly, as a status.
   const refusal = ROLE_REFUSAL.exec(message);
@@ -64,6 +64,12 @@ export function ErrorState({ message }: { message: string }) {
       <div className="state-title">Couldn’t load data</div>
       <div className="mono state-detail">{message}</div>
       {hint && <div className="muted state-hint">{hint}</div>}
+      {/* A page that polls tries again by itself; one that does not says how, and does it (UX-49). */}
+      {onRetry && (
+        <button type="button" className="btn state-action" onClick={onRetry}>
+          Try again
+        </button>
+      )}
     </div>
   );
 }
@@ -106,8 +112,11 @@ export function StaleCopy({ asOf, what = 'this', refreshing = false }: { asOf: n
   );
 }
 
+/** The attribute that puts content out of reach of the mouse and the keyboard while `on`. React 18 has no type for `inert`, and writes the empty string as the bare attribute. */
+export const inertWhen = (on: boolean): Record<string, string> => (on ? { inert: '' } : {});
+
 /**
- * Loaded content. Dimmed (and not clickable) while it still belongs to the
+ * Loaded content. Dimmed, and out of reach of the mouse and the keyboard (`inert`), while it still belongs to the
  * previous selection and the new one loads; topped with a note when a refresh
  * failed. Always the same wrapper, so toggling either keeps the content mounted.
  */
@@ -123,7 +132,8 @@ export function Loaded({
   children: ReactNode;
 }) {
   return (
-    <div className={stale ? 'stale' : undefined} aria-busy={stale || undefined}>
+    // `inert` is the one thing that keeps Tab and Enter from the buttons of the old selection (FR-54).
+    <div className={stale ? 'stale' : undefined} aria-busy={stale || undefined} {...inertWhen(stale)}>
       {error && !stale && <RefreshFailed error={error} updatedAt={updatedAt} />}
       {children}
     </div>
@@ -145,6 +155,8 @@ export function Async<T>({
   updatedAt,
   children,
   loadingLabel,
+  onRetry,
+  footer,
 }: {
   loading: boolean;
   error: string | null;
@@ -155,15 +167,22 @@ export function Async<T>({
   updatedAt?: number | null;
   loadingLabel?: string;
   children: (data: T) => ReactNode;
+  /** For a page that does not poll: the error then has a Try again button (useAsync's `reload`). */
+  onRetry?: () => void;
+  /** Drawn after the content, outside what dims and goes inert while it is stale: for a control that changes the selection, a pager, so that it keeps its focus (UX-57). */
+  footer?: (data: T) => ReactNode;
 }) {
-  if (error && (data == null || stale)) return <ErrorState message={error} />;
+  if (error && (data == null || stale)) return <ErrorState message={error} onRetry={onRetry} />;
   if (loading && data == null) return <Loading label={loadingLabel} />;
   if (data == null) return <Empty>No data.</Empty>;
   const copy = staleCopyOf(data);
   return (
-    <Loaded stale={stale} error={error} updatedAt={updatedAt}>
-      {copy && <StaleCopy asOf={copy.asOf} refreshing={copy.refreshing} />}
-      {children(data)}
-    </Loaded>
+    <>
+      <Loaded stale={stale} error={error} updatedAt={updatedAt}>
+        {copy && <StaleCopy asOf={copy.asOf} refreshing={copy.refreshing} />}
+        {children(data)}
+      </Loaded>
+      {footer?.(data)}
+    </>
   );
 }

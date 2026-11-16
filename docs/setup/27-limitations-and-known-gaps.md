@@ -16,7 +16,7 @@ not discovered by a reader.
 |---|---|
 | **It cannot collect anything** | Zabbix polls; the portal reads items. If Zabbix does not collect it, no portal feature can invent it |
 | **It cannot change monitoring** | One write exists, `event.acknowledge`. No host, item, trigger or template can be created, edited or deleted. See [ADR-0006](../architecture/adr/0006-read-only-with-one-write.md) |
-| **It remembers almost nothing** | Every derived value dies on restart. The portal keeps no audit trail of its own (who acknowledged what is in the text Zabbix stores, `[portal:<user>]`, and in the BFF's log), no saved views, no user table. The one thing it keeps is a small state file in the hosted copy: the saved report recipients, the monthly schedule and the last 24 sends ([ADR-0003](../architecture/adr/0003-no-database.md), amended; [ADR-0015](../architecture/adr/0015-keep-a-small-state-file-for-recipients-and-the-schedule.md)) |
+| **It remembers almost nothing** | Every derived value dies on restart. The portal keeps no audit trail of its own (who acknowledged what is in the text Zabbix stores, `[portal:<user>]`, and in the BFF's log), no saved views, no user table. It keeps two things: a copy of the BFF's log in a volume, so that a rebuild does not lose it (SC-42), and, in the hosted copy, a small state file with the saved report recipients, the monthly schedule and the last 24 sends ([ADR-0003](../architecture/adr/0003-no-database.md), amended; [ADR-0015](../architecture/adr/0015-keep-a-small-state-file-for-recipients-and-the-schedule.md)) |
 | **It cannot see past Zabbix's retention** | 31 days of raw history, 365 days of trends and events. A two-year question has no answer through this API |
 
 ## Goals only partly met
@@ -63,8 +63,11 @@ not discovered by a reader.
   500-entry LRU and parameterised keys, ordinary browsing can evict a fresh report in minutes. A closed month is pinned and stays. How
   often the expensive path actually runs is unknown, and it is the number that decides whether any of
   the performance work matters.
-- Every performance figure in this project is single-user and single-shot. There is no p95 and no
-  concurrency data anywhere.
+- Every performance figure in this project is single-user and single-shot, except one load test
+  (`tools/live/load-test.mjs`): the cached endpoints took 6,715 requests a second from 20 clients with no error
+  (median 2.4 ms, 99th percentile 11.6 ms), straight at the BFF on one Mac with a warm cache. It says nothing about
+  a cold read, a slow Zabbix, the browser, or a number of people on the screen, and no concurrency figure exists for
+  any other path.
 - The SLA report files were checked on test data. The August workbook was opened in Microsoft Excel on
   26 October 2026 with no repair prompt and read page by page. Both files were also downloaded from the
   running portal, on 12 October (size, pages and sheets read), on 15 October (a 200 in the BFF log) and,

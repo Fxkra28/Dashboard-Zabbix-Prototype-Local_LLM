@@ -54,6 +54,8 @@ const serialize = (v: UrlValue) => (typeof v === 'boolean' ? (v ? '1' : '0') : S
  * value is left out of the URL.
  *
  * - `options`: the values accepted from the URL; anything else reads as the default.
+ * - `keepDefault`: for a default worked out again on every render (the last closed month), which would
+ *   open another value in a copied link later: the value is always written, and the default once on mount.
  * - `debounceMs`: for text inputs: the value updates at once, the URL once
  *   typing pauses (browsers throttle a history write per keystroke).
  *
@@ -62,7 +64,7 @@ const serialize = (v: UrlValue) => (typeof v === 'boolean' ? (v ? '1' : '0') : S
 export function useUrlState<T extends UrlValue>(
   key: string,
   fallback: T,
-  { options, debounceMs }: { options?: readonly T[]; debounceMs?: number } = {},
+  { options, debounceMs, keepDefault }: { options?: readonly T[]; debounceMs?: number; keepDefault?: boolean } = {},
 ): [T, (value: T) => void] {
   const { search } = useLocation();
   const patch = useSearchPatch();
@@ -82,7 +84,7 @@ export function useUrlState<T extends UrlValue>(
     (value: T) => {
       const write = () => {
         timer.current = undefined;
-        patch({ [key]: Object.is(value, fallback) ? null : serialize(value) });
+        patch({ [key]: !keepDefault && Object.is(value, fallback) ? null : serialize(value) });
         // Unchanged URL (or a value the URL can't hold): nothing to wait for.
         setDraft((d) => (d && Object.is(d.value, value) ? { value } : d));
       };
@@ -91,8 +93,12 @@ export function useUrlState<T extends UrlValue>(
       if (debounceMs) timer.current = window.setTimeout(write, debounceMs);
       else write();
     },
-    [patch, key, fallback, debounceMs],
+    [patch, key, fallback, debounceMs, keepDefault],
   );
+
+  useEffect(() => {
+    if (keepDefault && new URLSearchParams(window.location.search).get(key) === null) patch({ [key]: serialize(fallback) });
+  }, [keepDefault, key, fallback, patch]);
 
   return [draft ? draft.value : fromUrl, setValue];
 }

@@ -14,9 +14,17 @@ vi.mock('../sli/engine.js', async (importOriginal) => ({
 }));
 
 const { getMonthlySli } = await import('../services/sli.js');
+const { Cancelled } = await import('../core/gate.js');
 const { SLI_AT_ONCE } = await import('../services/reportPolicy.js');
 
-const MONTHS = ['2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08'];
+/** The YYYY-MM of `n` months ago: a month that has started and is not past the year the SLA reports reach back (BK-50). */
+const monthsBack = (n: number) => {
+  const d = new Date();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() - n);
+  return d.toISOString().slice(0, 7);
+};
+const MONTHS = [8, 7, 6, 5, 4, 3, 2, 1].map(monthsBack);
 const PROFILES = ['availability', 'hcml-report'] as const;
 
 beforeEach(() => {
@@ -43,7 +51,7 @@ describe('getMonthlySli under a burst (BK-50)', () => {
   });
 
   it('still shares one read between callers who ask for the same month', async () => {
-    await Promise.all([getMonthlySli('2026-08', 'availability'), getMonthlySli('2026-08', 'availability'), getMonthlySli('2026-08', 'availability')]);
+    await Promise.all([getMonthlySli(monthsBack(1), 'availability'), getMonthlySli(monthsBack(1), 'availability'), getMonthlySli(monthsBack(1), 'availability')]);
     expect(compute).toHaveBeenCalledTimes(1);
   });
 
@@ -70,7 +78,7 @@ describe('a month nobody can report (BK-50)', () => {
     const release: (() => void)[] = [];
     compute.mockReset();
     compute.mockImplementation(() => new Promise((resolve) => release.push(() => resolve({ marker: 'held' }))));
-    const holders = [getMonthlySli('2026-01', 'availability'), getMonthlySli('2026-02', 'availability')];
+    const holders = [getMonthlySli(monthsBack(8), 'availability'), getMonthlySli(monthsBack(7), 'availability')];
     await expect((async () => getMonthlySli(month, 'availability'))()).rejects.toThrow(why);
     expect(compute).toHaveBeenCalledTimes(2);
     release.forEach((r) => r());
@@ -78,3 +86,48 @@ describe('a month nobody can report (BK-50)', () => {
   });
 });
 
+describe('a reader who leaves while a cold month waits (BK-59)', () => {
+  it('does not read the month nobody waits for, and reads it as any cold month when it is asked for again', async () => {
+    const release: (() => void)[] = [];
+    compute.mockReset();
+    compute.mockImplementation(() => new Promise((resolve) => release.push(() => resolve({ marker: 'held' }))));
+    const holders = [getMonthlySli(monthsBack(8), 'availability'), getMonthlySli(monthsBack(7), 'availability')];
+    const leaving = new AbortController();
+    const dropped = getMonthlySli(monthsBack(6), 'availability', leaving.signal);
+    dropped.catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(compute).toHaveBeenCalledTimes(2);
+
+    leaving.abort();
+    await expect(dropped).rejects.toBeInstanceOf(Cancelled);
+    release.forEach((r) => r());
+    await Promise.all(holders);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(compute).toHaveBeenCalledTimes(2);
+
+    compute.mockReset();
+    compute.mockImplementation(async () => ({ marker: 'march' }));
+    expect(await getMonthlySli(monthsBack(6), 'availability')).toEqual({ marker: 'march' });
+    expect(compute).toHaveBeenCalledTimes(1);
+  });
+
+  it('still reads a month for the reader who stays when another left', async () => {
+    const release: (() => void)[] = [];
+    compute.mockReset();
+    compute.mockImplementation(() => new Promise((resolve) => release.push(() => resolve({ marker: 'ok' }))));
+    const holders = [getMonthlySli(monthsBack(8), 'availability'), getMonthlySli(monthsBack(7), 'availability')];
+    const leaving = new AbortController();
+    const left = getMonthlySli(monthsBack(6), 'availability', leaving.signal);
+    const stays = getMonthlySli(monthsBack(6), 'availability');
+    left.catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    leaving.abort();
+    await expect(left).rejects.toBeInstanceOf(Cancelled);
+    release.forEach((r) => r());
+    await Promise.all(holders);
+    await vi.waitFor(() => expect(release.length).toBe(3));
+    release[2]!();
+    expect(await stays).toEqual({ marker: 'ok' });
+    expect(compute).toHaveBeenCalledTimes(3);
+  });
+});

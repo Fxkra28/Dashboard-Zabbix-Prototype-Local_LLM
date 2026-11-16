@@ -372,16 +372,16 @@ describe('a password on every short list (SC-46)', () => {
   };
 
   it('warns, and does not refuse, for the passwords the documents once used as examples, naming the users and never the passwords', async () => {
-    const { lines, threw } = await warned({ ...AUTH_ON, PORTAL_PASS: '', PORTAL_USERS: 'ana:secret:viewer,budi:Zabbix:operator,citra:a-long-real-password:admin' });
+    const { lines, threw } = await warned({ ...AUTH_ON, PORTAL_PASS: '', PORTAL_USERS: 'ana:changeme:viewer,budi:Password:operator,citra:a-long-real-password:admin' });
     expect(threw).toBe(false);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/"ana", "budi" have a password/);
     expect(lines[0]).not.toContain('citra');
-    expect(lines[0]).not.toMatch(/secret|zabbix/i);
+    expect(lines[0]).not.toMatch(/changeme|password:/i);
   });
 
   it('says it of one user in the singular, for the PORTAL_PASS pair', async () => {
-    const { lines, threw } = await warned({ ...AUTH_ON, PORTAL_PASS: 'zabbix', PORTAL_USERS: '' });
+    const { lines, threw } = await warned({ ...AUTH_ON, PORTAL_PASS: 'changeme', PORTAL_USERS: '' });
     expect(threw).toBe(false);
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/"admin" has a password/);
@@ -396,7 +396,7 @@ describe('a password on every short list (SC-46)', () => {
   it('says nothing for a long password, with sign-in off, or when none is given to say it to', async () => {
     expect((await warned({ ...AUTH_ON })).lines).toEqual([]);
     expect((await warned({ AUTH_ENABLED: 'false', PORTAL_PASS: 'secret', PORTAL_USERS: '' })).lines).toEqual([]);
-    const { assertUsers } = await load({ ...AUTH_ON, PORTAL_PASS: 'secret', PORTAL_USERS: '' });
+    const { assertUsers } = await load({ ...AUTH_ON, PORTAL_PASS: 'changeme', PORTAL_USERS: '' });
     expect(() => assertUsers()).not.toThrow();
   });
 
@@ -404,6 +404,42 @@ describe('a password on every short list (SC-46)', () => {
     const { lines, threw } = await warned({ ...AUTH_ON, PORTAL_PASS: 'admin', PORTAL_USERS: '' });
     expect(threw).toBe(true);
     expect(lines).toEqual([]);
+  });
+});
+
+// SC-55: docker compose cuts an unquoted password in .env at its first "$", so "Str0ng$Passw0rd1" reaches the server as "Str0ng" and was accepted.
+describe('a password that is too short (SC-55)', () => {
+  it('is refused for PORTAL_PASS and for a PORTAL_USERS entry, naming the user and never the password', async () => {
+    const one = (await load({ ...AUTH_ON, PORTAL_PASS: 'Str0ng', PORTAL_USERS: '' })).assertUsers;
+    expect(one).toThrow(/"admin" has a password shorter than 8 characters/);
+    expect(one).not.toThrow(/Str0ng/);
+    const two = (await load({ ...AUTH_ON, PORTAL_PASS: '', PORTAL_USERS: 'ana:Short1:viewer,budi:a-long-enough-one:operator,citra:Tiny:admin' })).assertUsers;
+    expect(two).toThrow(/"ana", "citra" have a password shorter than 8 characters/);
+    expect(two).not.toThrow(/budi|Short1|Tiny/);
+  });
+
+  it('says what cuts a password in two, and the three ways out, without a password in the sentence', async () => {
+    const { assertUsers } = await load({ ...AUTH_ON, PORTAL_PASS: 'Str0ng', PORTAL_USERS: '' });
+    expect(assertUsers).toThrow(/"\$"/);
+    expect(assertUsers).toThrow(/single quotes/);
+    expect(assertUsers).toThrow(/hash-password/);
+  });
+
+  it('lets exactly 8 characters through, and a hash of any password, which is the way to keep a short one', async () => {
+    expect((await load({ ...AUTH_ON, PORTAL_PASS: 'Passw0rd', PORTAL_USERS: '' })).assertUsers).not.toThrow();
+    const { hashPassword } = await import('../security/passwords.js');
+    const hash = await hashPassword('tiny');
+    expect((await load({ ...AUTH_ON, PORTAL_PASS: '', PORTAL_USERS: `ana:${hash}:admin` })).assertUsers).not.toThrow();
+  });
+
+  it('counts characters, not bytes', async () => {
+    expect((await load({ ...AUTH_ON, PORTAL_PASS: 'kata-ñandú', PORTAL_USERS: '' })).assertUsers).not.toThrow();
+    expect((await load({ ...AUTH_ON, PORTAL_PASS: 'ñandú', PORTAL_USERS: '' })).assertUsers).toThrow(/shorter than 8/);
+  });
+
+  it('asks nothing of a portal with sign-in off, and still names an empty password as it did', async () => {
+    expect((await load({ AUTH_ENABLED: 'false', PORTAL_PASS: 'x', PORTAL_USERS: '' })).assertUsers).not.toThrow();
+    expect((await load({ ...AUTH_ON, PORTAL_PASS: '', PORTAL_USERS: '' })).assertUsers).toThrow(/an empty password or the default "admin"/);
   });
 });
 

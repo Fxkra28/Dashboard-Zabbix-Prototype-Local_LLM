@@ -1,8 +1,8 @@
 # Documentation
 
-A branded, read-only operations portal over HCML's Zabbix 7.0: 139 monitored hosts across 14 sites.
+A branded, read-only operations portal over HCML's Zabbix 7.0. The September 2026 copy it was built on held 139 monitored hosts across 14 sites; the live count is HCML's own.
 The portal presents things Zabbix has no table for: sites, WAN links, incidents, host reachability and
-a monthly availability figure validated against HCML's own published reports.
+a monthly availability figure whose HCML report method matches HCML's own June to August reports to the last digit.
 
 **This copy is `hcml-portal-ollama`.** Its plain-language layer is `qwen3:8b` running on this host, so
 no question and no summary of the estate leaves the machine. The sibling `hcml-portal` runs the same code against
@@ -35,7 +35,7 @@ cache, auth, where a number comes from, both AI paths and the one write) in
 | Find out what filled a disk, and what is safe to remove | [`operations/full-disk.md`](operations/full-disk.md) |
 | Call it | [`api/openapi.yaml`](api/openapi.yaml), 51 endpoints · [how to view it](api/README.md) |
 | Download the monthly SLA report | [`setup/18-automated-reporting.md`](setup/18-automated-reporting.md) for the buttons, the endpoint and how the files are built |
-| Understand why it is shaped this way | [`architecture/adr/`](architecture/adr/): fifteen decisions |
+| Understand why it is shaped this way | [`architecture/adr/`](architecture/adr/): sixteen decisions |
 | See how it works | [`architecture/`](architecture/): diagrams and the subsystem index |
 | See what it looks like | [`screenshots/README.md`](screenshots/README.md): the main pages as images, with every name replaced |
 | See who uses it | [`ux/README.md`](ux/README.md): the four roles and the acknowledge journey, derived from the code |
@@ -49,9 +49,9 @@ cache, auth, where a number comes from, both AI paths and the one write) in
 
 | | |
 |---|---|
-| Front end | React 18 + TypeScript + Vite, ECharts. 19 pages, 1769 tests, linted with eslint |
-| Back end | Fastify 5 + TypeScript on Node 24. 24 route modules, 51 endpoints, 2976 tests, linted with eslint |
-| Data source | The Zabbix JSON-RPC API. Nothing else: no database, no volumes, no data files |
+| Front end | React 18 + TypeScript + Vite, ECharts. 18 pages, 2045 tests, linted with eslint |
+| Back end | Fastify 5 + TypeScript on Node 24. 24 route modules, 51 endpoints, 3412 tests, linted with eslint |
+| Data source | The Zabbix JSON-RPC API. Nothing else: no database. Two small volumes: the web check figures of closed months ([ADR-0016](architecture/adr/0016-keep-the-web-check-figures-of-closed-months.md)) and the server's own copy of its log |
 | Writes | Exactly one: acknowledge/close, behind a separate token and the operator role |
 | Downloads | The monthly SLA report as a PDF, an Excel file or a zip of CSV files, in the number and date style chosen, built when asked from the cached figures and never stored |
 | State | One in-process `Map`, 500 entries or about 64 MB, TTLs from 15 s to 24 h. Lost on restart |
@@ -89,7 +89,7 @@ docs/
   contributing.md          the house rules, and why each one exists
   setup/                   the deep reference, one file for each subsystem (indexed by setup.md)
   api/openapi.yaml         the contract: 51 endpoints
-  architecture/adr/        why it is the way it is: 15 decisions
+  architecture/adr/        why it is the way it is: 16 decisions
   schema/  flow/  erd/     the diagrams; erd/erd.md is the data model in prose
   screenshots/             the main pages as images, with host names, addresses, interface descriptions and web check names replaced
   ux/                      who uses it: the four roles and the acknowledge journey (derived, not interviewed)
@@ -100,7 +100,7 @@ deploy/
   rebuild.sh               rebuilds the portals from the commit, then checks what came up
   watch.sh                 tells someone when a portal or a container stops: a LaunchAgent on the Mac, cron elsewhere
 .github/
-  workflows/ci.yml         five jobs: server, web, the eleven checkers, a secret scan, both Docker builds
+  workflows/ci.yml         five jobs: server, web, the checkers, a secret scan, both Docker builds
   dependabot.yml           weekly pull requests for the actions, the npm packages and the base images
 ```
 

@@ -214,7 +214,7 @@ line is a graphical object under WCAG 1.4.11.
 
 The purple these replaced, `#7C4DFF`, was also used as a KPI card stripe on the Dashboard alongside
 three other colours. A stripe that varies for variety is decoration, so those four came off. The
-same stripe stays wherever it carries state: Capacity, Availability, Inventory and Alert noise all
+same stripe stays wherever it carries state: Capacity, the SLA page, Inventory and Alert noise all
 set it from a threshold.
 
 ### The monospace face

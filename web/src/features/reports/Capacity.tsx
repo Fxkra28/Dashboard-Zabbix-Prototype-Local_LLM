@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../api';
 import { useAsync } from '../../shared/hooks/useAsync';
 import { useUrlState } from '../../shared/hooks/useUrlState';
+import { useAuth, roleAllows } from '../../shared/hooks/useAuth';
 import type { CapacityReport, CapacityRow } from '../../types';
 import { Async, Empty } from '../../shared/components/states';
 import { Field } from '../../shared/components/Field';
@@ -38,6 +39,9 @@ function MetricPanel({
   days: number;
 }) {
   const iface = metric === 'ifutil';
+  // The server keeps interface items from a viewer (SC-45), so a viewer who pressed Graph there would be refused: the button is left off (FR-55).
+  const { role } = useAuth();
+  const canGraph = !iface || roleAllows(role, 'wall');
   return (
     <div className="panel">
       <div className="panel-head">
@@ -55,7 +59,7 @@ function MetricPanel({
       )}
 
       {rows.length ? (
-        <TableWrap label="Capacity by interface">
+        <TableWrap label={PANEL_TITLE[metric] ?? label}>
           <table className="data">
             <thead>
               <tr>
@@ -63,7 +67,7 @@ function MetricPanel({
                 <th>{iface ? 'Port' : 'Item'}</th>
                 <th style={{ width: 150 }}>Average ({days}d)</th>
                 <th>Peak</th>
-                <th className="sticky-end"><span className="sr-only">Actions</span></th>
+                {canGraph && <th className="sticky-end"><span className="sr-only">Actions</span></th>}
               </tr>
             </thead>
             <tbody>
@@ -101,11 +105,13 @@ function MetricPanel({
                       </>
                     )}
                   </td>
-                  <td className="sticky-end">
-                    <Link className="btn ghost sm" to={`/graphs?hostid=${r.hostid}&itemid=${r.itemid}`}>
-                      Graph
-                    </Link>
-                  </td>
+                  {canGraph && (
+                    <td className="sticky-end">
+                      <Link className="btn ghost sm" to={`/graphs?hostid=${r.hostid}&itemid=${r.itemid}`}>
+                        Graph
+                      </Link>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -148,6 +154,7 @@ export default function Capacity() {
         stale={q.stale}
         updatedAt={q.updatedAt}
         loadingLabel="Reading trends…"
+        onRetry={q.reload}
       >
         {(data) => {
           const empty = data.metrics.every((m) => !m.rows.length);

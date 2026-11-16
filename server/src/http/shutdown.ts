@@ -1,3 +1,4 @@
+import { inspect } from 'node:util';
 import type { FastifyInstance } from 'fastify';
 
 // Close on SIGTERM and SIGINT: node as PID 1 ignores a signal it has no handler for.
@@ -73,3 +74,43 @@ export function installShutdown(app: FastifyInstance, opts: ShutdownOptions = {}
     for (const s of signals) source.off(s, onSignal);
   };
 }
+
+type CrashEvent = 'uncaughtException' | 'unhandledRejection';
+
+interface CrashSource {
+  on(event: CrashEvent, handler: (reason: unknown) => void): unknown;
+  off(event: CrashEvent, handler: (reason: unknown) => void): unknown;
+}
+
+/** An Error as it is; anything else as text of at most 500 characters. */
+const asError = (reason: unknown): Error =>
+  reason instanceof Error ? reason : new Error(inspect(reason, { depth: 1, breakLength: Infinity }).replace(/^'|'$/g, '').slice(0, 500));
+
+/**
+ * Write what crashed to the log, and so to the file of SC-42, before the process dies: Node's own report goes to stderr,
+ * which a rebuild deletes with the container (BK-68). Returns the function that takes the handlers off again.
+ */
+export function installCrashLog(
+  app: Pick<FastifyInstance, 'log'>,
+  opts: { source?: CrashSource; exit?: (code: number) => void } = {},
+): () => void {
+  const { source = process, exit = (code) => process.exit(code) } = opts;
+  let dying = false;
+
+  const handlerFor = (event: CrashEvent) => (reason: unknown): void => {
+    if (!dying) {
+      dying = true;
+      app.log.fatal({ err: asError(reason) }, `${event}: the server stops`);
+    }
+    exit(1);
+  };
+
+  const handlers = new Map<CrashEvent, (reason: unknown) => void>(
+    (['uncaughtException', 'unhandledRejection'] as const).map((e) => [e, handlerFor(e)]),
+  );
+  for (const [event, handler] of handlers) source.on(event, handler);
+  return () => {
+    for (const [event, handler] of handlers) source.off(event, handler);
+  };
+}
+

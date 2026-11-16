@@ -10,7 +10,9 @@ import {
   cached,
   invalidate,
   setCacheLogger,
+  type FetchContext,
 } from '../core/cache.js';
+import { Cancelled, createGate } from '../core/gate.js';
 
 // The cache is module-level state shared by every test in this file.
 beforeEach(() => {
@@ -718,3 +720,354 @@ describe('write holds', () => {
     expect(fn).toHaveBeenCalledTimes(3);
   });
 });
+
+describe('readers who leave (BK-59)', () => {
+  /** A one-place gate whose place is held until the test lets go, so whatever is asked next has to wait. */
+  function busyGate() {
+    const gate = createGate(1);
+    const free = deferred<void>();
+    const holder = gate.run(() => free.promise);
+    return { gate, release: () => free.resolve(), holder };
+  }
+
+  it('hands fn a wanted() that is true while a reader waits', async () => {
+    let wanted: (() => boolean) | undefined;
+    const hold = deferred<string>();
+    const reader = cached('w1', 10_000, (f) => {
+      wanted = f.wanted;
+      return hold.promise;
+    });
+    expect(wanted?.()).toBe(true);
+    hold.resolve('x');
+    await reader;
+  });
+
+  it('drops a queued fetch when its only reader leaves, and the next reader gets a fetch of their own', async () => {
+    const { gate, release, holder } = busyGate();
+    const job = vi.fn().mockResolvedValue('first');
+    const ac = new AbortController();
+    const gone = cached('q1', 10_000, (f) => gate.run(job, f), { signal: ac.signal });
+    gone.catch(() => undefined);
+    await flush();
+    ac.abort();
+    await expect(gone).rejects.toBeInstanceOf(Cancelled);
+
+    release();
+    await holder;
+    await flush();
+    expect(job).not.toHaveBeenCalled();
+
+    // The dropped fetch left nothing behind: no stored value, and no failure handed to the next reader.
+    const fresh = vi.fn().mockResolvedValue('second');
+    expect(await cached('q1', 10_000, fresh)).toBe('second');
+    expect(fresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a queued fetch while another reader still waits for it', async () => {
+    const { gate, release, holder } = busyGate();
+    const job = vi.fn().mockResolvedValue('shared');
+    const leaver = new AbortController();
+    const a = cached('q2', 10_000, (f) => gate.run(job, f), { signal: leaver.signal });
+    const b = cached('q2', 10_000, (f) => gate.run(job, f));
+    a.catch(() => undefined);
+    await flush();
+    leaver.abort();
+    await expect(a).rejects.toBeInstanceOf(Cancelled);
+
+    release();
+    await holder;
+    expect(await b).toBe('shared');
+    expect(job).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a queued fetch for a reader with no signal, such as the monthly send', async () => {
+    const { gate, release, holder } = busyGate();
+    const job = vi.fn().mockResolvedValue('v');
+    const send = cached('q3', 10_000, (f) => gate.run(job, f));
+    await flush();
+    release();
+    await holder;
+    expect(await send).toBe('v');
+    expect(job).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a reader who comes after the last one left take the queued fetch over', async () => {
+    const { gate, release, holder } = busyGate();
+    const job = vi.fn().mockResolvedValue('v');
+    const ac = new AbortController();
+    const first = cached('q4', 10_000, (f) => gate.run(job, f), { signal: ac.signal });
+    first.catch(() => undefined);
+    await flush();
+    ac.abort();
+    await expect(first).rejects.toBeInstanceOf(Cancelled);
+
+    // Still in line: nobody has reached the front yet, so a new reader wants it again.
+    const second = cached('q4', 10_000, (f) => gate.run(job, f));
+    release();
+    await holder;
+    expect(await second).toBe('v');
+    expect(job).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects the reader whose signal fires at once, never with an old copy, and logs no failed fetch', async () => {
+    const advance = useClock();
+    const warn = vi.fn();
+    setCacheLogger({ warn });
+    try {
+      await cached('q5', 1_000, async () => 'old', { staleIfError: true });
+      advance(5_000);
+      const hold = deferred<string>();
+      const ac = new AbortController();
+      const reader = cached('q5', 1_000, () => hold.promise, { staleIfError: true, signal: ac.signal });
+      reader.catch(() => undefined);
+      ac.abort();
+      await expect(reader).rejects.toBeInstanceOf(Cancelled);
+      expect(warn).not.toHaveBeenCalled();
+      hold.resolve('new');
+      await flush();
+    } finally {
+      setCacheLogger(undefined);
+    }
+  });
+
+  it('refuses a signal that has already fired, and starts nothing', async () => {
+    const fn = vi.fn().mockResolvedValue('v');
+    const ac = new AbortController();
+    ac.abort();
+    await expect(cached('q6', 10_000, fn, { signal: ac.signal })).rejects.toBeInstanceOf(Cancelled);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('lets a fetch that is already running finish and keep its value when its only reader leaves', async () => {
+    const hold = deferred<string>();
+    const ac = new AbortController();
+    const reader = cached('q7', 10_000, () => hold.promise, { signal: ac.signal });
+    reader.catch(() => undefined);
+    await flush();
+    ac.abort();
+    await expect(reader).rejects.toBeInstanceOf(Cancelled);
+
+    hold.resolve('kept');
+    await flush();
+    const next = vi.fn().mockResolvedValue('not asked');
+    expect(await cached('q7', 10_000, next)).toBe('kept');
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it('always wants a background refresh, which has no reader by design', async () => {
+    const advance = useClock();
+    await cached('q8', 1_000, async () => 'v1', { staleMs: 60_000 });
+    advance(1_500);
+    const gate = createGate(1);
+    const free = deferred<void>();
+    const holder = gate.run(() => free.promise);
+    const job = vi.fn().mockResolvedValue('v2');
+    // The old value answers at once; the refresh waits for a place with nobody behind it.
+    expect(await cached('q8', 1_000, (f) => gate.run(job, f), { staleMs: 60_000 })).toBe('v1');
+    free.resolve();
+    await holder;
+    await flush();
+    expect(job).toHaveBeenCalledTimes(1);
+    expect(await cached('q8', 1_000, async () => 'unused', { staleMs: 60_000 })).toBe('v2');
+  });
+
+  it('hands a reader who arrives the moment a fetch is dropped a fresh fetch, not the doomed one', async () => {
+    let ctx!: FetchContext;
+    const doomed = deferred<string>();
+    const ac = new AbortController();
+    const first = cached('race', 10_000, (c) => {
+      ctx = c;
+      return doomed.promise;
+    }, { signal: ac.signal });
+    first.catch(() => undefined);
+    await flush();
+    ac.abort();
+    await expect(first).rejects.toBeInstanceOf(Cancelled);
+
+    // The gate's turn comes and nobody wants the fetch, so it is taken off the key on the spot; a reader arrives before its rejection has reached anyone.
+    expect(ctx.wanted()).toBe(false);
+    const second = cached('race', 10_000, async () => 'fresh');
+    doomed.reject(new Cancelled());
+    expect(await second).toBe('fresh');
+  });
+
+  it('does not let one key’s readers leaving touch another key', async () => {
+    const { gate, release, holder } = busyGate();
+    const jobA = vi.fn().mockResolvedValue('a');
+    const jobB = vi.fn().mockResolvedValue('b');
+    const ac = new AbortController();
+    const a = cached('q9a', 10_000, (f) => gate.run(jobA, f), { signal: ac.signal });
+    const b = cached('q9b', 10_000, (f) => gate.run(jobB, f));
+    a.catch(() => undefined);
+    await flush();
+    ac.abort();
+    release();
+    await holder;
+    expect(await b).toBe('b');
+    expect(jobA).not.toHaveBeenCalled();
+  });
+});
+
+// BK-67: a fetch that can stop (a model call holding the one slot) is told when the last reader has left, and only then.
+describe('the signal a fetch can stop on (BK-67)', () => {
+  it('fires when the last reader leaves a fetch that reads it, and the fetch is not kept', async () => {
+    let signal!: AbortSignal;
+    const hold = deferred<string>();
+    const ac = new AbortController();
+    const reader = cached('s1', 10_000, (f) => {
+      signal = f.signal;
+      return hold.promise;
+    }, { signal: ac.signal });
+    reader.catch(() => undefined);
+    await flush();
+    expect(signal.aborted).toBe(false);
+    ac.abort();
+    await expect(reader).rejects.toBeInstanceOf(Cancelled);
+    expect(signal.aborted).toBe(true);
+    expect(signal.reason).toBeInstanceOf(Cancelled);
+
+    hold.resolve('late');
+    await flush();
+    const fresh = vi.fn().mockResolvedValue('fresh');
+    expect(await cached('s1', 10_000, fresh)).toBe('fresh');
+    expect(fresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire while another reader still waits, and the value is kept for them', async () => {
+    let signal!: AbortSignal;
+    const hold = deferred<string>();
+    const leaver = new AbortController();
+    const a = cached('s2', 10_000, (f) => {
+      signal = f.signal;
+      return hold.promise;
+    }, { signal: leaver.signal });
+    const b = cached('s2', 10_000, async () => 'not asked');
+    a.catch(() => undefined);
+    await flush();
+    leaver.abort();
+    await expect(a).rejects.toBeInstanceOf(Cancelled);
+    expect(signal.aborted).toBe(false);
+    hold.resolve('shared');
+    expect(await b).toBe('shared');
+  });
+
+  it('starts a fresh fetch for a reader who comes after the last one left, and leaves the old one stopped', async () => {
+    const signals: AbortSignal[] = [];
+    const ac = new AbortController();
+    const first = cached('s3', 10_000, (f) => {
+      signals.push(f.signal);
+      return new Promise<string>(() => undefined);
+    }, { signal: ac.signal });
+    first.catch(() => undefined);
+    await flush();
+    ac.abort();
+    await expect(first).rejects.toBeInstanceOf(Cancelled);
+    const second = await cached('s3', 10_000, async (f) => {
+      signals.push(f.signal);
+      return 'second';
+    });
+    expect(second).toBe('second');
+    expect(signals.map((s) => s.aborted)).toEqual([true, false]);
+  });
+
+  it('never fires for a fetch that does not read it: it still finishes and is kept, as in BK-59', async () => {
+    const hold = deferred<string>();
+    const ac = new AbortController();
+    const reader = cached('s4', 10_000, () => hold.promise, { signal: ac.signal });
+    reader.catch(() => undefined);
+    await flush();
+    ac.abort();
+    await expect(reader).rejects.toBeInstanceOf(Cancelled);
+    hold.resolve('kept');
+    await flush();
+    expect(await cached('s4', 10_000, async () => 'not asked')).toBe('kept');
+  });
+
+  it('never fires for a background refresh, which has no reader and is wanted all the same', async () => {
+    const advance = useClock();
+    await cached('s5', 1_000, async () => 'old', { staleMs: 60_000 });
+    advance(2_000);
+    let signal!: AbortSignal;
+    const hold = deferred<string>();
+    expect(await cached('s5', 1_000, (f) => {
+      signal = f.signal;
+      return hold.promise;
+    }, { staleMs: 60_000 })).toBe('old');
+    await flush();
+    expect(signal.aborted).toBe(false);
+    hold.resolve('new');
+    await flush();
+    expect(await cached('s5', 1_000, async () => 'not asked', { staleMs: 60_000 })).toBe('new');
+  });
+
+  it('does not fire for a reader who leaves after the answer came', async () => {
+    let signal!: AbortSignal;
+    const ac = new AbortController();
+    expect(await cached('s6', 10_000, async (f) => {
+      signal = f.signal;
+      return 'done';
+    }, { signal: ac.signal })).toBe('done');
+    ac.abort();
+    expect(signal.aborted).toBe(false);
+  });
+
+  // BK-71: the signal was read after an await, and the last reader had left before that, so nothing ever told the fetch.
+  it('hands a fetch that asks for it after its last reader has left a signal that has already fired, and keeps nothing', async () => {
+    let signal!: AbortSignal;
+    const earlier = deferred<void>();
+    const ac = new AbortController();
+    const reader = cached('s7', 10_000, async (f) => {
+      await earlier.promise; // an earlier read, before the model call asks for the signal
+      signal = f.signal;
+      return 'late';
+    }, { signal: ac.signal });
+    reader.catch(() => undefined);
+    await flush();
+    ac.abort();
+    await expect(reader).rejects.toBeInstanceOf(Cancelled);
+    earlier.resolve();
+    await flush();
+    expect(signal.aborted).toBe(true);
+    expect(signal.reason).toBeInstanceOf(Cancelled);
+
+    const fresh = vi.fn().mockResolvedValue('fresh');
+    expect(await cached('s7', 10_000, fresh)).toBe('fresh');
+    expect(fresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire for a late ask while another reader waits for the same fetch', async () => {
+    let signal!: AbortSignal;
+    const earlier = deferred<void>();
+    const leaver = new AbortController();
+    const a = cached('s8', 10_000, async (f) => {
+      await earlier.promise;
+      signal = f.signal;
+      return 'shared';
+    }, { signal: leaver.signal });
+    const b = cached('s8', 10_000, async () => 'not asked');
+    a.catch(() => undefined);
+    await flush();
+    leaver.abort();
+    await expect(a).rejects.toBeInstanceOf(Cancelled);
+    earlier.resolve();
+    expect(await b).toBe('shared');
+    expect(signal.aborted).toBe(false);
+  });
+
+  it('does not fire for a late ask of a background refresh, which has no reader and is wanted all the same', async () => {
+    const advance = useClock();
+    await cached('s9', 1_000, async () => 'old', { staleMs: 60_000 });
+    advance(2_000);
+    let signal!: AbortSignal;
+    const earlier = deferred<void>();
+    expect(await cached('s9', 1_000, async (f) => {
+      await earlier.promise;
+      signal = f.signal;
+      return 'new';
+    }, { staleMs: 60_000 })).toBe('old');
+    earlier.resolve();
+    await flush();
+    expect(signal.aborted).toBe(false);
+  });
+});
+

@@ -11,7 +11,6 @@
 }
 .sli-partial {
   margin-left: var(--s-0-5);
-  opacity: 0.7;
 }
 .sli-cov {
   font-size: var(--t-sm);

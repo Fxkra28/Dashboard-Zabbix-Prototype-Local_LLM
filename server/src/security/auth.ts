@@ -6,7 +6,7 @@ import { normalizeIP } from '@fastify/rate-limit';
 import { config, SESSION_EPOCH_DEFAULT } from '../core/config.js';
 import { pageRoles } from './pageAccess.js';
 import { loginBody, noBody } from '../core/schemas.js';
-import { decoyVerify, isCommon, isGuessable, parseStoredPassword, verifyPassword, type StoredPassword } from './passwords.js';
+import { decoyVerify, isCommon, isGuessable, isTooShort, MIN_PASSWORD_LENGTH, parseStoredPassword, verifyPassword, type StoredPassword } from './passwords.js';
 
 /**
  * Portal auth and RBAC. Every source slide in HCML's review is stamped Private and Confidential, so
@@ -101,9 +101,9 @@ export const tokenLifetime = (): string => `${config.auth.sessionHours}h`;
 export const tokenClaims = (cookieName: string) => ({ iss: `hcml-portal:${cookieName}`, aud: `hcml-portal:${cookieName}` });
 
 /**
- * Sign-in logging: the name as typed is logged, so it is cut short and stripped of control
- * characters. From this many failures in a row for one name (any address) a warning is logged, and
- * again at every multiple of it; failures older than the window are forgotten.
+ * Sign-in logging: the name as typed is logged only when an account holds it, cut short and stripped of control
+ * characters; any other name is logged as unknown with its length. From this many failures in a row for one name (any address)
+ * a warning is logged, and again at every multiple of it; failures older than the window are forgotten.
  */
 const LOG_NAME_MAX = 64;
 export const LOGIN_WARN_AFTER = 5;
@@ -237,7 +237,7 @@ const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /**
  * Refuse to start with a password anyone can guess: empty (what copying
- * .env.example gave) or the built-in "admin". Passwords on a short list are
+ * .env.example gave) or the built-in "admin", and a plain password under MIN_PASSWORD_LENGTH characters. Passwords on a short list are
  * warned about, not refused. Names the users, never the passwords. Only with auth on.
  */
 export function assertUsers(warn: (message: string) => void = () => undefined): void {
@@ -259,6 +259,15 @@ export function assertUsers(warn: (message: string) => void = () => undefined): 
       `AUTH_ENABLED=true but ${weak.map((u) => `"${u.name}"`).join(', ')} ` +
         `${weak.length === 1 ? 'has' : 'have'} an empty password or the default "admin". ` +
         'Set PORTAL_PASS, or PORTAL_USERS as name:password:role triples, in .env.',
+    );
+  }
+  // Docker compose reads a "$" in .env as the start of a variable and drops the rest, so a long password can reach the server short (SC-55).
+  const short = loaded.filter((u) => isTooShort(u.pass));
+  if (short.length) {
+    throw new Error(
+      `AUTH_ENABLED=true but ${short.map((u) => `"${u.name}"`).join(', ')} ${short.length === 1 ? 'has' : 'have'} a password shorter than ${MIN_PASSWORD_LENGTH} characters. ` +
+        'Docker compose cuts a password in .env at its first "$" unless it is in single quotes, so a long one can arrive short. ' +
+        'Put the password in single quotes, use a longer one, or store a hash made by scripts/hash-password.ts.',
     );
   }
   // Not a refusal: a password on a short list is a weak choice and not an unset one, and the owner may have reasons.
@@ -418,14 +427,21 @@ export async function setupAuth(app: FastifyInstance): Promise<void> {
     reply.header('retry-after', String(seconds));
     throw Object.assign(new Error(message), { statusCode: 429, error: 'rate_limited' });
   };
-  // Every attempt is logged: the name as typed, the outcome and the address, never the password.
+  // Every attempt is logged: the name, the outcome and the address, never the password.
   const typedName = (req: FastifyRequest) => {
     const { username } = (req.body ?? {}) as { username?: unknown };
     // eslint-disable-next-line no-control-regex -- a typed name must not carry control characters into a log line
     return typeof username === 'string' ? username.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, LOG_NAME_MAX) : '';
   };
+  // A name no account holds is logged as unknown with its length: a password typed into the name box must not stay in a log that lasts (SC-52).
+  const loggedName = (req: FastifyRequest) => {
+    const typed = typedName(req);
+    if (typed && users.some((u) => sameName(u.name, typed))) return { user: typed };
+    const { username } = (req.body ?? {}) as { username?: unknown };
+    return { user: 'unknown', nameLength: typeof username === 'string' ? username.length : 0 };
+  };
   const logAttempt = (req: FastifyRequest, outcome: 'success' | 'failure' | 'locked' | 'rate_limited') =>
-    req.log.info({ event: 'sign_in', user: typedName(req), outcome, ip: req.ip }, `sign-in ${outcome}`);
+    req.log.info({ event: 'sign_in', ...loggedName(req), outcome, ip: req.ip }, `sign-in ${outcome}`);
   const loginLimit = async (req: FastifyRequest, reply: FastifyReply) => {
     const locked = failures.get(loginKey(req));
     const now = Date.now();
@@ -451,7 +467,7 @@ export async function setupAuth(app: FastifyInstance): Promise<void> {
     nameFailures.set(key, { count, last: now });
     if (nameFailures.size > LOGIN_FAIL_KEYS) nameFailures.delete(nameFailures.keys().next().value as string);
     if (count % LOGIN_WARN_AFTER === 0) {
-      req.log.warn({ event: 'sign_in_repeated_failures', user, failures: count, ip: req.ip }, 'repeated failed sign-ins for one name');
+      req.log.warn({ event: 'sign_in_repeated_failures', ...loggedName(req), failures: count, ip: req.ip }, 'repeated failed sign-ins for one name');
     }
   };
   const recordFailure = (key: string) => {

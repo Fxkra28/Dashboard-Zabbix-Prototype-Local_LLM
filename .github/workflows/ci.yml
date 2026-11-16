@@ -164,7 +164,7 @@ jobs:
       - name: Every relative link in the docs resolves, spelled exactly
         run: node tools/check/links.check.mjs
 
-      - name: The counts the docs state are the ones the code has
+      - name: The numbers the docs state about the code (the test counts are judged by npm run verify, which runs the tests first, not here)
         run: node tools/check/facts.check.mjs
 
       - name: Every diagram source still matches its stamp, and has its PDF

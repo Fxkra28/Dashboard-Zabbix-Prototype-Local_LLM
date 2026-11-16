@@ -25,7 +25,10 @@ describe.skipIf(!hasPython)('signedin_check.py started wrongly (IN-78)', () => {
     expect(r.code).not.toBe(0);
     noTraceback(r.text);
     expect(r.text).toContain('PORTAL_USER and PORTAL_PASSWORD are not set');
-    expect(r.text).toContain('PORTAL_USER=... PORTAL_PASSWORD=... python3 -I tools/live/signedin_check.py http://127.0.0.1:9');
+    // The password is read without echo, so that it stays out of the shell's history (DC-33).
+    expect(r.text).toContain('read -r PORTAL_USER; read -rs PORTAL_PASSWORD; export PORTAL_USER PORTAL_PASSWORD');
+    expect(r.text).toContain('python3 -I tools/live/signedin_check.py http://127.0.0.1:9');
+    expect(r.text).not.toMatch(/PORTAL_PASSWORD=/);
   });
 
   it('names only the one that is missing', () => {
@@ -46,7 +49,9 @@ describe.skipIf(!hasPython)('signedin_check.py started wrongly (IN-78)', () => {
     const r = run(['--help']);
     expect(r.code).toBe(0);
     noTraceback(r.text);
-    expect(r.text).toContain('PORTAL_USER=... PORTAL_PASSWORD=... python3 -I signedin_check.py');
+    expect(r.text).toContain('read -rs PORTAL_PASSWORD');
+    expect(r.text).toContain('python3 -I signedin_check.py');
+    expect(r.text).not.toMatch(/PORTAL_PASSWORD=/);
     expect(r.text).toContain('--expect-mail');
     expect(run(['-h']).code).toBe(0);
   });
@@ -55,7 +60,8 @@ describe.skipIf(!hasPython)('signedin_check.py started wrongly (IN-78)', () => {
     const r = run([]);
     expect(r.code).toBe(2);
     noTraceback(r.text);
-    expect(r.text).toContain('PORTAL_USER=... PORTAL_PASSWORD=... python3 -I signedin_check.py');
+    expect(r.text).toContain('read -rs PORTAL_PASSWORD');
+    expect(r.text).toContain('python3 -I signedin_check.py');
   });
 
   it('says that the first argument is the address, when it is something else', () => {

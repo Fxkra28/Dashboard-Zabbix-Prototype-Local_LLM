@@ -69,7 +69,7 @@ defined no maintenance periods at all, so no published figure changed.
 * Its `stats.zabbixCalls` counter under-reports: sliced `event.get` recursion is counted once, so
   the true call count is higher whenever a window exceeds 5,000 events.
 * If HCML ever configures Services properly, this becomes duplication and should be revisited.
-* A closed month's figure is immutable but is still recomputed after every restart. See
+* A closed month's figure changes rarely, but it can: an edited maintenance period moves past months and the readings behind the web checks age out. It is kept for a day and recomputed after every restart. See
   [ADR-0003](0003-no-database.md).
 
 ## Pros and Cons of the Options

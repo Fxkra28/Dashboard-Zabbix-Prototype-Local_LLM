@@ -44,7 +44,7 @@ This part keeps the layers above and the endpoint reference below.
 
 | Method + path | Returns | Cache |
 |---|---|---|
-| `GET /api/health` | `{ ok, ts, ai, aiProvider, aiExternal, writeBack, defaults, ready }` for anyone (`ready` is a plain `true` or `false`), plus `version, startedAt, build, streams` and `ready` as an object for a signed-in caller: capability flags (the UI hides actions that aren't configured), the build, whether Zabbix answers, and the screens streaming. Public; 200 even when Zabbix is down | `ready` 15 s |
+| `GET /api/health` | `{ ok, ts, ai, aiProvider, aiExternal, writeBack, defaults, ready }` for anyone (`ready` is a plain `true` or `false`), plus `version, startedAt, build, streams, logFile` and `ready` as an object for a signed-in caller: capability flags (the UI hides actions that aren't configured), the build, whether Zabbix answers, and the screens streaming. Public; 200 even when Zabbix is down | `ready` 15 s |
 | `GET /api/ready` | the same facts as a signed-in `/api/health`, plus `ok`; answers 503 while the portal cannot read Zabbix, so a monitor that holds a token needs only the status code. Guarded like any route | `ready` 15 s |
 | `GET /api/hosts` | hosts + interfaces (ip/type/available) | 30 s |
 | `GET /api/hosts/overview` | hosts + per-host problem severity counts | 15 s |

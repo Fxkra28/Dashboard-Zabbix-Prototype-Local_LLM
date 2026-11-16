@@ -74,9 +74,9 @@ change its schema in the same commit.
   `Authorization: Bearer`, for scripts. The header wins when both arrive. No route takes `?token=`
   any more, the live stream included: `EventSource` sends the cookie
   ([ADR-0010](../architecture/adr/0010-session-cookie.md)).
-- A cookie POST needs `X-HCML-CSRF: 1`. Every POST that authenticates with the cookie, and every
-  sign-in and sign-out, is refused with `403 csrf` without it, or when its `Origin` names another
-  host. A Bearer request needs neither, except to sign in or out.
+- A cookie request that changes something needs `X-HCML-CSRF: 1`. Every POST, PUT, PATCH or DELETE that authenticates with the cookie
+  (the schedule and the saved list of recipients are PUT and DELETE), and every sign-in and sign-out, is refused with `403 csrf` without it,
+  or when its `Origin` names another host. A Bearer request needs neither, except to sign in or out.
 - Sign-in returns no token. `POST /api/auth/login` and `POST /api/auth/refresh` answer
   `{ user, expiresIn }` and set the cookie. A script takes the token from `Set-Cookie`. `expiresIn` is the
   session length in seconds: 43200 at the default 12 hours (`SESSION_HOURS`).
@@ -90,15 +90,23 @@ change its schema in the same commit.
   code does not say so, but `X-Data-Stale: true` and `X-Data-Age-Seconds: <seconds>` do. They are
   absent on a live answer, and the JSON body never changes. The SLA report download is built from the
   same cached figures, so it can be a 200 with a file made from older figures, with the same headers.
-  A view HCML's Zabbix takes tens of seconds to build, and a slow report past its cache time, may
-  instead answer from its last copy while a newer one is read: `X-Data-Refreshing: true` with the
-  same age header, never together with `X-Data-Stale`.
+  A view HCML's Zabbix takes tens of seconds to build, and the availability (a window, or `basis=all-problems`), noise
+  and capacity reports past their cache time, may instead answer from their last copy while a newer one is read:
+  `X-Data-Refreshing: true` with the same age header, never together with `X-Data-Stale`. The derived monthly
+  SLA (`/api/sli`, what is built on it, and a `month` of `/api/reports/availability` with the default basis) is
+  answered the same way but without those headers: the body of `/api/sli` carries `generatedAt`, and the SLA page
+  prints it; the availability report has no such field.
+- A slow read whose reader has gone is answered `499 cancelled`. When the connection of the person who asked
+  closes while the read waits for its place, it is never started (`core/readerGone.ts`, `core/gate.ts`), and
+  only a script that gives up can see the answer. It is documented on `/api/sli`, `/api/reports/availability`,
+  `/api/reports/noise`, `/api/reports/capacity`, `/api/reports/top-triggers`, `/api/sli/export`, `/api/services/derived` and the two Explain routes (where it
+  also ends a model call that is running), and `npm run check:api` fails when a route that passes `readerGone` does not document it.
 - The live stream is capped, not rate limited. `GET /api/stream` answers `429 too_many_streams`
   with `Retry-After: 30` past `STREAM_MAX_CLIENTS` screens in all or `STREAM_MAX_PER_USER` for one
   user, and it ends when the session token expires.
 - `GET /api/health` is public, and tells a signed-in caller more. Anyone gets `ok`, `ts`, `ai`,
   `aiProvider`, `aiExternal`, `writeBack`, `defaults` and `ready`, a plain `true` or `false` for whether Zabbix can be read (so a monitor needs no account; a revoked token reads as any other failure). A request with a valid session also gets
-  `version`, `startedAt`, `build`, `ready` as the whole check (does Zabbix answer, and the model) and `streams`. A bad or
+  `version`, `startedAt`, `build`, `ready` as the whole check (does Zabbix answer, and the model), `streams` and `logFile` (whether the server's own log file is being written). A bad or
   expired token is not a 401 here: it gets the public reply. The status stays 200 when Zabbix is
   down: read `ready.ok`. With sign-in off every caller counts as signed in, as for `/api/auth/me`.
   `writeBack` is false when sign-in is off and `ALLOW_WRITE_WITHOUT_AUTH` is not `true`, since
