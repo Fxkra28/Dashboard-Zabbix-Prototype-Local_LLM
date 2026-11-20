@@ -6,7 +6,7 @@
 # HCML Monitoring Portal: `hcml-portal-ollama`
 
 A bespoke, **service-centric** monitoring portal for HCML built on the **Zabbix API**, with its
-plain-language layer running on a **local model**. Nothing about the estate leaves this machine.
+plain-language layer running on a **local model**. No question or summary of the estate leaves this machine.
 
 Zabbix stays the collection and configuration engine. Keep its native UI for host, item and trigger
 admin. This portal is the layer Zabbix's UI cannot be: site-structured, role-aware, plain-language,
@@ -17,7 +17,7 @@ monitoring (SNMP/ICMP), reading everything the same way, through the API.
  Browser (React) ──HTTP+SSE──► BFF (Fastify, holds tokens, caches) ──JSON-RPC──► Zabbix API
                                             │
                                             └──── HTTP ────► Ollama on this host
-                                                             qwen3:8b · never off-box
+                                                             gemma4:12b · never off-box
 ```
 
 **The browser never sees a Zabbix or model credential.** Every call goes through the BFF.
@@ -31,7 +31,7 @@ pipeline, the cache, auth, where a number comes from, both AI paths and the one 
 
 > **This repo and its sibling are one source tree.** `myown/hcml-portal` holds the *same* `server/src`
 > and `web/src`, byte for byte, `diff -r` prints nothing. The whole difference between the two is
-> which model answers: there, hosted Claude over the Anthropic API; here, `qwen3:8b` on this host.
+> which model answers: there, hosted Claude over the Anthropic API; here, `gemma4:12b` on this host.
 > That is set in an untracked `.env`, not in code, so the distinction is a configuration choice,
 > not a fork. **21 files differ**, all configuration or per-repo perspective: the two `.env` files and
 > both `.env.example` templates, `docker-compose.yml` (the published port), `setup.md` (three port
@@ -86,7 +86,7 @@ few seconds.
 | Piece | Version | What it does here |
 |---|---|---|
 | **Zabbix** | 7.0 | The only data source, read over **JSON-RPC 2.0**, never its database. Two tokens: read everywhere, write only for acknowledge/close |
-| **Ollama** | native, on the host | Serves `qwen3:8b` (5.2 GB) at `:11434`. **Not containerised**: Docker Desktop on macOS cannot pass through the Metal GPU, so a containerised Ollama falls back to CPU. The BFF speaks Ollama's **native `/api/chat`** when it answers, because only that API accepts a context size and honours `keep_alive` |
+| **Ollama** | native, on the host | Serves `gemma4:12b` (8.0 GB) at `:11434`. **Not containerised**: Docker Desktop on macOS cannot pass through the Metal GPU, so a containerised Ollama falls back to CPU. The BFF speaks Ollama's **native `/api/chat`** when it answers, because only that API accepts a context size and honours `keep_alive` |
 | **Docker Compose** | — | Two services, neither of them a datastore: `portal-bff` (Node) and `portal-web` (nginx) on `127.0.0.1:8082`. Both images are multi-stage and install with `npm ci` against a committed lockfile, so one commit builds the same twice |
 | **nginx** | alpine | Serves the build and reverse-proxies `/bff`, with `proxy_buffering off` (SSE never arrives without it), a one-year immutable cache on `/assets/`, and SPA fallback to `index.html` |
 
@@ -108,7 +108,7 @@ hcml-portal-ollama/
 │   │   ├── zabbix.ts            # JSON-RPC client; read/write token split, timeouts
 │   │   ├── queries.ts           # shared Zabbix queries
 │   │   ├── cache.ts             # TTL cache, in-flight coalescing, invalidate(prefix)
-│   │   ├── ai.ts                # the model client: qwen3:8b here, Claude in the sibling
+│   │   ├── ai.ts                # the model client: gemma4:12b here, Claude in the sibling
 │   │   ├── chat.ts              # the assistant: estate snapshot + streamed answers
 │   │   ├── reachability.ts      # host state: up / down / degraded / nodata / disabled
 │   │   ├── naming.ts            # HCML's host-name convention → site + device class
@@ -177,8 +177,8 @@ table above:
 ```bash
 brew install ollama
 brew services start ollama
-ollama pull qwen3:8b            # 5.2 GB
-ollama list                     # qwen3:8b should be there
+ollama pull gemma4:12b          # 8.0 GB
+ollama list                     # gemma4:12b should be there
 ```
 
 The portal works without it: leave `AI_BASE_URL` blank and every page still serves, only the
@@ -202,12 +202,12 @@ edit. It ships as:
 ```
 AI_PROVIDER=openai-compatible
 AI_BASE_URL=http://localhost:11434/v1   # host.docker.internal:11434 from a container
-AI_MODEL=qwen3:8b
+AI_MODEL=gemma4:12b
 AI_TIMEOUT_MS=120000
 ```
 
 The sibling repo `hcml-portal` ships the hosted block instead. Switching this copy to hosted needs
-**both** `AI_PROVIDER` and `AI_MODEL` changed, `AI_PROVIDER` alone leaves `qwen3:8b` pointed at the
+**both** `AI_PROVIDER` and `AI_MODEL` changed, `AI_PROVIDER` alone leaves `gemma4:12b` pointed at the
 Anthropic API and every *Explain* fails. And `AI_PROVIDER` accepts only `anthropic` or
 `openai-compatible`, falling back to `anthropic` **silently** for anything else, so a typo such as
 `AI_PROVIDER=ollama` sends estate data off-box with no error.
@@ -350,7 +350,7 @@ Optional, off unless configured, and **never called on page load**. Two paths:
 - **Ask the assistant**: the chat page. Sends a rollup of the whole estate and streams the answer
   back token by token over SSE (`POST /api/chat`, events `context`, `token`, `done`, `error`).
 
-In this copy the model is **`qwen3:8b`, served by Ollama on this host**, so what is sent: host
+In this copy the model is **`gemma4:12b`, served by Ollama on this host**, so what is sent: host
 names, trigger names, problem text, **never leaves this machine**. The sibling repo `hcml-portal`
 is the same code pointed at hosted Claude over the Anthropic API, where it does. Which one answers is
 one line of `.env`
@@ -435,12 +435,12 @@ directly comparable on the same problem. **What this copy sets is in the right-h
 |---|---|---|
 | `AI_PROVIDER` | `anthropic` | **`openai-compatible`** |
 | `AI_BASE_URL` | — | **`http://host.docker.internal:11434/v1`** (`localhost:11434` outside Docker) |
-| `AI_MODEL` | `claude-sonnet-4-6` / `qwen3:8b` per backend | **`qwen3:8b`** |
+| `AI_MODEL` | `claude-sonnet-4-6` / `qwen3:8b` per backend | **`gemma4:12b`** |
 | `AI_TIMEOUT_MS` | `30000` / `120000` per backend | **`120000`**: a local model generates more slowly and loads from disk when cold |
 | `ANTHROPIC_API_KEY` | — | not used by this copy; the hosted backend needs it, and blank ⇒ `/api/explain/*` returns 503 |
 | `AI_API_KEY` | — | not used. Only a *hosted* OpenAI-compatible gateway wants one; a local Ollama does not |
 | `AI_MAX_RETRIES` | `1` | **Anthropic only**: the SDK implements it. The local backend does not retry |
-| `AI_KEEP_ALIVE` | `30m` | How long Ollama keeps the model loaded after its last use (~5 GB resident). Without it the first question after an idle spell waits ~10 s for the load |
+| `AI_KEEP_ALIVE` | `30m` | How long Ollama keeps the model loaded after its last use (~5 GB resident for `qwen3:8b`; `gemma4:12b` is an 8.0 GB file). Without it the first question after an idle spell waits for the load: ~10 s for `qwen3:8b`, 15 to 45 s for `gemma4:12b` |
 | `AI_OLLAMA_NATIVE` | `auto` | `auto` asks `AI_BASE_URL` minus `/v1` for `/api/version` and, if Ollama answers, uses its native `/api/chat` for chat, explain, warm-up and prefill: the only API that takes a context size and honours `AI_KEEP_ALIVE` (each `/v1` call resets the expiry to 5 min). `true` / `false` skip the check; any other server keeps `/v1` |
 | `AI_NUM_CTX` | `8192` | Native Ollama only. Context window in tokens, sent with **every** request: Ollama restarts the model, and drops its prompt cache, whenever a request asks for a different size. 8192 tokens of cache take ~0.6 GB, twice Ollama's default of 4096 |
 | `AI_TEMPERATURE` / `AI_TOP_P` | `0.7` / `0.8` | Native Ollama only. Stated explicitly, since `/v1` sampled at 1.0. Qwen3's own recommendation for answers without thinking |

@@ -10,7 +10,7 @@ import { useReportTimeZone } from '../../shared/hooks/useReportTimeZone';
 import { roleAllows, useAuth } from '../../shared/hooks/useAuth';
 
 /**
- * The internet traffic meters: one gauge per gauge widget of the Zabbix dashboard HCML keeps (INTERNET_METERS_DASHBOARD). Wall screens, operators and admins only.
+ * The internet traffic meters: one gauge per gauge widget of the Zabbix dashboard HCML keeps (INTERNET_METERS_DASHBOARD). Only for an account that has the Network page.
  * `q` is the Dashboard's one request (useMeters.ts); on a wall `page` says which slice this slide holds, and the sentence over the grid counts them all.
  */
 export default function InternetMeters({ q, page }: { q: MetersQuery; page?: { index: number; pages: number } }) {
@@ -37,7 +37,7 @@ export default function InternetMeters({ q, page }: { q: MetersQuery; page?: { i
           !d.found ? (
             <div className="state">
               Zabbix has no dashboard named “{d.dashboard}” that the portal can read.{' '}
-              {/* The setting's name is for the portal admin; a wall screen or an operator cannot set it (UX-53). */}
+              {/* The setting's name is for the portal admin; no other account can set it (UX-53). */}
               {roleAllows(role, 'admin')
                 ? 'Set INTERNET_METERS_DASHBOARD to the name of the one that holds the gauges.'
                 : 'Ask the portal admin which Zabbix dashboard holds the gauges.'}

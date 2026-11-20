@@ -4,7 +4,7 @@
 |---|---|---|---|
 | Operators and developers | about 9 min | [The server](server.md) | [Tools, deploy and docs](tools-deploy-docs.md) |
 
-The web app is what the browser runs: a React application written in TypeScript and built with Vite. It has 18 pages. In production it is a folder of static files that nginx serves; in development Vite serves it and passes every address that starts with `/bff` to a local server. It holds no secret and talks only to the server, never to Zabbix.
+The web app is what the browser runs: a React application written in TypeScript and built with Vite. It has 20 pages. In production it is a folder of static files that nginx serves; in development Vite serves it and passes every address that starts with `/bff` to a local server. It holds no secret and talks only to the server, never to Zabbix.
 
 This page goes through `web/` folder by folder, in the same way as [the server](server.md).
 
@@ -68,20 +68,20 @@ This page goes through `web/` folder by folder, in the same way as [the server](
 ```text
 web/src/
 ├── __tests__/
-├── api/        13 files
+├── api/        14 files
 ├── features/
 ├── generated/  2 files
-├── guards/     13 files
+├── guards/     14 files
 ├── shared/
-├── styles/     21 files
-└── types/      11 files
+├── styles/     22 files
+└── types/      12 files
 ```
 <!-- /gen -->
 
 <!-- gen:files web/src -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`App.tsx`](../../../web/src/App.tsx) | 83 | 2 | The route table: every page is loaded on demand, and the sign-in page sits outside the shell. |
+| [`App.tsx`](../../../web/src/App.tsx) | 87 | 2 | The route table: every page is loaded on demand, and the sign-in page sits outside the shell. |
 | [`main.tsx`](../../../web/src/main.tsx) | 17 | 0 | The entry: reloads on a stale chunk, asks the server for its time zone, then renders the app. |
 | [`theme.ts`](../../../web/src/theme.ts) | 32 | 2 | The severity names and colours the canvas charts fall back to, because a canvas cannot read a stylesheet variable. |
 | [`vite-env.d.ts`](../../../web/src/vite-env.d.ts) | 1 | 0 | Tells TypeScript about the types Vite adds. |
@@ -99,19 +99,20 @@ These three folders are at the root, not inside the features, because every feat
 <!-- gen:files web/src/api -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`assistant.ts`](../../../web/src/api/assistant.ts) | 99 | 4 | The calls behind Explain and the Assistant: two explanations, the streamed chat and its warm-up. |
-| [`client.ts`](../../../web/src/api/client.ts) | 183 | 11 | The one place a request leaves the page: deadlines, the abort signal, the 401 handling and the failure message. |
+| [`assistant.ts`](../../../web/src/api/assistant.ts) | 100 | 4 | The calls behind Explain and the Assistant: two explanations, the streamed chat and its warm-up. |
+| [`client.ts`](../../../web/src/api/client.ts) | 187 | 12 | The one place a request leaves the page: deadlines, the abort signal, the 401 handling and the failure message. |
 | [`dashboard.ts`](../../../web/src/api/dashboard.ts) | 16 | 1 | The calls behind what the Dashboard shows besides the problem list. |
 | [`graphs.ts`](../../../web/src/api/graphs.ts) | 22 | 1 | The call behind the Graphs page. |
 | [`hosts.ts`](../../../web/src/api/hosts.ts) | 24 | 1 | The calls behind the Hosts, Devices and Latest data pages. |
-| [`index.ts`](../../../web/src/api/index.ts) | 61 | 20 | Joins the per-feature calls into the one api object the pages import. |
+| [`index.ts`](../../../web/src/api/index.ts) | 63 | 21 | Joins the per-feature calls into the one api object the pages import. |
 | [`meters.ts`](../../../web/src/api/meters.ts) | 10 | 1 | The call behind the internet traffic meters. |
 | [`network.ts`](../../../web/src/api/network.ts) | 22 | 1 | The calls behind the network pages: devices and interfaces, maps, sites and links. |
 | [`problems.ts`](../../../web/src/api/problems.ts) | 21 | 2 | The problem list, the live stream's address and the portal's one write. |
 | [`reports.ts`](../../../web/src/api/reports.ts) | 17 | 1 | The calls behind the reports. |
-| [`session.ts`](../../../web/src/api/session.ts) | 226 | 13 | Sign-in, sign-out, session renewal, the cross-site header on every POST, and what happens when a session ends. |
-| [`shell.ts`](../../../web/src/api/shell.ts) | 17 | 1 | The two calls the shell makes first: what the server says about itself and who is signed in. |
-| [`sla.ts`](../../../web/src/api/sla.ts) | 118 | 5 | The calls behind availability and SLA, and the SLA report downloads. |
+| [`session.ts`](../../../web/src/api/session.ts) | 230 | 13 | Sign-in, sign-out, session renewal, the cross-site header on every POST, and what happens when a session ends. |
+| [`shell.ts`](../../../web/src/api/shell.ts) | 18 | 1 | The two calls the shell makes first: what the server says about itself and who is signed in. |
+| [`sla.ts`](../../../web/src/api/sla.ts) | 137 | 5 | The calls behind availability and SLA, and the SLA report downloads. |
+| [`users.ts`](../../../web/src/api/users.ts) | 31 | 1 | The calls behind the Users page and the change of one's own password. |
 <!-- /gen -->
 
 <!-- folder web/src/types -->
@@ -120,17 +121,18 @@ These three folders are at the root, not inside the features, because every feat
 <!-- gen:files web/src/types -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`assistant.ts`](../../../web/src/types/assistant.ts) | 46 | 5 | The shapes behind Explain and the Assistant. |
-| [`auth.ts`](../../../web/src/types/auth.ts) | 27 | 3 | The roles, who is signed in, and what the server says about itself. |
+| [`assistant.ts`](../../../web/src/types/assistant.ts) | 60 | 5 | The shapes behind Explain and the Assistant. |
+| [`auth.ts`](../../../web/src/types/auth.ts) | 56 | 5 | The roles, who is signed in, and what the server says about itself. |
 | [`dashboard.ts`](../../../web/src/types/dashboard.ts) | 85 | 8 | The shapes of what the Dashboard shows besides the problem list. |
 | [`graphs.ts`](../../../web/src/types/graphs.ts) | 32 | 4 | The shapes of the graph pipeline. |
 | [`hosts.ts`](../../../web/src/types/hosts.ts) | 97 | 13 | The shapes of hosts, devices and items. |
-| [`index.ts`](../../../web/src/types/index.ts) | 110 | 102 | Re-exports every shape so a page writes one import. |
+| [`index.ts`](../../../web/src/types/index.ts) | 114 | 117 | Re-exports every shape so a page writes one import. |
 | [`meters.ts`](../../../web/src/types/meters.ts) | 70 | 7 | The shapes of the internet traffic meters. |
 | [`network.ts`](../../../web/src/types/network.ts) | 148 | 16 | The shapes of the network pages. |
 | [`problems.ts`](../../../web/src/types/problems.ts) | 28 | 2 | The shapes of the problem list and the acknowledge answer. |
-| [`reports.ts`](../../../web/src/types/reports.ts) | 116 | 13 | The shapes of the reports. |
-| [`sla.ts`](../../../web/src/types/sla.ts) | 340 | 31 | The shapes of availability, SLA and the service trees. |
+| [`reports.ts`](../../../web/src/types/reports.ts) | 118 | 13 | The shapes of the reports. |
+| [`sla.ts`](../../../web/src/types/sla.ts) | 364 | 33 | The shapes of availability, SLA and the service trees. |
+| [`users.ts`](../../../web/src/types/users.ts) | 111 | 11 | The shapes of the users the page reads and the changes it sends. |
 <!-- /gen -->
 
 <!-- folder web/src/guards -->
@@ -140,18 +142,19 @@ These three folders are at the root, not inside the features, because every feat
 | File | Lines | Exports | What it is |
 |---|---|---|---|
 | [`assistant.ts`](../../../web/src/guards/assistant.ts) | 19 | 2 | The checks for the Explain answers. |
-| [`auth.ts`](../../../web/src/guards/auth.ts) | 14 | 1 | The check for who is signed in. |
+| [`auth.ts`](../../../web/src/guards/auth.ts) | 16 | 1 | The check for who is signed in. |
 | [`dashboard.ts`](../../../web/src/guards/dashboard.ts) | 59 | 5 | The checks for what the Dashboard shows besides the problem list. |
 | [`graphs.ts`](../../../web/src/guards/graphs.ts) | 42 | 1 | The check for a graph. |
 | [`hosts.ts`](../../../web/src/guards/hosts.ts) | 88 | 9 | The checks for hosts, devices and items. |
-| [`index.ts`](../../../web/src/guards/index.ts) | 41 | 45 | Joins the per-feature checks behind one import. |
+| [`index.ts`](../../../web/src/guards/index.ts) | 43 | 49 | Joins the per-feature checks behind one import. |
 | [`meters.ts`](../../../web/src/guards/meters.ts) | 57 | 1 | The check for the internet traffic meters. |
 | [`misfit.ts`](../../../web/src/guards/misfit.ts) | 41 | 4 | What happens when an answer fails its check: the message a page shows and the console line. |
 | [`network.ts`](../../../web/src/guards/network.ts) | 134 | 6 | The checks for the network pages. |
 | [`problems.ts`](../../../web/src/guards/problems.ts) | 25 | 1 | The check for the problem list, which the live frames pass through too. |
-| [`reports.ts`](../../../web/src/guards/reports.ts) | 90 | 5 | The checks for the reports. |
+| [`reports.ts`](../../../web/src/guards/reports.ts) | 91 | 5 | The checks for the reports. |
 | [`shape.ts`](../../../web/src/guards/shape.ts) | 109 | 17 | The building blocks of a check: text, number, flag, list and object shapes. |
-| [`sla.ts`](../../../web/src/guards/sla.ts) | 249 | 12 | The checks for availability and SLA. |
+| [`sla.ts`](../../../web/src/guards/sla.ts) | 252 | 12 | The checks for availability and SLA. |
+| [`users.ts`](../../../web/src/guards/users.ts) | 55 | 4 | Checks the shape of what the users routes answer. |
 <!-- /gen -->
 
 <!-- folder web/src/generated -->
@@ -160,7 +163,7 @@ These three folders are at the root, not inside the features, because every feat
 <!-- gen:files web/src/generated -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`openapi.ts`](../../../web/src/generated/openapi.ts) | 4694 | 5 | Types made from the API description by a tool; never edited by hand. |
+| [`openapi.ts`](../../../web/src/generated/openapi.ts) | 5572 | 5 | Types made from the API description by a tool; never edited by hand. |
 <!-- /gen -->
 
 ### The features
@@ -172,16 +175,17 @@ These three folders are at the root, not inside the features, because every feat
 ```text
 web/src/features/
 ├── assistant/  8 files
-├── auth/       1 file
+├── auth/       4 files
 ├── dashboard/  9 files
 ├── graphs/     9 files
 ├── hosts/      5 files
 ├── meters/     4 files
 ├── network/    5 files
-├── problems/   6 files
+├── problems/   7 files
 ├── reports/    4 files
-├── shell/      12 files
-└── sla/        18 files
+├── shell/      14 files
+├── sla/        20 files
+└── users/      2 files
 ```
 <!-- /gen -->
 
@@ -208,8 +212,8 @@ Everything that talks to the model. The Assistant page takes a free question and
 | File | Lines | Exports | What it is |
 |---|---|---|---|
 | [`AiDataNotice.tsx`](../../../web/src/features/assistant/AiDataNotice.tsx) | 18 | 1 | Says next to an AI answer whether the question left this machine. |
-| [`Assistant.tsx`](../../../web/src/features/assistant/Assistant.tsx) | 316 | 2 | The Assistant page: free-form questions about the estate, answered as they are written. |
-| [`ExplainPanel.tsx`](../../../web/src/features/assistant/ExplainPanel.tsx) | 260 | 3 | The slide-over that explains one problem or one SLA figure in plain words. |
+| [`Assistant.tsx`](../../../web/src/features/assistant/Assistant.tsx) | 390 | 2 | The Assistant page: free-form questions about the estate, answered as they are written. |
+| [`ExplainPanel.tsx`](../../../web/src/features/assistant/ExplainPanel.tsx) | 268 | 3 | The slide-over that explains one problem or one SLA figure in plain words. |
 | [`Markdown.tsx`](../../../web/src/features/assistant/Markdown.tsx) | 81 | 1 | Draws the small slice of markdown the Assistant may write. |
 | [`ModelOfflineNotice.tsx`](../../../web/src/features/assistant/ModelOfflineNotice.tsx) | 17 | 1 | Says so when the AI model is not answering, before a click that would only fail. |
 | [`parseMarkdown.ts`](../../../web/src/features/assistant/parseMarkdown.ts) | 155 | 4 | Reads the assistant's markdown into blocks and inline pieces, allowing nothing that could carry a link or a script. |
@@ -220,12 +224,15 @@ Everything that talks to the model. The Assistant page takes a free question and
 #### auth
 
 <!-- folder web/src/features/auth -->
-The sign-in page, the only page outside the shell. After signing in it returns to the page the session ended on, but only to a path on this site.
+The sign-in page, the only page outside the shell, and the two that let a person look after their own password. After signing in it returns to the page the session ended on, but only to a path on this site. The account page shows who is signed in and what they may do. A temporary password shows the form for a new one alone, in place of every page, until it is chosen.
 
 <!-- gen:files web/src/features/auth -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`Login.tsx`](../../../web/src/features/auth/Login.tsx) | 106 | 2 | The sign-in page, and the safe path to return to afterwards. |
+| [`Account.tsx`](../../../web/src/features/auth/Account.tsx) | 34 | 1 | The account page: who is signed in, what they may do, and the form for their own password. |
+| [`ChangePassword.tsx`](../../../web/src/features/auth/ChangePassword.tsx) | 73 | 1 | The form for a new password, shown alone when the password is a temporary one. |
+| [`Login.tsx`](../../../web/src/features/auth/Login.tsx) | 118 | 2 | The sign-in page, and the safe path to return to afterwards. |
+| [`RequestAccount.tsx`](../../../web/src/features/auth/RequestAccount.tsx) | 135 | 2 | The link and the form on the sign-in page for asking for an account, drawn only when requests are on. |
 <!-- /gen -->
 
 #### dashboard
@@ -237,7 +244,7 @@ The first page. It shows the counts and the live problem list, with tabs for the
 | File | Lines | Exports | What it is |
 |---|---|---|---|
 | [`HostsView.tsx`](../../../web/src/features/dashboard/HostsView.tsx) | 150 | 1 | The Dashboard's Hosts view: availability, device kinds, web monitoring and the busiest hosts. |
-| [`Overview.tsx`](../../../web/src/features/dashboard/Overview.tsx) | 442 | 1 | The Dashboard: the counts and live problem list, with tabs for the internet meters and the Hosts view, in normal or wall mode. |
+| [`Overview.tsx`](../../../web/src/features/dashboard/Overview.tsx) | 444 | 1 | The Dashboard: the counts and live problem list, with tabs for the internet meters and the Hosts view, in normal or wall mode. |
 | [`Tabs.tsx`](../../../web/src/features/dashboard/Tabs.tsx) | 67 | 3 | The accessible tabs pattern used by the Dashboard and the SLA page. |
 | [`fit.ts`](../../../web/src/features/dashboard/fit.ts) | 42 | 4 | The scale that makes a wall screen's content fit its window. |
 | [`hostsFigures.ts`](../../../web/src/features/dashboard/hostsFigures.ts) | 56 | 12 | Host availability and usage words, as the Zabbix widgets count and name them. |
@@ -257,8 +264,8 @@ One host, up to four of its items, any range. The chart is drawn with ECharts on
 |---|---|---|---|
 | [`HostDetail.tsx`](../../../web/src/features/graphs/HostDetail.tsx) | 177 | 1 | The Graphs page: one host, up to four items, any range. |
 | [`ItemPicker.tsx`](../../../web/src/features/graphs/ItemPicker.tsx) | 267 | 1 | A searchable, grouped picker for the items of one host. |
-| [`RangePicker.tsx`](../../../web/src/features/graphs/RangePicker.tsx) | 165 | 5 | The time range: presets, a custom range and a live range, kept in the address. |
-| [`StaleNote.tsx`](../../../web/src/features/graphs/StaleNote.tsx) | 58 | 1 | Says so when a graph is thinner or older than it looks. |
+| [`RangePicker.tsx`](../../../web/src/features/graphs/RangePicker.tsx) | 166 | 5 | The time range: presets, a custom range and a live range, kept in the address. |
+| [`StaleNote.tsx`](../../../web/src/features/graphs/StaleNote.tsx) | 59 | 1 | Says so when a graph is thinner or older than it looks. |
 | [`TimeSeriesChart.tsx`](../../../web/src/features/graphs/TimeSeriesChart.tsx) | 518 | 3 | The chart: draws the series with ECharts, with its tooltip and the Show data table. |
 | [`chartCsv.ts`](../../../web/src/features/graphs/chartCsv.ts) | 37 | 2 | The Show data table as rows for a CSV file. |
 | [`chartTable.ts`](../../../web/src/features/graphs/chartTable.ts) | 47 | 4 | The Show data table: the series joined on time. |
@@ -277,7 +284,7 @@ The pages that list machines: Hosts, Devices (a tile for each kind of device) an
 | [`Devices.tsx`](../../../web/src/features/hosts/Devices.tsx) | 126 | 1 | The Devices page: a tile for each kind of device, and the hosts of the chosen kind. |
 | [`HostTable.tsx`](../../../web/src/features/hosts/HostTable.tsx) | 116 | 2 | A host as the Hosts page and a site list it. |
 | [`Hosts.tsx`](../../../web/src/features/hosts/Hosts.tsx) | 63 | 1 | The Hosts page. |
-| [`LatestData.tsx`](../../../web/src/features/hosts/LatestData.tsx) | 268 | 1 | The Latest data page: pick a host and see every item's latest value. |
+| [`LatestData.tsx`](../../../web/src/features/hosts/LatestData.tsx) | 272 | 1 | The Latest data page: pick a host and see every item's latest value. |
 | [`deviceTally.ts`](../../../web/src/features/hosts/deviceTally.ts) | 21 | 3 | What a kind of device adds up to: how many, how many in trouble, how many silent. |
 <!-- /gen -->
 
@@ -289,7 +296,7 @@ The internet traffic meters: one dial for each gauge widget of the Zabbix dashbo
 <!-- gen:files web/src/features/meters -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`Gauge.tsx`](../../../web/src/features/meters/Gauge.tsx) | 115 | 1 | One internet traffic meter, drawn as a dial. |
+| [`Gauge.tsx`](../../../web/src/features/meters/Gauge.tsx) | 117 | 1 | One internet traffic meter, drawn as a dial. |
 | [`InternetMeters.tsx`](../../../web/src/features/meters/InternetMeters.tsx) | 60 | 1 | The meters: one gauge for each gauge widget of the Zabbix dashboard. |
 | [`gaugeDial.ts`](../../../web/src/features/meters/gaugeDial.ts) | 177 | 17 | The dial as numbers and words: arcs, ticks and the reading. |
 | [`useMeters.ts`](../../../web/src/features/meters/useMeters.ts) | 17 | 2 | Asks for the meters once a minute. |
@@ -305,7 +312,7 @@ The pages about places and links: Sites (a card for each site), Maps (Zabbix map
 |---|---|---|---|
 | [`Links.tsx`](../../../web/src/features/network/Links.tsx) | 268 | 1 | The Links and WAN health page. |
 | [`Maps.tsx`](../../../web/src/features/network/Maps.tsx) | 286 | 1 | The Maps page: the list of Zabbix maps and the topology of the chosen one. |
-| [`Network.tsx`](../../../web/src/features/network/Network.tsx) | 384 | 1 | The Network page: devices grouped by site, with their interfaces. |
+| [`Network.tsx`](../../../web/src/features/network/Network.tsx) | 388 | 1 | The Network page: devices grouped by site, with their interfaces. |
 | [`Sites.tsx`](../../../web/src/features/network/Sites.tsx) | 229 | 1 | The Sites page: a card for each site with its worst problem. |
 | [`mapLabels.ts`](../../../web/src/features/network/mapLabels.ts) | 138 | 10 | Where each element's name goes on a map, kept inside the map. |
 <!-- /gen -->
@@ -320,8 +327,9 @@ The Problems page: filters, the table, live updates from the stream, Explain, an
 |---|---|---|---|
 | [`AckDialog.tsx`](../../../web/src/features/problems/AckDialog.tsx) | 210 | 1 | The acknowledge and close dialog: the portal's only write. |
 | [`AckPill.tsx`](../../../web/src/features/problems/AckPill.tsx) | 4 | 1 | Whether a problem has been acknowledged. |
-| [`Problems.tsx`](../../../web/src/features/problems/Problems.tsx) | 412 | 1 | The Problems page: filters, the table, live updates and Explain. |
+| [`Problems.tsx`](../../../web/src/features/problems/Problems.tsx) | 408 | 1 | The Problems page: filters, the table, live updates and Explain. |
 | [`ProblemsTable.tsx`](../../../web/src/features/problems/ProblemsTable.tsx) | 62 | 1 | The problem table, with rows marked when they appear or clear. |
+| [`counts.ts`](../../../web/src/features/problems/counts.ts) | 22 | 4 | What counts as an open problem, shared by the Dashboard and the Problems page. |
 | [`liveChange.ts`](../../../web/src/features/problems/liveChange.ts) | 13 | 1 | What a live frame says about the list, as one comparable string. |
 | [`useChangeHighlight.ts`](../../../web/src/features/problems/useChangeHighlight.ts) | 94 | 3 | How long a new problem stays marked and a cleared one stays on screen. |
 <!-- /gen -->
@@ -334,9 +342,9 @@ The four report pages under `/reports` that need no month: Capacity trends, Aler
 <!-- gen:files web/src/features/reports -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`AlertNoise.tsx`](../../../web/src/features/reports/AlertNoise.tsx) | 278 | 1 | The alert-noise report page. |
-| [`Capacity.tsx`](../../../web/src/features/reports/Capacity.tsx) | 197 | 1 | The capacity trends page. |
-| [`Inventory.tsx`](../../../web/src/features/reports/Inventory.tsx) | 269 | 1 | The inventory and ownership scorecard page, for admins. |
+| [`AlertNoise.tsx`](../../../web/src/features/reports/AlertNoise.tsx) | 279 | 1 | The alert-noise report page. |
+| [`Capacity.tsx`](../../../web/src/features/reports/Capacity.tsx) | 203 | 1 | The capacity trends page. |
+| [`Inventory.tsx`](../../../web/src/features/reports/Inventory.tsx) | 270 | 1 | The inventory and ownership scorecard page, for admins. |
 | [`TopTriggers.tsx`](../../../web/src/features/reports/TopTriggers.tsx) | 96 | 1 | The top 100 triggers page. |
 <!-- /gen -->
 
@@ -349,14 +357,16 @@ The frame around every page: the sidebar, the top bar, the page title, the error
 | File | Lines | Exports | What it is |
 |---|---|---|---|
 | [`ErrorBoundary.tsx`](../../../web/src/features/shell/ErrorBoundary.tsx) | 80 | 2 | Catches a page that throws and reloads once when an old page asks for a chunk that is gone. |
-| [`Layout.tsx`](../../../web/src/features/shell/Layout.tsx) | 144 | 3 | The shell around every page: sidebar, top bar, the page title and the Outlet. |
+| [`Layout.tsx`](../../../web/src/features/shell/Layout.tsx) | 206 | 3 | The shell around every page: sidebar, top bar, the page title and the Outlet. |
+| [`NoAccess.tsx`](../../../web/src/features/shell/NoAccess.tsx) | 46 | 1 | What a person sees at a page their account does not have. |
 | [`NotFound.tsx`](../../../web/src/features/shell/NotFound.tsx) | 15 | 1 | The page for an address that is not a page. |
-| [`Sidebar.tsx`](../../../web/src/features/shell/Sidebar.tsx) | 196 | 2 | The grouped menu, filtered by the role, with the build in its footer. |
+| [`Sidebar.tsx`](../../../web/src/features/shell/Sidebar.tsx) | 202 | 2 | The grouped menu, filtered by the role, with the build in its footer. |
 | [`TodayDate.tsx`](../../../web/src/features/shell/TodayDate.tsx) | 10 | 1 | Today's date, re-read every minute. |
 | [`build.ts`](../../../web/src/features/shell/build.ts) | 24 | 2 | Turns the build the server reports into the footer label. |
+| [`useAccessWatch.ts`](../../../web/src/features/shell/useAccessWatch.ts) | 37 | 1 | Asks for the account again when a tab is shown, and every ten minutes, so a change of pages reaches an open page. |
 | [`useBuild.ts`](../../../web/src/features/shell/useBuild.ts) | 28 | 1 | Asks the server which build it runs. |
 | [`usePageTitle.ts`](../../../web/src/features/shell/usePageTitle.ts) | 18 | 2 | Names the browser tab after the page. |
-| [`useSessionRenewal.ts`](../../../web/src/features/shell/useSessionRenewal.ts) | 95 | 1 | Keeps an open page signed in for as long as it stays open. |
+| [`useSessionRenewal.ts`](../../../web/src/features/shell/useSessionRenewal.ts) | 100 | 1 | Keeps an open page signed in for as long as it stays open. |
 | [`useTopBarHeight.ts`](../../../web/src/features/shell/useTopBarHeight.ts) | 19 | 1 | Keeps a custom property at the measured height of the sticky top bar, so the room kept under it is the bar's own however much it wraps. |
 | [`useUiPrefs.ts`](../../../web/src/features/shell/useUiPrefs.ts) | 116 | 6 | The theme, the narrow-screen rule and the collapsed sidebar, kept in the browser. |
 | [`useWallMode.ts`](../../../web/src/features/shell/useWallMode.ts) | 54 | 1 | The wall mode: no sidebar, larger type, a clock and the age of the data. |
@@ -371,23 +381,35 @@ The service and SLA pages: the service tree, and the SLA page with Zabbix's own 
 | File | Lines | Exports | What it is |
 |---|---|---|---|
 | [`AvailabilityRedirect.tsx`](../../../web/src/features/sla/AvailabilityRedirect.tsx) | 23 | 1 | Sends the old address of the Availability and response page to the SLA page. |
-| [`EmailReport.tsx`](../../../web/src/features/sla/EmailReport.tsx) | 307 | 2 | The button and dialog that email a month's report to the people in the settings. |
+| [`EmailReport.tsx`](../../../web/src/features/sla/EmailReport.tsx) | 314 | 2 | The button and dialog that email a month's report to the people in the settings. |
 | [`FileChoices.tsx`](../../../web/src/features/sla/FileChoices.tsx) | 41 | 3 | The tick boxes for the kinds of file a report comes in. |
+| [`RangeControls.tsx`](../../../web/src/features/sla/RangeControls.tsx) | 148 | 1 | The controls of the SLA page's range view: the window, the hours and the weekdays. |
 | [`ReportDialog.tsx`](../../../web/src/features/sla/ReportDialog.tsx) | 87 | 3 | The frame the report dialogs share. |
-| [`ReportDownload.tsx`](../../../web/src/features/sla/ReportDownload.tsx) | 162 | 5 | The buttons that download a month's SLA report as PDF, Excel or CSV. |
+| [`ReportDownload.tsx`](../../../web/src/features/sla/ReportDownload.tsx) | 179 | 9 | The buttons that download a month's SLA report as PDF, Excel or CSV. |
 | [`ReportSchedule.tsx`](../../../web/src/features/sla/ReportSchedule.tsx) | 327 | 2 | The Schedule button and its dialog for the monthly send. |
 | [`ReportStyleButton.tsx`](../../../web/src/features/sla/ReportStyleButton.tsx) | 51 | 1 | The button and dialog that choose how a report writes numbers and dates. |
 | [`Response.tsx`](../../../web/src/features/sla/Response.tsx) | 86 | 1 | The Response tab of the SLA page: the problems nobody has acknowledged, by age. |
 | [`Rolling.tsx`](../../../web/src/features/sla/Rolling.tsx) | 205 | 1 | The last 7 or 30 days on the SLA page: the availability of each device over a window that ends now. |
-| [`SavedList.tsx`](../../../web/src/features/sla/SavedList.tsx) | 221 | 1 | The saved list of people, in the Email and Schedule dialogs: remove one, add one, delete the list. |
+| [`SavedList.tsx`](../../../web/src/features/sla/SavedList.tsx) | 239 | 1 | The saved list of people, in the Email and Schedule dialogs: remove one, add one, delete the list. |
 | [`Services.tsx`](../../../web/src/features/sla/Services.tsx) | 446 | 1 | The service tree page. |
-| [`Sla.tsx`](../../../web/src/features/sla/Sla.tsx) | 905 | 1 | The SLA page: Zabbix's SLA objects, the derived monthly figure and the Response tab, in tabs. |
-| [`Sli.tsx`](../../../web/src/features/sla/Sli.tsx) | 250 | 21 | Small shared pieces of the derived SLA views: the period picker, pills and notes. |
+| [`Sla.tsx`](../../../web/src/features/sla/Sla.tsx) | 1082 | 1 | The SLA page: Zabbix's SLA objects, the derived monthly figure and the Response tab, in tabs. |
+| [`Sli.tsx`](../../../web/src/features/sla/Sli.tsx) | 256 | 22 | Small shared pieces of the derived SLA views: the period picker, pills and notes. |
 | [`StyleFields.tsx`](../../../web/src/features/sla/StyleFields.tsx) | 56 | 1 | The three style choices as selects with an example of each. |
 | [`addresses.ts`](../../../web/src/features/sla/addresses.ts) | 20 | 5 | Small helpers for a box of addresses and a list in a sentence. |
 | [`percent.ts`](../../../web/src/features/sla/percent.ts) | 16 | 1 | Prints a percentage without rounding a miss up to the target. |
+| [`rangeWindow.ts`](../../../web/src/features/sla/rangeWindow.ts) | 195 | 26 | Turns the choices of the range view into the request the server takes. |
 | [`reportStyle.ts`](../../../web/src/features/sla/reportStyle.ts) | 62 | 8 | The report style choices and the person's own, kept in this browser. |
 | [`sitesBelow.ts`](../../../web/src/features/sla/sitesBelow.ts) | 17 | 1 | The words of the Sites below target card: how many sites fall short, which, and how many have no figure to judge. |
+<!-- /gen -->
+
+<!-- folder web/src/features/users -->
+Users and access, for administrators: the people who can sign in, with the role and the pages each has, and the forms to add one, change one, disable one and reset a password. The server refuses everyone else, so a person who types the address without the module sees a page that says so. A user is never deleted from here, only disabled, so that the log keeps its names.
+
+<!-- gen:files web/src/features/users -->
+| File | Lines | Exports | What it is |
+|---|---|---|---|
+| [`Users.tsx`](../../../web/src/features/users/Users.tsx) | 596 | 2 | The Users page: the people, their role and pages, and the forms to add, change, disable and reset. |
+| [`access.ts`](../../../web/src/features/users/access.ts) | 41 | 8 | What the Users page says about a user: their status, the labels of roles and the modules a role can be given. |
 <!-- /gen -->
 
 ### What the features share
@@ -402,15 +424,16 @@ The service and SLA pages: the service tree, and the SLA page with Zabbix's own 
 | File | Lines | Exports | What it is |
 |---|---|---|---|
 | [`BrandMark.tsx`](../../../web/src/shared/components/BrandMark.tsx) | 55 | 1 | The HCML logo. |
-| [`CollectorNotice.tsx`](../../../web/src/shared/components/CollectorNotice.tsx) | 33 | 2 | Says when Zabbix still answers but almost no device does, which means its way into the network is cut. |
+| [`CollectorNotice.tsx`](../../../web/src/shared/components/CollectorNotice.tsx) | 34 | 2 | Says when Zabbix still answers but almost no device does, which means its way into the network is cut. |
 | [`Field.tsx`](../../../web/src/shared/components/Field.tsx) | 31 | 3 | One cell of a controls row: a label above its control. |
 | [`KpiCard.tsx`](../../../web/src/shared/components/KpiCard.tsx) | 21 | 1 | A figure card, with a stripe only when a state sets one. |
 | [`NoData.tsx`](../../../web/src/shared/components/NoData.tsx) | 18 | 2 | The placeholder for no value, spoken as words by a screen reader. |
+| [`PageLink.tsx`](../../../web/src/shared/components/PageLink.tsx) | 27 | 2 | A link that is not drawn as one when the account does not have the page, and the hook that says so. |
 | [`Pager.tsx`](../../../web/src/shared/components/Pager.tsx) | 29 | 1 | Previous and Next around a line saying where the list stands. |
 | [`StatusBadge.tsx`](../../../web/src/shared/components/StatusBadge.tsx) | 93 | 5 | The severity, up/down, availability and host-state pills. |
 | [`TableWrap.tsx`](../../../web/src/shared/components/TableWrap.tsx) | 51 | 1 | The box that lets a wide table scroll, with a tab stop and a name. |
-| [`icons.tsx`](../../../web/src/shared/components/icons.tsx) | 145 | 16 | The menu and page icons, drawn inline. |
-| [`states.tsx`](../../../web/src/shared/components/states.tsx) | 188 | 8 | Loading, error, empty and stale-copy states, and the Async wrapper that shows them. |
+| [`icons.tsx`](../../../web/src/shared/components/icons.tsx) | 153 | 17 | The menu and page icons, drawn inline. |
+| [`states.tsx`](../../../web/src/shared/components/states.tsx) | 204 | 8 | Loading, error, empty and stale-copy states, and the Async wrapper that shows them. |
 <!-- /gen -->
 
 <!-- folder web/src/shared/hooks -->
@@ -420,15 +443,15 @@ The service and SLA pages: the service tree, and the SLA page with Zabbix's own 
 | File | Lines | Exports | What it is |
 |---|---|---|---|
 | [`scrollLock.ts`](../../../web/src/shared/hooks/scrollLock.ts) | 28 | 1 | Keeps the page behind a dialog from scrolling, counted for dialogs open together. |
-| [`useAsync.ts`](../../../web/src/shared/hooks/useAsync.ts) | 168 | 1 | Fetch with loading and error state, an abort on leave, and optional polling. |
-| [`useAuth.ts`](../../../web/src/shared/hooks/useAuth.ts) | 79 | 3 | Who is signed in and what they may see, from one shared probe. |
+| [`useAsync.ts`](../../../web/src/shared/hooks/useAsync.ts) | 175 | 1 | Fetch with loading and error state, an abort on leave, and optional polling. |
+| [`useAuth.ts`](../../../web/src/shared/hooks/useAuth.ts) | 133 | 5 | Who is signed in and what they may see, from one shared probe. |
 | [`useDebounced.ts`](../../../web/src/shared/hooks/useDebounced.ts) | 11 | 1 | A value once it has stopped changing. |
 | [`useDialogFocus.ts`](../../../web/src/shared/hooks/useDialogFocus.ts) | 96 | 2 | Moves focus into a dialog and back when it closes. |
-| [`useNow.ts`](../../../web/src/shared/hooks/useNow.ts) | 11 | 1 | The current time, re-read on an interval. |
+| [`useNow.ts`](../../../web/src/shared/hooks/useNow.ts) | 17 | 1 | The current time, re-read on an interval. |
 | [`useReducedMotion.ts`](../../../web/src/shared/hooks/useReducedMotion.ts) | 16 | 1 | Whether the person has asked the system for less motion, following the setting as it changes. |
 | [`useReportTimeZone.ts`](../../../web/src/shared/hooks/useReportTimeZone.ts) | 7 | 1 | The reporting time zone, re-rendering when the server's answer changes it. |
 | [`useReveal.ts`](../../../web/src/shared/hooks/useReveal.ts) | 18 | 1 | Brings a panel that opened below a long list into view and puts the focus on its heading. |
-| [`useSSE.ts`](../../../web/src/shared/hooks/useSSE.ts) | 187 | 2 | The live stream: connects, reads frames, and treats three missed pings as a dead line. |
+| [`useSSE.ts`](../../../web/src/shared/hooks/useSSE.ts) | 186 | 2 | The live stream: connects, reads frames, and treats three missed pings as a dead line. |
 | [`useUrlState.ts`](../../../web/src/shared/hooks/useUrlState.ts) | 104 | 2 | Reads and changes query-string parameters in place. |
 <!-- /gen -->
 
@@ -438,14 +461,15 @@ The service and SLA pages: the service tree, and the SLA page with Zabbix's own 
 <!-- gen:files web/src/shared/lib -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`chatStore.ts`](../../../web/src/shared/lib/chatStore.ts) | 52 | 5 | Where this tab keeps the Assistant conversation. |
+| [`chatStore.ts`](../../../web/src/shared/lib/chatStore.ts) | 57 | 5 | Where this tab keeps the Assistant conversation. |
+| [`clock.ts`](../../../web/src/shared/lib/clock.ts) | 56 | 5 | The server's clock, taken from the Date header of the answers, for every age on the page. |
 | [`csv.ts`](../../../web/src/shared/lib/csv.ts) | 26 | 3 | The one CSV writer, with its guard against spreadsheet formulas. |
-| [`freshness.ts`](../../../web/src/shared/lib/freshness.ts) | 67 | 6 | How old the numbers on a page are, when the server says so. |
+| [`freshness.ts`](../../../web/src/shared/lib/freshness.ts) | 68 | 6 | How old the numbers on a page are, when the server says so. |
 | [`plural.ts`](../../../web/src/shared/lib/plural.ts) | 2 | 1 | A count with its noun. |
 | [`saveFile.ts`](../../../web/src/shared/lib/saveFile.ts) | 15 | 2 | Saves a file the page built, through a throwaway link, and keeps its address long enough for the browser to finish. |
-| [`severity.ts`](../../../web/src/shared/lib/severity.ts) | 125 | 10 | Severity names, times, ages, durations and availability text. |
+| [`severity.ts`](../../../web/src/shared/lib/severity.ts) | 126 | 10 | Severity names, times, ages, durations and availability text. |
 | [`sites.ts`](../../../web/src/shared/lib/sites.ts) | 84 | 5 | The browser's copy of the site-naming rules. |
-| [`time.ts`](../../../web/src/shared/lib/time.ts) | 281 | 25 | Dates and months in HCML's reporting time zone. |
+| [`time.ts`](../../../web/src/shared/lib/time.ts) | 283 | 25 | Dates and months in HCML's reporting time zone. |
 | [`units.ts`](../../../web/src/shared/lib/units.ts) | 161 | 8 | Zabbix units turned into human text. |
 | [`wall.ts`](../../../web/src/shared/lib/wall.ts) | 83 | 12 | What the wall shows, in turn. |
 <!-- /gen -->
@@ -462,23 +486,24 @@ The service and SLA pages: the service tree, and the SLA page with Zabbix's own 
 | [`01-tokens.css`](../../../web/src/styles/01-tokens.css) | 337 |  | The design tokens: colours, spacing, type, radii and motion, for light and dark. |
 | [`02-base.css`](../../../web/src/styles/02-base.css) | 51 |  | The reset and the one visible focus ring. |
 | [`03-shell.css`](../../../web/src/styles/03-shell.css) | 100 |  | The page grid: sidebar, top bar and content. |
-| [`04-login.css`](../../../web/src/styles/04-login.css) | 85 |  | The sign-in card. |
-| [`05-layout-chips-tags.css`](../../../web/src/styles/05-layout-chips-tags.css) | 125 |  | The two-column layout, severity chips, problem tags and the skip link. |
+| [`04-login.css`](../../../web/src/styles/04-login.css) | 101 |  | The sign-in card. |
+| [`05-layout-chips-tags.css`](../../../web/src/styles/05-layout-chips-tags.css) | 149 |  | The two-column layout, severity chips, problem tags and the skip link. |
 | [`06-cards-tables-badges.css`](../../../web/src/styles/06-cards-tables-badges.css) | 146 |  | Panels, figure cards, tables and pills. |
-| [`07-controls-states.css`](../../../web/src/styles/07-controls-states.css) | 236 |  | Buttons, fields, filters and the loading, error and empty states. |
-| [`08-explain-modal-notices.css`](../../../web/src/styles/08-explain-modal-notices.css) | 367 |  | The login wrapper, the Explain slide-over, modal dialogs, notices and the role chip. |
+| [`07-controls-states.css`](../../../web/src/styles/07-controls-states.css) | 243 |  | Buttons, fields, filters and the loading, error and empty states. |
+| [`08-explain-modal-notices.css`](../../../web/src/styles/08-explain-modal-notices.css) | 378 |  | The login wrapper, the Explain slide-over, modal dialogs, notices and the role chip. |
 | [`09-reports-sites.css`](../../../web/src/styles/09-reports-sites.css) | 446 |  | The scorecard, alert-noise flags, links, ageing, the service tree and the site cards. |
-| [`10-assistant.css`](../../../web/src/styles/10-assistant.css) | 145 |  | The Assistant's chat. |
-| [`11-graphs-network.css`](../../../web/src/styles/11-graphs-network.css) | 346 |  | The Graphs, Latest data and Network pages. |
-| [`12-sla-services-links.css`](../../../web/src/styles/12-sla-services-links.css) | 211 |  | The SLA, services, availability, capacity, sites and links pages. |
+| [`10-assistant.css`](../../../web/src/styles/10-assistant.css) | 168 |  | The Assistant's chat. |
+| [`11-graphs-network.css`](../../../web/src/styles/11-graphs-network.css) | 352 |  | The Graphs, Latest data and Network pages. |
+| [`12-sla-services-links.css`](../../../web/src/styles/12-sla-services-links.css) | 231 |  | The SLA, services, availability, capacity, sites and links pages. |
 | [`13-second-pass.css`](../../../web/src/styles/13-second-pass.css) | 123 |  | Fixes found on the second pass: freshness, errors, links in tables, focus and a few page details. |
 | [`14-sidebar-wall.css`](../../../web/src/styles/14-sidebar-wall.css) | 243 |  | The collapsible sidebar, the theme picker and the wall mode. |
 | [`15-report-download.css`](../../../web/src/styles/15-report-download.css) | 42 |  | The SLA download buttons. |
-| [`16-meters.css`](../../../web/src/styles/16-meters.css) | 222 |  | The Dashboard's tabs and the internet traffic meters. |
-| [`17-hosts-devices.css`](../../../web/src/styles/17-hosts-devices.css) | 176 |  | The Dashboard's Hosts view. |
+| [`16-meters.css`](../../../web/src/styles/16-meters.css) | 220 |  | The Dashboard's tabs and the internet traffic meters. |
+| [`17-hosts-devices.css`](../../../web/src/styles/17-hosts-devices.css) | 177 |  | The Dashboard's Hosts view. |
 | [`18-soft-depth.css`](../../../web/src/styles/18-soft-depth.css) | 208 |  | The soft look of 26 October: raised and pressed surfaces, the 3:1 edges and the motion. |
-| [`19-touch.css`](../../../web/src/styles/19-touch.css) | 90 |  | Makes every control at least 44 pixels where the pointer is a finger. |
-| [`index.css`](../../../web/src/styles/index.css) | 28 |  | Imports the parts in cascade order. |
+| [`19-touch.css`](../../../web/src/styles/19-touch.css) | 93 |  | Makes every control at least 44 pixels where the pointer is a finger. |
+| [`20-print.css`](../../../web/src/styles/20-print.css) | 107 |  | The rules for print and Save as PDF, the last part of the stylesheet. |
+| [`index.css`](../../../web/src/styles/index.css) | 29 |  | Imports the parts in cascade order. |
 <!-- /gen -->
 
 ### The tests

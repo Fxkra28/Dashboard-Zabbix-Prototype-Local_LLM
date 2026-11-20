@@ -10,7 +10,7 @@ import { afterAll, describe, expect, it } from 'vitest';
  * The script is what says whether the two copies still match, and CI runs only its self-test, so
  * this holds the rules it keeps: the list names files, not folders, a listed file must be in both
  * copies, and README_copy.md has one allowed place. It also keeps the numbers the documents state
- * (18 files, 22 with the .env files) equal to the list, so they cannot drift apart.
+ * (17 files, 21 with the .env files) equal to the list, so they cannot drift apart.
  */
 const repo = (rel: string) => fileURLToPath(new URL(`../../../${rel}`, import.meta.url));
 const read = (rel: string) => readFileSync(repo(rel), 'utf8');
@@ -127,15 +127,15 @@ describe('the documents count what the script lists', () => {
     return found;
   };
 
-  it('says 22 files differ in README.md, the glossary of setup.md, ADR-0005 and contributing.md', () => {
-    expect(withEnv).toBe(22);
+  it('says 21 files differ in README.md, the glossary of setup.md, ADR-0005 and contributing.md', () => {
+    expect(withEnv).toBe(21);
     expect(numbers('README.md', /Exactly \*{0,2}(\d+) files\*{0,2} differ/g)).toEqual([withEnv]);
     expect(numbers('docs/setup/28-glossary.md', /Byte-identical source; (\d+) files differ/g)).toEqual([withEnv]);
     expect(numbers('docs/architecture/adr/0005-provider-neutral-ai-layer.md', /divergence is now (\d+) files/g)).toEqual([withEnv]);
     expect(numbers('docs/contributing.md', /exactly \*{0,2}(\d+)\*{0,2} differing files/g)).toEqual([withEnv]);
   });
 
-  it('says 18 files are named in the script, in README.md and contributing.md', () => {
+  it('says 17 files are named in the script, in README.md and contributing.md', () => {
     expect(numbers('README.md', /with the (\d+) files that may differ \(/g)).toEqual([perCopy]);
     expect(numbers('docs/contributing.md', /by name: (\d+) files, and the four/g)).toEqual([perCopy]);
     expect(numbers('docs/contributing.md', /names its (\d+) files one by one/g)).toEqual([perCopy]);

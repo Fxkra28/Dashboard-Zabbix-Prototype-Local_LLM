@@ -18,8 +18,8 @@
  *     as an `in: path` parameter, on the operation or on its path item;
  *   - the guard: a route the guard covers must document 401 and must not be marked `security: []`,
  *     and a route that can answer 403 (an unsafe method, which needs the CSRF header, or a role above
- *     viewer) must document 403. The public paths and the role rules are read from `PUBLIC_ROUTES`
- *     and `ROUTE_RULES` in the source, so there is no third list to drift;
+ *     guest, or a route no row of the table owns, which is for administrators) must document 403. The public paths and the role rules are read from `PUBLIC_ROUTES`
+ *     (auth.ts) and `ROUTES` (modules.ts) in the source, so there is no third list to drift;
  *   - the body: an unsafe method takes a body schema (schemas.ts), so it must document 400;
  *   - the query: a route that declares its query names (`singleValues` in schemas.ts) must document 400, and
  *     the spec must declare exactly those names `in: query`;
@@ -259,6 +259,8 @@ export function cutDescriptions(yaml: string): { line: number; entry: string }[]
       blockIndent = null;
     }
     if (text.trimStart().startsWith('#')) return;
+    // A path with a parameter in it, `/api/users/{name}:`, is a key and not a mapping.
+    if (/^\s*\/\S*:\s*$/.test(text)) return;
     if (/(?::|-)\s+[|>][+-]?\d?\s*$/.test(text)) blockIndent = indentOf(text);
 
     // One frame per open bracket: the entries it has finished and the one it is reading.
@@ -312,22 +314,22 @@ export function cutDescriptions(yaml: string): { line: number; entry: string }[]
 export interface Guard {
   /** Paths the guard lets through without a token. */
   open: Set<string>;
-  /** The minimum role per route, first match wins. A route no rule matches needs `viewer`. */
+  /** The minimum role per route, first match wins. A route no rule matches is closed to everyone but administrators. */
   rules: { pattern: RegExp; role: string }[];
 }
 
 /**
- * The guard's two tables, read out of the source that holds them (`PUBLIC_ROUTES` and `ROUTE_RULES`
- * in auth.ts), or null when either is missing: a checker that cannot see the guard must fail, not
+ * The guard's two tables, read out of the source that holds them (`PUBLIC_ROUTES` in auth.ts and `ROUTES`
+ * in modules.ts), or null when either is missing: a checker that cannot see the guard must fail, not
  * pass with nothing to compare.
  */
 export function guardIn(source: string): Guard | null {
   const open = /\bPUBLIC_ROUTES\s*=\s*new Set\(\s*\[([^\]]*)\]/.exec(source);
-  const table = /\bROUTE_RULES\b[^=]*=\s*\[([\s\S]*?)\n\s*\];/.exec(source);
+  const table = /\bROUTES\b[^=]*=\s*\[([\s\S]*?)\n\s*\];/.exec(source);
   if (!open || !table) return null;
 
   const paths = [...open[1].matchAll(/(['"`])([^'"`]+)\1/g)].map((m) => m[2]);
-  const rules = [...table[1].matchAll(/pattern:\s*\/((?:\\.|[^/\\\n])+)\/([a-z]*)\s*,\s*role:\s*['"](\w+)['"]/g)].map((m) => ({
+  const rules = [...table[1].matchAll(/pattern:\s*\/((?:\\.|[^/\\\n])+)\/([a-z]*)\s*,\s*modules:\s*(?:\[[^\]]*\]|'any')\s*,\s*role:\s*['"](\w+)['"]/g)].map((m) => ({
     pattern: new RegExp(m[1], m[2]),
     role: m[3],
   }));
@@ -366,22 +368,23 @@ export function rolesTable(yaml: string): Map<string, RoleEntry[]> | null {
 
 /**
  * The Roles table against the guard's rules, both ways: every path the table names has the role of its row, and every
- * operation the rules put above viewer is named under its role. The rules are read from auth.ts, so there is one list and a copy.
+ * operation the rules put above guest is named under its role. The rules are read from modules.ts, so there is one list and a copy.
  */
 export function compareRoles(table: Map<string, RoleEntry[]>, ops: SpecOp[], guard: Guard): string[] {
   const problems: string[] = [];
-  const roleOf = (path: string) => guard.rules.find((r) => r.pattern.test(path))?.role ?? 'viewer';
+  // A public path needs no role; a route no row owns is for administrators.
+  const roleOf = (path: string) => (guard.open.has(path) ? 'guest' : (guard.rules.find((r) => r.pattern.test(path))?.role ?? 'admin'));
   for (const [role, entries] of table) {
     for (const e of entries) {
       const given = roleOf(e.prefix ? `${e.path}x` : e.path);
-      if (given !== role) problems.push(`docs/api/openapi.yaml  the Roles table puts ${e.path}${e.prefix ? '*' : ''} under ${role}, and ROUTE_RULES in auth.ts gives it ${given}`);
+      if (given !== role) problems.push(`docs/api/openapi.yaml  the Roles table puts ${e.path}${e.prefix ? '*' : ''} under ${role}, and ROUTES in modules.ts gives it ${given}`);
     }
   }
   for (const o of ops) {
     const role = roleOf(o.path.replace(/\{[^}]+\}/g, 'x'));
-    if (role === 'viewer') continue;
+    if (role === 'guest') continue;
     const named = (table.get(role) ?? []).some((e) => (e.method === undefined || e.method === o.method) && (e.prefix ? o.path.startsWith(e.path) : o.path === e.path));
-    if (!named) problems.push(`docs/api/openapi.yaml  ${o.method.toUpperCase()} ${o.path} needs ${role} (ROUTE_RULES in auth.ts) but the Roles table does not name it under ${role}`);
+    if (!named) problems.push(`docs/api/openapi.yaml  ${o.method.toUpperCase()} ${o.path} needs ${role} (ROUTES in modules.ts) but the Roles table does not name it under ${role}`);
   }
   return problems;
 }
@@ -434,10 +437,10 @@ export function compare(routes: Route[], ops: SpecOp[], guard: Guard) {
       if (o.security === 'none') problems.push(`${label} is marked security: [] but the guard covers it`);
       if (!o.responses.includes('401')) problems.push(`${label} is guarded but documents no 401`);
     }
-    const needs = guard.rules.find((g) => g.pattern.test(r.path))?.role ?? 'viewer';
+    const needs = guard.open.has(r.path) ? 'guest' : (guard.rules.find((g) => g.pattern.test(r.path))?.role ?? 'admin');
     const why = UNSAFE_METHODS.has(r.method)
       ? 'an unsafe method needs the X-HCML-CSRF header'
-      : needs !== 'viewer'
+      : needs !== 'guest'
         ? `it needs the ${needs} role`
         : '';
     if (why) {
@@ -606,15 +609,17 @@ function selfTest(): string[] {
   eq('a key with no value', cut('a: { type: string, b }'), ['1:b']);
   eq('the cut one inside another mapping', cut('a: { x: { description: One, two }, type: string }'), ['1:two']);
   eq('a comment', cut('# a: { b, c }'), []);
+  eq('a path with a parameter', cut('  /api/users/{name}/password:'), []);
   eq('a block scalar is prose', cut(['a:', '  description: |', '    Write { b, c } like this.', '  type: string', 'x: { y, z }'].join('\n')), ['5:y', '5:z']);
 
   // The guard's two tables
 
   const authSource = String.raw`
-    const ROUTE_RULES: { pattern: RegExp; role: Role }[] = [
-      { pattern: /^\/api\/reports\/inventory/, role: 'admin' },
+    export const ROUTES: readonly RouteRule[] = [
+      { pattern: /^\/api\/reports\/inventory/, modules: ['inventory'], role: 'admin' },
       // a comment between rules
-      { pattern: /^\/api\/(links|net)\b/, role: 'operator' },
+      { pattern: /^\/api\/(links|net)\b/, modules: ['network', 'links'], role: 'operator' },
+      { pattern: /^\/api\/ready$/, modules: 'any', role: 'guest' },
     ];
     const PUBLIC_ROUTES = new Set(['/api/health', "/api/auth/login"]);
   `;
@@ -623,7 +628,7 @@ function selfTest(): string[] {
   eq(
     'reads the role rules',
     read?.rules.map((r) => `${r.pattern.test('/api/net/interfaces') ? 'net ' : ''}${r.role}`),
-    ['admin', 'net operator'],
+    ['admin', 'net operator', 'guest'],
   );
   eq('no guard tables in the source', guardIn('const x = 1;'), null);
   eq('one table is not enough', guardIn(authSource.replace('PUBLIC_ROUTES', 'ELSEWHERE')), null);
@@ -657,6 +662,7 @@ function selfTest(): string[] {
       { pattern: /^\/api\/sli\/(email|recipients)/, role: 'admin' },
       { pattern: /^\/api\/(links|net)\b/, role: 'wall' },
       { pattern: /^\/api\/problems\/(acknowledge|close)/, role: 'operator' },
+      { pattern: /^\/api\//, role: 'guest' },
     ],
   };
   const roleOp = (method: string, path: string): SpecOp => ({ method, path, security: 'inherit', responses: ['200'], pathParams: [], queryParams: [] });
@@ -668,12 +674,12 @@ function selfTest(): string[] {
   const wrongRow = rolesTable(rolesYaml.replace('`/api/links`, `/api/net/*`', '`/api/links`, `/api/net/*`, `/api/hosts`')?.replace('| `wall` |', '| `wall` |') ?? '');
   eq('a path under the wrong role', (wrongRow ? compareRoles(wrongRow, okOps, roleGuard) : []).filter((p) => p.includes('puts /api/hosts under wall')).length, 1);
   eq('a method that is not the one in the table', (table ? compareRoles(table, [roleOp('delete', '/api/problems/acknowledge')], roleGuard) : []).length, 1);
-  eq('a star covers what is below it, and only that', table && compareRoles(table, [roleOp('get', '/api/net/a/b'), roleOp('get', '/api/net')], roleGuard), ['docs/api/openapi.yaml  GET /api/net needs wall (ROUTE_RULES in auth.ts) but the Roles table does not name it under wall']);
-  eq('a path no rule matches is left to viewer', table && compareRoles(table, [roleOp('get', '/api/networks')], roleGuard), []);
+  eq('a star covers what is below it, and only that', table && compareRoles(table, [roleOp('get', '/api/net/a/b'), roleOp('get', '/api/net')], roleGuard), ['docs/api/openapi.yaml  GET /api/net needs wall (ROUTES in modules.ts) but the Roles table does not name it under wall']);
+  eq('a path the catch-all gives to guest needs no row', table && compareRoles(table, [roleOp('get', '/api/networks')], roleGuard), []);
 
   // compare(): the clean case, then one break at a time
 
-  const guard: Guard = { open: new Set(['/api/open']), rules: [{ pattern: /^\/api\/ops/, role: 'operator' }] };
+  const guard: Guard = { open: new Set(['/api/open']), rules: [{ pattern: /^\/api\/ops/, role: 'operator' }, { pattern: /^\/api\//, role: 'guest' }] };
   const route = (method: Route['method'], path: string): Route => ({ method, path, where: 'f.ts:1' });
   const op = (method: string, path: string, over: Partial<SpecOp> = {}): SpecOp => ({
     method,
@@ -780,7 +786,7 @@ const problems: string[] = [];
 const guard = guardIn(sources.map((s) => s.text).join('\n'));
 if (!guard) {
   problems.push(
-    'server/src  could not read PUBLIC_ROUTES and ROUTE_RULES (auth.ts), so the 401 and 403 checks cannot run. ' +
+    'server/src  could not read PUBLIC_ROUTES (auth.ts) and ROUTES (modules.ts), so the 401 and 403 checks cannot run. ' +
       'If they moved or changed shape, teach guardIn() in this script the new form.',
   );
 }

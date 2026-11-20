@@ -57,6 +57,9 @@ a.kind-tile:hover {
 }
 .web-failure a {
   color: inherit;
+  /* Colour alone is no cue for a link in a line of text (WCAG 1.4.1): these names are links, so they are underlined (UX-79). */
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 .kind-tile.empty {
   border-color: var(--border);
@@ -96,10 +99,8 @@ a.kind-tile:hover {
 }
 .top-host a {
   color: inherit;
-  text-decoration: none;
-}
-.top-host a:hover {
   text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 .top-value {
   font-size: var(--t-base);

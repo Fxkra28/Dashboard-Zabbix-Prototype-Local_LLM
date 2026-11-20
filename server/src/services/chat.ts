@@ -4,6 +4,7 @@ import { getSnapshot, systemText, type ChatTurn } from './assistant.js';
 import { AiDisabledError, AiUpstreamError, prefillModel, warmModel } from '../clients/ai.js';
 import { ZabbixApiError, ZabbixAuthError, ZabbixTimeoutError } from '../clients/zabbix.js';
 import { SOURCE_DOWN } from '../http/errors.js';
+import { topHostsView } from './topHosts.js';
 
 /**
  * The assistant endpoint. A POST because the conversation travels in the body,
@@ -65,6 +66,8 @@ const PREFILL_RETRY_MS = 5_000;
  * read the system text the next question will start with. Never throws.
  */
 export async function warmAndPrefill(log: FastifyBaseLogger, load: boolean): Promise<void> {
+  // The list of busiest hosts answers the CPU or memory of a site and takes tens of seconds when cold: start it now and do not wait for it.
+  void topHostsView().catch(() => undefined);
   try {
     let [, snapshot] = await Promise.all([load ? warmModel(log) : undefined, getSnapshot()]);
     // One built while the derived SLA was still computing is never reused, so

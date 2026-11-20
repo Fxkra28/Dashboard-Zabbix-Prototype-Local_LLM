@@ -7,7 +7,7 @@ Three views of the same system in motion. `schema/` answers *what the data is*; 
 |---|---|---|
 | [`WebFlow.pdf`](WebFlow.pdf) | What happens in the browser, from the first byte to data on screen? | 6 stages, 27 boxes |
 | [`ServerFlow.pdf`](ServerFlow.pdf) | What happens to one request inside the BFF, in the order it runs? | sequence, 7 participants |
-| [`DataFlow.pdf`](DataFlow.pdf) | Where does a number come from, and where does it go? | 5 lanes, end to end |
+| [`DataFlow.pdf`](DataFlow.pdf) | Where does a number come from, and where does it go? | 6 lanes, end to end |
 
 Read them in that order if you are new: the browser is what you can see, the server is what it talks
 to, and the data flow is the whole path.
@@ -98,11 +98,12 @@ in `X-Data-Stale`; both carry `X-Data-Age-Seconds`. `cached` in `server/src/core
 POST /api/auth/login ──► JWT, 12 h by default, in an httpOnly cookie ──cookie │ Authorization: Bearer (scripts)──► onRequest: forgery check, then guard ──ROUTE_RULES──► 200 │ 401 │ 403
 ```
 
-Users come from the environment, not a table: `PORTAL_USERS` as `name:password:role` triples, or
-`PORTAL_USER`/`PORTAL_PASS` as the single-admin shorthand. Four rules set the roles above the default:
-admin for `/api/reports/inventory`, `/api/sli/email` and `/api/sli/schedule`, wall for `/api/links` and `/api/net`, and operator for the acknowledge
-write, and anything unmatched needs viewer, so a new route is protected by default rather than
-accidentally public. `/api/health`, `/api/auth/login`, `/api/auth/me` and `/api/auth/logout` are the
+Users come from two places: the environment (`PORTAL_USERS` as `name:password:role` triples, or
+`PORTAL_USER`/`PORTAL_PASS` as the single-admin shorthand, whose first admin is the break-glass account) and, on a portal with a data folder, a users file on
+the state volume that administrators manage on the Users page. A table of routes (`security/modules.ts`) gives each route the pages that own it and the lowest role:
+admin for `/api/users`, `/api/reports/inventory`, `/api/sli/email`, `/api/sli/schedule` and `/api/sli/recipients`, operator for the acknowledge
+write, and guest for the rest. A route that has no row is for administrators only, so a new route is protected by default rather than
+accidentally public. `/api/health`, `/api/auth/login`, `/api/auth/me`, `/api/auth/logout` and `/api/auth/request` are the
 only exemptions, matched exactly against the route the router matched, so an encoded path such as
 `/%61pi/hosts` is guarded like `/api/hosts`. Sign-in allows 10 attempts a minute per account and
 address. The forgery check runs first: a POST sent with the cookie, and every sign-in and sign-out,
@@ -127,7 +128,7 @@ deliberately, so every figure downstream is a snapshot of that moment
 ### 7 · AI: Explain
 
 ```text
-ExplainPanel ──GET /api/explain/problem──► ai.ts ──HTTP──► 127.0.0.1:11434 (qwen3:8b) ──► buffered JSON, cached 1 h
+ExplainPanel ──GET /api/explain/problem──► ai.ts ──HTTP──► 127.0.0.1:11434 (AI_MODEL) ──► buffered JSON, cached 1 h
                                                     stays on this host
 ```
 
@@ -144,9 +145,9 @@ Assistant ──POST /api/chat──► estate snapshot + ≤3,000 chars of hist
 ```
 
 The Assistant is the larger of the two AI paths by a wide margin: Explain sends one problem, this
-sends a rollup of the whole estate: every host by site, the open problems, unreachable-host lists
-and derived SLA figures. Streamed token by token and never cached, where Explain is buffered and
-cached. Two caps bound the prompt: `HISTORY_CHAR_BUDGET`, 3,000 characters of earlier turns, and `SNAPSHOT_CHAR_CAP`, 5,500 characters of the snapshot.
+sends a rollup of the whole estate: the open problems, unreachable-host lists by site
+and derived SLA figures, and, for a question that asks for more, detail blocks the portal reads for it (past problems, a device's latest values, the SLA of a window, a host's state, groups and templates, WAN links, web checks, maintenance, maps and report summaries; up to 2,800 characters, [ADR-0019](../architecture/adr/0019-let-the-portal-read-what-a-question-needs.md)). Streamed token by token and never cached, where Explain is buffered and
+cached. Two caps bound the prompt: `HISTORY_CHAR_BUDGET`, 3,000 characters of earlier turns, and `SNAPSHOT_CHAR_CAP`, 6,200 characters of the snapshot.
 `HISTORY_CHAR_BUDGET` in `server/src/services/chat.ts`, `SNAPSHOT_CHAR_CAP` in `server/src/services/assistantSnapshot.ts`, `chatRoutes` in `server/src/routes/chat.ts`.
 
 ### 9 · The one write
@@ -165,22 +166,22 @@ sequence: `event.acknowledge` is awaited first.
 
 ## What this copy's perspective is
 
-This is `hcml-portal-ollama`: the plain-language layer is `qwen3:8b`, served by Ollama on this
+This is `hcml-portal-ollama`: the plain-language layer is the local model that `AI_MODEL` names in `.env`, served by Ollama on this
 host. So in `DataFlow` the model box is green like everything else the portal computes, and the
 box beside it reads *STAYS ON THIS MACHINE*.
 
-**There is no red anywhere in this folder**: verified, not asserted: the rendered `DataFlow` here
-carries 0 red fills and 9 green. The sibling repo `hcml-portal` renders the same diagram with
+**There is one red box in this folder, the report by email**: verified, not asserted: the rendered `DataFlow` here
+carries 1 red fill and 10 green, and one grey for the state file. The sibling repo `hcml-portal` renders the same diagram with
 3 red: two because the model there is hosted Claude over the Anthropic API and a problem's host name,
 trigger name and tags cross the network when someone clicks *Explain*, and one for the report by
-email, which this copy never sends.
+email, which this copy has too.
 
 `WebFlow.mmd` and `ServerFlow.mmd` are byte-identical in both repos. Verify with `diff`, not by
 eye. The browser and the request pipeline do not know or care which model answers.
 Inside this folder only `DataFlow.mmd`, `DataFlow.pdf` and this README differ. `DataFlow` differs in
-the `MODEL` box, the `LEAVES` box, the `class` lines that colour them, and lane 6 (the report by
-email and its state file), which only `hcml-portal` has. (Outside this folder
-the repos also differ in `README.md`, `AUDIT_REPORT.md`, `docker-compose.yml`, the `.env` files and
+the `MODEL` box, the `LEAVES` box, and the `class` lines that colour them. Lane 6 (the report by
+email and its state file) is in both. (Outside this folder
+the repos also differ in `README.md`, `docker-compose.yml`, the `.env` files and
 the `schema/` diagrams, so "the repos differ only in
 DataFlow" is true of *this folder*, not of the whole tree.)
 
@@ -195,7 +196,7 @@ DataFlow" is true of *this folder*, not of the whole tree.)
 > as `AI_PROVIDER=ollama` or `=local` turns this diagram back into the red one with no code change,
 > no error, a startup warning as the only sign, and no visible difference in the UI. An empty
 > `AI_PROVIDER` falls back with no warning at all. Going the other way, back to hosted, also needs `AI_MODEL` dropped, or
-> `qwen3:8b` is sent to the Anthropic API and every *Explain* fails.
+> the local model's name is sent to the Anthropic API and every *Explain* fails.
 >
 > Since 24 September 2026 the Docker deployment cannot make that mistake. This copy's
 > `docker-compose.yml` fixes `AI_PROVIDER` to `openai-compatible` instead of reading it from `.env`,
@@ -251,11 +252,9 @@ unresponsive Zabbix both return 503, not 502/504, because they are *configuratio
 than upstream faults, and nothing in the server ever returns 504. Both are pinned by tests. Only
 `zabbix_error` is a 502.
 
-**DataFlow: five lanes, top to bottom, each read left to right.** Lane 1 is Zabbix doing the work we
+**DataFlow: six lanes, top to bottom, each read left to right.** Lane 1 is Zabbix doing the work we
 do not do. Lane 2 is the BFF. Lane 3 is the plain-language layer, reached on demand only, never
-on page load. Lane 4 is the browser. Lane 5 is the single write to Zabbix. There is no lane 6 in this
-copy: the hosted copy's report by email needs `MAIL_` settings and a state file for its schedule, and this one passes
-no mail settings and keeps no schedule: its state volume holds only the web check figures of closed months.
+on page load. Lane 4 is the browser. Lane 5 is the single write to Zabbix. Lane 6 is the report by email, which both copies have: it is off until the `MAIL_` settings name a mail account (this copy passes them since 16 November 2026, FR-56), and its saved recipients and monthly schedule are kept in the state volume beside the users and the web check figures of closed months.
 
 Lane 5 ends in its own terminal box rather than an arrow looping back to lane 1. It is the same
 Zabbix API; the arrow is omitted because one cycle is enough to make the layout engine scramble the
@@ -289,7 +288,7 @@ one does not send anything anywhere.
 | Green | The portal derives it, on this machine. No table exists: built per request, cached for seconds, gone on restart |
 | Amber | Runs in the browser |
 | Purple | The portal's single write back to Zabbix |
-| Red | It leaves this machine: none in this copy |
+| Red | It leaves this machine: in this copy only the report by email |
 | Grey | A decision, a guard, or a boundary |
 
 The same palette as [`../schema/`](../schema/), so a box means the same thing in both folders.
@@ -298,8 +297,8 @@ The same palette as [`../schema/`](../schema/), so a box means the same thing in
 bands, and two of them reuse a colour from this table with a different meaning. Its amber band is
 the `onRequest` forgery check and auth guard running inside the BFF, not browser code. Its red band is
 "when Zabbix does not cooperate": an upstream failure, and nothing leaves the machine there. Grey
-(guard), green (derived) and purple (the one write) do match the table. The sixth band, slate, is the report by email. In this copy there is no red
-anywhere on `DataFlow` at all.
+(guard), green (derived) and purple (the one write) do match the table. The sixth band, slate, is the report by email. In this copy the only red on `DataFlow`
+is the box that ends lane 6, the report by email.
 
 ---
 
@@ -344,7 +343,7 @@ Four rules these sources must keep:
 **If you change `WebFlow.mmd` or `ServerFlow.mmd`, make the identical change in `hcml-portal`**: those
 two are meant to stay byte-identical, and `diff` is the check. `DataFlow.mmd` and this README are
 meant to differ; keep the rendered difference to the places named above (`MODEL`, `LEAVES`, their
-`class` lines, and the hosted copy's lane 6).
+`class` lines).
 
 Both folders are named `flow/`, lowercase, in both repos, so this check works on a case-sensitive
 filesystem too. Use `cmp`, not `diff`: on a case-insensitive volume such as APFS a wrong-case
@@ -361,8 +360,8 @@ A quick way to prove this copy's claim after any edit:
 
 ```bash
 npx @mermaid-js/mermaid-cli -i DataFlow.mmd -o /tmp/df.svg -w 2600 -b white
-grep -o '#fee2e2' /tmp/df.svg | wc -l    # red: must be 0 here, and 3 in hcml-portal
-grep -o '#dcfce7' /tmp/df.svg | wc -l    # green: must be 9 here, and 8 in hcml-portal
+grep -o '#fee2e2' /tmp/df.svg | wc -l    # red: must be 1 here (the report by email), and 3 in hcml-portal
+grep -o '#dcfce7' /tmp/df.svg | wc -l    # green: must be 10 here, and 8 in hcml-portal
 ```
 
 Then run `node tools/check/diagrams.stamp.mjs` from the repo root. It records which source each render was made from, and CI fails on a source edited after its stamp (`tools/check/diagrams.check.mjs`).

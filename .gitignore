@@ -38,3 +38,39 @@ coverage/
 !.env.example
 portal-state.json
 *.bak
+
+# The portal's users with their password hashes (users.json and its copies: .prev, .repaired-<time>, .broken-<time>), the web check figures of closed months and the requests for an
+# account, which hold the names and reasons that strangers typed. A development run with PORTAL_STATE_DIR set writes them where it points, usually inside the repository: never commit them (SC-66, FR-62).
+users.json*
+closed-months.json*
+requests.json*
+*.broken-*
+
+# Kept outside the repository, in a private folder: the work log (it holds every open weak point of HCML's systems and the owner's
+# words), the first audit (run on a restore of HCML's production backup), the two handbook pages that list what is still open, and the
+# dated change logs of October. On the machine of the owner `tracker.md` is a link to the private copy, so the checks that read it still run;
+# a fresh clone has none of them, and the checks accept that.
+/tracker.md
+/AUDIT_REPORT.md
+/docs/handover/5-reference/open-items.md
+/docs/handover/5-reference/open-problems.md
+/docs/handover/0-everyone/risks-limits-costs.md
+
+# Pictures kept outside the repository: the screenshots of the main pages (their counts, site names and host group names are real) and the PNG renders of the ERD diagrams,
+# which the .mmd sources and the PDFs next to them can make again.
+/docs/screenshots/
+/docs/erd/**/*.png
+/docs/setup/[34][0-9]-what-changed-*.md
+
+# A dump of a database, an encrypted copy, a token, a key or a certificate: never commit one. A copy of the production Zabbix, a backup of
+# the portal's state and the files that deploy/backup-state.sh makes belong outside the repository.
+*.sql
+*.sql.gz
+*.dump
+*.enc
+*.token
+*.pem
+*.key
+*.p12
+*.pfx
+

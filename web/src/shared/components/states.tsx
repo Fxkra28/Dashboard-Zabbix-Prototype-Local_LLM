@@ -42,8 +42,11 @@ function hintFor(message: string, admin: boolean): string | null {
 
 /** The BFF's refusal of a page above the signed-in role (security/auth.ts, security/viewerPolicy.ts). */
 const ROLE_REFUSAL = /needs the "(\w+)" role; you are signed in as "(\w+)"/;
-const FOR_ROLE: Record<string, string> = { viewer: 'viewers', wall: 'wall screens', operator: 'operators', admin: 'admins' };
+const FOR_ROLE: Record<string, string> = { operator: 'operators', admin: 'admins' };
 const withArticle = (word: string) => (/^[aeiou]/i.test(word) ? `an ${word}` : `a ${word}`);
+
+/** The BFF's refusal of a route that belongs to a page the account does not have (security/modules.ts `refusalText`). */
+const MODULE_REFUSAL = /Your account does not have (.+?)\. Ask an administrator for access\./;
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   const { role } = useAuth();
@@ -55,6 +58,16 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry?: ()
       <div className="state" role="status">
         <div className="state-title">This page is for {FOR_ROLE[needs] ?? `the ${needs} role`}</div>
         <div className="state-hint">You are signed in as {withArticle(has)}. Ask the portal admin if you need access.</div>
+      </div>
+    );
+  }
+  // The same for a page the account lacks: nothing failed, and trying again would not help (FR-71).
+  const lacking = MODULE_REFUSAL.exec(message);
+  if (lacking) {
+    return (
+      <div className="state" role="status">
+        <div className="state-title">Your account does not have {lacking[1]}</div>
+        <div className="state-hint">An administrator gives each person the pages they see. Ask one to add it.</div>
       </div>
     );
   }
@@ -156,6 +169,7 @@ export function Async<T>({
   children,
   loadingLabel,
   onRetry,
+  retryable = true,
   footer,
 }: {
   loading: boolean;
@@ -169,10 +183,12 @@ export function Async<T>({
   children: (data: T) => ReactNode;
   /** For a page that does not poll: the error then has a Try again button (useAsync's `reload`). */
   onRetry?: () => void;
+  /** useAsync's `retryable`: false for an answer that asking again cannot change, which then has no Try again button. */
+  retryable?: boolean;
   /** Drawn after the content, outside what dims and goes inert while it is stale: for a control that changes the selection, a pager, so that it keeps its focus (UX-57). */
   footer?: (data: T) => ReactNode;
 }) {
-  if (error && (data == null || stale)) return <ErrorState message={error} onRetry={onRetry} />;
+  if (error && (data == null || stale)) return <ErrorState message={error} onRetry={retryable ? onRetry : undefined} />;
   if (loading && data == null) return <Loading label={loadingLabel} />;
   if (data == null) return <Empty>No data.</Empty>;
   const copy = staleCopyOf(data);

@@ -1,6 +1,6 @@
 import { zbx } from '../clients/zabbix.js';
 import { cached, SLOW_VIEW } from '../core/cache.js';
-import { DEVICE_CLASS_LABELS, deviceClass, siteFromHostName, type DeviceClass } from '../domain/naming.js';
+import { DEVICE_CLASS_LABELS, deviceClass, type DeviceClass } from '../domain/naming.js';
 import { categoryFor } from '../sli/engine.js';
 import { hostsOverviewView } from './hosts.js';
 
@@ -37,7 +37,8 @@ export async function getDevices() {
     devices: overview.map((h) => {
       // A host the template read has not met yet (added a moment ago) has no category, which the class rules allow.
       const category = categoryByHost.get(h.hostid) ?? 'Other';
-      return { ...h, site: siteFromHostName(h.name), category, class: deviceClass(h.name, category) };
+      // The overview carries the site of the four signals, as the Sites page reads it (BK-94).
+      return { ...h, category, class: deviceClass(h.name, category) };
     }),
   };
 }

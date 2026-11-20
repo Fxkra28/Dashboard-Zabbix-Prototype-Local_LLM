@@ -10,6 +10,7 @@ import { Field } from '../../shared/components/Field';
 import KpiCard from '../../shared/components/KpiCard';
 import { dur } from '../../shared/lib/units';
 import { downloadCsv } from '../../shared/lib/csv';
+import { serverNow } from '../../shared/lib/clock';
 import { dayInZone } from '../../shared/lib/time';
 import { NoData } from '../../shared/components/NoData';
 import { count } from '../../shared/lib/plural';
@@ -80,7 +81,7 @@ export default function AlertNoise() {
   // The rows on screen, so a filtered file says so in its name and is not mistaken for the full list. The days come from the report itself: a new period may still be loading (FR-54).
   const download = () => {
     const shown = flag === 'all' ? '' : `-${flag}`;
-    const day = dayInZone(Date.now());
+    const day = dayInZone(serverNow());
     const held = q.data ? Math.round(q.data.windowSeconds / 86_400) : days;
     downloadCsv(`hcml-alert-noise-${held}d${shown}-${day}.csv`, csvRows(rows));
   };

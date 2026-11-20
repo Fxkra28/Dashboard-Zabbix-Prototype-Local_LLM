@@ -4,6 +4,22 @@
   max-width: 208px;
   margin: 0 auto var(--s-5);
 }
+/* The way to the form for an account (FR-62): a button that is read as a link. */
+.login-alt {
+  margin: var(--s-4) 0 0;
+  text-align: center;
+  font-size: var(--t-base);
+}
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+  cursor: pointer;
+}
 
 .nav-link {
   display: flex;

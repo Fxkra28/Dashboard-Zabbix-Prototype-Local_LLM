@@ -35,9 +35,9 @@ Path 3 is the only option that can express the concepts Zabbix has no table for,
 nothing inside the monitoring system. The portal holds a read-only API token and speaks JSON-RPC over
 HTTP; it never touches Zabbix's database, its configuration or its files.
 
-*Amended 20 October 2026 (tracker SC-23).* "Read-only token" here, and in "the blast radius on Zabbix is a
-read-only token" below, is how the code uses the token. The read token HCML's deployment holds belongs to a
-Super admin user (checked 13 October), so it describes the credential that was meant, not yet the real one.
+*Amended 20 October 2026.* "Read-only token" here, and in "the blast radius on Zabbix is a
+read-only token" below, is how the code uses the token. For the credential itself to be read-only, the token should belong to a
+user whose role allows only the read methods; until then it describes the credential that was meant.
 [ADR-0006](0006-read-only-with-one-write.md) has the detail.
 
 ### Positive Consequences

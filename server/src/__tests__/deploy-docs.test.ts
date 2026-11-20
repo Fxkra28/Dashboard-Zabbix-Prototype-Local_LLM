@@ -75,6 +75,24 @@ describe('the browser-to-nginx hop is drawn as plain HTTP (tracker IN-26)', () =
   });
 });
 
+// IN-104: the runbook says that the monthly round names the Ollama image, and the pin is a tag in one line of the overlay: the round must name that tag, or it checks a version nobody runs.
+describe('the monthly round of the handbook and the pin of the model server\'s image (IN-104)', () => {
+  const pinned = /\$\{OLLAMA_IMAGE:-ollama\/ollama:(\d+\.\d+\.\d+)\}/.exec(read('docker-compose.vm.yml'))?.[1];
+  const round = read('docs/handover/4-working/run-it.md');
+
+  it('names the tag the overlay pins, in the command that looks for a newer one', () => {
+    expect(pinned, 'the overlay pins a version').toBeDefined();
+    expect(round).toContain(`docker buildx imagetools inspect ollama/ollama:${pinned}`);
+    expect(round).toContain('${OLLAMA_IMAGE:-ollama/ollama:' + pinned + '}');
+  });
+
+  it('is the line that the runbook points to, and says where the digest is written down', () => {
+    const runbook = read('docs/operations/vm-runbook.md');
+    expect(runbook).toContain('the monthly round in the handbook names the Ollama image');
+    expect(round).toContain('digest we wrote down');
+  });
+});
+
 describe('docs/operations/tls.md (tracker IN-26)', () => {
   const text = read('docs/operations/tls.md');
   const fences = [...text.matchAll(/```(\w*)\n([\s\S]*?)```/g)].map((m) => ({ lang: m[1], body: m[2] }));
@@ -103,7 +121,7 @@ describe('docs/operations/tls.md (tracker IN-26)', () => {
     expect(fence('caddyfile')).toContain('Strict-Transport-Security');
     expect(fence('caddyfile')).toMatch(/reverse_proxy 127\.0\.0\.1:\d+/);
     expect(fence('caddyfile')).toContain('flush_interval -1');
-    expect(fence('yaml')).toContain('headers.stsSeconds=');
+    expect(fences.find((f) => f.body.includes('traefik.'))?.body).toContain('headers.stsSeconds=');
   });
 
   it('gives the two .env settings as lines to copy, and starts HSTS short', () => {
@@ -131,8 +149,37 @@ describe('docs/operations/tls.md (tracker IN-26)', () => {
     expect(text).not.toMatch(/server\.port=80\b(?!\d)/);
   });
 
-  it('says it was not run against a live proxy', () => {
-    expect(flat('docs/operations/tls.md')).toContain('were **not run** against a live proxy');
+  // DC-70: the page said that no recipe was ever run, two screens after describing the run of the nginx one; vm-runbook.md step 6 records what was seen.
+  it('says which recipe has been run, what was seen, and what has not been seen', () => {
+    const t = flat('docs/operations/tls.md');
+    expect(t).toContain('Only the nginx one has been run, and once: on 18 November 2026');
+    expect(t).toContain('Not seen: Caddy and Traefik (neither was started)');
+    expect(t).not.toContain('**not run** against a live proxy');
+    // What the runbook's step 6 records, and nothing it does not.
+    for (const seen of ['one `Strict-Transport-Security` header and not two', 'HttpOnly; Secure; SameSite=Strict', '403 `csrf`', 'without `X-Forwarded-Proto` sets the cookie without `Secure`']) expect(t, seen).toContain(seen);
+    const step6 = read('docs/operations/vm-runbook.md').split('## 6. The TLS proxy')[1]?.split('## 7.')[0] ?? '';
+    expect(step6).toContain('HttpOnly; Secure; SameSite=Strict');
+    expect(step6).toContain('403 `csrf`');
+  });
+
+  // DC-77: the proxy is a container the operator writes, so the page gives it what the portal's own file gives its containers.
+  it('gives the proxy container a restart policy, a rotated log and limits, as docker-compose.yml does for its own', () => {
+    const overlay = fences.find((f) => f.body.includes('tls-proxy:'))?.body ?? '';
+    expect(overlay).toContain('restart: unless-stopped');
+    expect(overlay).toContain('max-size: "50m"');
+    expect(overlay).toContain('max-file: "5"');
+    for (const limit of ['mem_limit:', 'memswap_limit:', 'pids_limit:', 'cpus:']) expect(overlay, limit).toContain(limit);
+    const base = read('docker-compose.yml');
+    expect(base).toContain('max-size: "50m"');
+    expect(base).toContain('max-file: "5"');
+  });
+
+  it('says where the source restriction must be made, because ufw does not see a published container port', () => {
+    const t = flat('docs/operations/tls.md');
+    expect(t).toContain('## Who can reach the proxy');
+    expect(t).toContain('`DOCKER-USER` chain');
+    expect(t).toContain('checked before ufw');
+    expect(t).toContain('HCML\'s network firewall');
   });
 });
 
@@ -196,7 +243,7 @@ describe('docs/operations/backup-and-restore.md (tracker IN-24)', () => {
   it('has a numbered restore checklist that ends in a health check and a fresh copy', () => {
     const checklist = text.split('## Restore checklist')[1]?.split('\n## ')[0] ?? '';
     const steps = [...checklist.matchAll(/^(\d+)\. /gm)].map((m) => Number(m[1]));
-    expect(steps).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    expect(steps).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     expect(checklist).toContain('/bff/api/health');
     expect(checklist).toContain('fresh encrypted copy');
   });
@@ -212,7 +259,38 @@ describe('docs/operations/backup-and-restore.md (tracker IN-24)', () => {
     const copy = text.split('## Keep an encrypted copy')[1]?.split('\n## ')[0] ?? '';
     expect(copy).toContain('docker-compose.override.yml');
     expect(copy).toMatch(/no secret|not a secret|holds no secret/);
-    expect(steps.find((s) => s.startsWith('7. '))).toContain('docker-compose.override.yml');
+    expect(steps.find((s) => s.startsWith('8. '))).toContain('docker-compose.override.yml');
+  });
+
+  // DC-62: the accounts made on the Users page are in a volume that a clone does not hold, and a checklist that left them out ended at the administrator of .env alone.
+  it('puts the volume back in a step of its own, before the start, with the script and the containers made but not started', () => {
+    const steps = text.split('## Restore checklist')[1]?.split('\n## ')[0]?.split(/^(?=\d+\. )/m) ?? [];
+    const volume = steps.find((s) => s.startsWith('5. '));
+    expect(volume, 'step 5').toBeDefined();
+    expect(volume).toContain('portal-state');
+    expect(volume).toContain('docker compose up --no-start');
+    expect(volume).toContain('deploy/restore-state.sh FILE --apply');
+    expect(steps.find((s) => s.startsWith('6. '))).toContain('docker compose up -d');
+  });
+
+  it('says that the users and the requests are in a volume and not in git, and that down -v deletes them', () => {
+    const kept = text.split('## What the portal keeps')[1]?.split('\n## ')[0] ?? '';
+    const users = kept.split('\n').find((l) => l.includes('`users.json`'));
+    expect(users).toMatch(/\| No: a Docker volume/);
+    expect(users).not.toMatch(/\| Yes \|/);
+    expect(kept.split('\n').find((l) => l.includes('`requests.json`'))).toMatch(/\| No: a Docker volume/);
+    expect(kept).toContain('and with them every account made on the Users page');
+    expect(text).toContain('deploy/backup-state.sh --env');
+    const none = text.split('## If there is no copy')[1]?.split('\n## ')[0] ?? '';
+    expect(none).toContain('`portal-state`');
+    expect(read('docs/operations/full-disk.md')).toContain('every account made on the Users page');
+  });
+
+  it('puts the script before the by-hand recipe, and the logs after the restore', () => {
+    const at = (h: string) => text.indexOf(`## ${h}`);
+    expect(at('The volumes, with a script')).toBeGreaterThan(at('What the portal keeps'));
+    expect(at('The volumes, with a script')).toBeLessThan(at('Keep an encrypted copy'));
+    expect(at('The logs: what they hold, where they go, how long they last')).toBeGreaterThan(at('If there is no copy'));
   });
 
   // /api/health tells only a signed-in caller whether Zabbix answers (health.test.ts). A step
@@ -245,9 +323,9 @@ describe('"nothing to back up" is gone from the documents it was in (tracker IN-
     expect(text).toContain('operations/backup-and-restore.md');
   });
 
-  it('ADR-0003 lists the .env files as the portal\'s state, and links the backup page', () => {
+  it('ADR-0003 lists the .env files and the state volume as the portal\'s state, and links the backup page', () => {
     const text = flat('docs/architecture/adr/0003-no-database.md');
-    expect(text).toContain("The `.env` files are the portal's only state, and nothing backs them up");
+    expect(text).toContain("The `.env` files and the volume `portal-state` are the portal's state, and nothing else backs them up");
     expect(text).toContain('operations/backup-and-restore.md');
     expect(text).toContain('Amended: 2026-10-07');
   });

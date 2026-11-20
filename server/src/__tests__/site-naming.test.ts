@@ -8,15 +8,15 @@ import { deviceClass, naturalCompare, siteFromHostName, wanPairKey } from '../do
  */
 describe('siteFromHostName', () => {
   it.each([
-    ['1.2.1 IDX02CORESWITCH', 1],
-    ['2.1. SUB11FW01', 2], // HCML's own stray trailing dot
+    ['1.2.1 TANGO02CORESWITCH', 1],
+    ['2.1. GOLF11FW01', 2], // HCML's own stray trailing dot
     ['4.3.3 FPSO ARUBA 3', 4],
-    ['9.1.1 WHP-MBH_IE3200_AS01', 9],
+    ['9.1.1 TANGO-ROMEO_IE3200_AS01', 9],
     ['11.3.5 MOPU ARUBA 5', 11],
-    ['14.3.1 TWSB REPEATER DMR 1', 14],
+    ['14.3.1 TANGO REPEATER QUEBEC 1', 14],
     ['INET : SAMPANG WAN 1', 3],
-    ['INET : JAKARTA WAN 2 (JATAYU)', 1],
-    ['INET : FPSO INTERNET 3 (BACKUP)', 4],
+    ['INET : JAKARTA WAN 2 (Provider-G)', 1],
+    ['INET : FPSO INTERNET 3 (Provider-F)', 4],
     ['INET : TWSB LINI 2 WAN 1', 14],
     ['SERVER : CUCM SURABAYA', 2],
   ])('places %s at site %i', (name, code) => {
@@ -42,7 +42,7 @@ describe('siteFromHostName', () => {
     expect(siteFromHostName(name)?.code).toBe(code);
   });
 
-  it.each(['WEB : MS TEAMS', 'INTERNET', 'Zabbix server', 'Huawei WAC-650', '99.1 NOT A SITE'])(
+  it.each(['WEB : MS TEAMS', 'INTERNET', 'Zabbix server', 'Kilo WAC-650', '99.1 NOT A SITE'])(
     'does not guess a site for %s',
     (name) => {
       expect(siteFromHostName(name)).toBeNull();
@@ -55,7 +55,7 @@ describe('wanPairKey', () => {
     expect(wanPairKey('INET : SAMPANG WAN 1')).toEqual({ path: 'SAMPANG', leg: '1' });
     expect(wanPairKey('INET : SAMPANG WAN 2')).toEqual({ path: 'SAMPANG', leg: '2' });
     expect(wanPairKey('INET : JAKARTA WAN 1 (EXAMPLENET)')).toEqual({ path: 'JAKARTA', leg: '1', provider: 'EXAMPLENET' });
-    expect(wanPairKey('INET : FPSO INTERNET 3 (BACKUP)')).toEqual({ path: 'FPSO', leg: '3', provider: 'BACKUP' });
+    expect(wanPairKey('INET : FPSO INTERNET 3 (Provider-F)')).toEqual({ path: 'FPSO', leg: '3', provider: 'Provider-F' });
     // Two TWSB offices are two different paths, not three legs of one.
     expect(wanPairKey('INET : TWSB LINI 2 WAN 1')?.path).toBe('TWSB LINI 2');
     expect(wanPairKey('INET : TWSB OFFICE WAN 2')?.path).toBe('TWSB OFFICE');
@@ -70,11 +70,11 @@ describe('wanPairKey', () => {
 describe('deviceClass', () => {
   it('prefers the monitoring template, then the name', () => {
     expect(deviceClass('14.1 BRAVO-FW2', 'FortiGate by SNMP')).toBe('firewall');
-    expect(deviceClass('9.1.1 WHP-MBH_IE3200_AS01', 'Cisco IOS by SNMP')).toBe('switch');
-    expect(deviceClass('2.1. SUB11FW01')).toBe('firewall');
+    expect(deviceClass('9.1.1 TANGO-ROMEO_IE3200_AS01', 'Cisco IOS by SNMP')).toBe('switch');
+    expect(deviceClass('2.1. GOLF11FW01')).toBe('firewall');
     expect(deviceClass('7.2.1 Moxa Switch')).toBe('switch');
     expect(deviceClass('4.3.3 FPSO ARUBA 3')).toBe('access-point');
-    expect(deviceClass('4.4.1 FPSO REPEATER DMR 1', 'ICMP Ping')).toBe('repeater');
+    expect(deviceClass('4.4.1 FPSO REPEATER QUEBEC 1', 'ICMP Ping')).toBe('repeater');
   });
 
   it('recognises the service prefixes whatever the template says', () => {

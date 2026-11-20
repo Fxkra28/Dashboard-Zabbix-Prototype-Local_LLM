@@ -1,6 +1,6 @@
 /** The calls behind availability and SLA: the availability report, the derived monthly SLA and its files, the service trees and Zabbix's own SLAs. */
 
-import type { ServicesResponse, DerivedServicesResponse, DeletedRecipients, EmailInfo, EmailRequest, EmailSent, SavedRecipients, ReportStyle, ScheduleInfo, ScheduleRequest, SliReport, SliProfile, SlaSource, AvailabilityBasis, Sla, SlaSli, AvailabilityReport } from '../types';
+import type { ServicesResponse, DerivedServicesResponse, DeletedRecipients, EmailInfo, EmailRequest, EmailSent, SavedRecipients, ReportRange, ReportStyle, ScheduleInfo, ScheduleRequest, SliReport, SliProfile, SlaSource, AvailabilityBasis, Sla, SlaSli, AvailabilityReport } from '../types';
 import { availabilityGuard, deletedRecipientsGuard, derivedServicesGuard, emailInfoGuard, emailSentGuard, savedRecipientsGuard, scheduleInfoGuard, servicesGuard, slaListGuard, slaSliGuard, slaSourceGuard, sliGuard } from '../guards';
 import { currentSignal, del, fetchOk, post, put, qs, request, SLI_TIMEOUT_MS } from './client';
 
@@ -63,6 +63,18 @@ export interface AvailabilityQuery {
   severity?: number;
 }
 
+/** Fetches one report file by the query that names it, and checks that what came back is the file: a 200 is not proof, a proxy that answers a lapsed session with a login page gets there too. */
+async function fetchReport(query: string, part: string, format: ReportFormat, signal: AbortSignal | undefined) {
+  const res = await fetchOk(`/api/sli/export${query}`, signal ?? currentSignal);
+  const { type, what } = REPORT_TYPES[format];
+  if (!(res.headers.get('Content-Type') ?? '').toLowerCase().startsWith(type)) {
+    throw new Error(`The server answered with something that is not ${what}.`);
+  }
+  const blob = await res.blob();
+  if (blob.size === 0) throw new Error('The server sent an empty file.');
+  return { blob, fileName: reportFileName(res.headers.get('Content-Disposition'), part, format) };
+}
+
 export const slaApi = {
   // Automated reporting
   availability: (query: AvailabilityQuery) =>
@@ -84,24 +96,31 @@ export const slaApi = {
   // Derived monthly SLA (portal-computed from ICMP triggers, read-only)
   sli: (month?: string, profile?: SliProfile) =>
     request<SliReport>(`/api/sli${qs({ month, profile })}`, { timeoutMs: SLI_TIMEOUT_MS, guard: sliGuard }),
+  /**
+   * The report for a window of whole hours that is not a calendar month, with `dayHours` such as `8-17` and `days` such as `1,2,3,4,5` when only some hours count.
+   * It has no web checks, which are monthly.
+   */
+  sliWindow: (query: { from: number; to: number; profile?: SliProfile; dayHours?: string; days?: string }) =>
+    request<SliReport>(`/api/sli${qs({ from: query.from, to: query.to, profile: query.profile, dayHours: query.dayHours, days: query.days })}`, { timeoutMs: SLI_TIMEOUT_MS, guard: sliGuard }),
   /** The month's report as a PDF, Excel or zipped CSV file, named by the BFF; `signal` cancels it. With no `style` the BFF's defaults stand. */
-  sliExport: async (month: string, format: ReportFormat, signal?: AbortSignal, style?: ReportStyle) => {
-    const query = qs({ month, format, decimal: style?.decimal, date: style?.date, separator: format === 'csv' ? style?.separator : undefined });
-    const res = await fetchOk(`/api/sli/export${query}`, signal ?? currentSignal);
-    const { type, what } = REPORT_TYPES[format];
-    // A 200 is not proof of a report: a proxy that answers a lapsed session with a login page gets here too.
-    if (!(res.headers.get('Content-Type') ?? '').toLowerCase().startsWith(type)) {
-      throw new Error(`The server answered with something that is not ${what}.`);
-    }
-    const blob = await res.blob();
-    if (blob.size === 0) throw new Error('The server sent an empty file.');
-    return { blob, fileName: reportFileName(res.headers.get('Content-Disposition'), month, format) };
-  },
+  sliExport: (month: string, format: ReportFormat, signal?: AbortSignal, style?: ReportStyle) =>
+    fetchReport(qs({ month, format, decimal: style?.decimal, date: style?.date, separator: format === 'csv' ? style?.separator : undefined }), month, format, signal),
+  /** The same file for a range of days and the hours of the day that count (FR-60): one figure for the whole range, and no web checks, which are monthly. */
+  sliRangeExport: (range: ReportRange, format: ReportFormat, signal?: AbortSignal, style?: ReportStyle) =>
+    fetchReport(
+      qs({ from: range.from, to: range.to, dayHours: range.dayHours, days: range.days, format, decimal: style?.decimal, date: style?.date, separator: format === 'csv' ? style?.separator : undefined }),
+      `${range.from}_to_${range.to}`,
+      format,
+      signal,
+    ),
   /** Whether the report can be emailed, and from and to whom. Administrators only: the BFF refuses the others. */
   sliEmailInfo: () => request<EmailInfo>('/api/sli/email', { guard: emailInfoGuard }),
   /** Emails the month's report, in the formats and to the addresses asked for. The BFF's own sentence is the error when it fails. */
   // The server builds the month's report before it sends: as long as a download may take, so a second send is not a second email.
   sliEmail: (month: string, options: EmailRequest) => post<EmailSent>('/api/sli/email', { month, ...options }, emailSentGuard, SLI_TIMEOUT_MS),
+  /** Emails the report for a range of days (FR-60). The window is an object because `to`, in the options, is the list of people. */
+  sliRangeEmail: (range: ReportRange, options: EmailRequest) =>
+    post<EmailSent>('/api/sli/email', { window: { from: range.from, to: range.to }, dayHours: range.dayHours, days: range.days, ...options }, emailSentGuard, SLI_TIMEOUT_MS),
   /** The monthly send: how it is set, when it goes next and what was sent. Administrators only. */
   sliSchedule: () => request<ScheduleInfo>('/api/sli/schedule', { guard: scheduleInfoGuard }),
   /** Sets the monthly send and the saved recipients. The answer is what `sliSchedule` would say now. */

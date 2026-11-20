@@ -32,9 +32,8 @@ Four things about the Docker path that are easy to get wrong, and were:
    portal signing tokens with a value published in this repo looks perfectly healthy while anyone
    can forge an admin token, so this fails loudly rather than warning. `PORTAL_PASS` has no default
    either (it was `admin`), and the BFF also exits while any user's password is empty, is `admin`, or is a plain password shorter than 8 characters.
-2. `ZBX_URL` defaults to HCML's Zabbix, `https://zabbix.hcml.co.id/zabbix/api_jsonrpc.php`. From
-   HCML's office network that name leads to a Zero Trust gateway that refuses the portal, so a
-   `docker-compose.override.yml`, kept on the machine and out of git, maps it to Zabbix's LAN
+2. `ZBX_URL` defaults to HCML's Zabbix, `https://zabbix.example.com/zabbix/api_jsonrpc.php`. From
+   HCML's office network a `docker-compose.override.yml`, kept on the machine and out of git, maps it to Zabbix's LAN
    address for `portal-bff`. `localhost` inside the container means *the container*, which is why
    `server/.env`'s dev value must not be reused verbatim.
 3. `.dockerignore` is load-bearing. `web/Dockerfile` does `COPY . .` after `npm ci`; without it
@@ -65,7 +64,8 @@ Beyond localhost, and backups. The Docker path speaks plain HTTP and publishes o
 `127.0.0.1`. To reach the portal from another machine, put TLS in front of it and set `WEB_ORIGIN`
 to the `https://` address and `TRUST_PROXY=2`:
 [`docs/operations/tls.md`](../operations/tls.md) has an nginx, a Caddy and a Traefik recipe, with
-HSTS. The portal's only state is its `.env` files, apart from the web check figures of closed months kept on a volume (`portal-state`) and a copy of the server's log kept on another (`portal-logs`):
+HSTS. The portal's secrets and settings are its `.env` files; both copies also keep small state files on a volume (`portal-state`: `users.json`, the people added on the Users page; `portal-state.json`, the saved recipients and the monthly schedule; `closed-months.json`, the web check figures of closed months; and `requests.json` when requests for an account are on), and a copy of the server's log on another (`portal-logs`). Back up the `.env` files and the `portal-state` volume together, since a person added on the Users page exists nowhere else.
+Requests for an account (`ACCOUNT_REQUESTS`, `ACCOUNT_REQUESTS_MAX_PENDING`, `ACCOUNT_REQUESTS_PER_ADDRESS`) are off unless `ACCOUNT_REQUESTS=true` is set in the root `.env`, which both compose files pass on; they need sign-in on and the state volume ([§19](19-authentication-rbac.md)).
 [`docs/operations/backup-and-restore.md`](../operations/backup-and-restore.md) says how to keep an
 encrypted copy and how to restore from it, and `deploy/settings.example` lists every non-secret
 setting with its default.

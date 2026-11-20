@@ -52,7 +52,7 @@ The containers start again by themselves when Docker starts. Then the portal rea
 
 ## Who to ask
 
-The owner of the portal: accounts, settings, backups, rebuilds, and anything the portal itself does. HCML IT: Zabbix, its certificate, its network path and the speed of its database.
+Us: accounts, settings, backups, rebuilds, and anything the portal itself does. HCML IT: Zabbix, its certificate, its network path and the speed of its database.
 
 ## Where the details are
 

@@ -2,8 +2,9 @@ import { zbx } from '../clients/zabbix.js';
 import { cached, SLOW_VIEW } from '../core/cache.js';
 import { cachedProblems, openProblems } from '../domain/queries.js';
 import { getIcmpByHost, hostState } from '../domain/reachability.js';
-import { naturalCompare, siteFromHostName } from '../domain/naming.js';
+import { naturalCompare } from '../domain/naming.js';
 import { isNetworkKey, withoutNetworkItems } from '../security/viewerPolicy.js';
+import { SITE_SIGNALS, withSite } from './sites.js';
 
 /** One page of Latest data (legacy, un-paged). Bounds the read and flags when it was hit. */
 export const LATEST_LIMIT = 500;
@@ -44,6 +45,10 @@ export interface ZHost {
   status: string;
   maintenance_status?: string;
   interfaces?: { ip: string; type?: string; available?: string }[];
+  /** What the site is read from, asked for with the host and not passed on (`withSite`). */
+  hostgroups?: { groupid: string; name: string }[];
+  tags?: { tag: string; value: string }[];
+  inventory?: { site_city?: string; location?: string } | [];
 }
 
 /** Each host with its live problem counts and its reachability state (ping first; reachability.ts). */
@@ -52,6 +57,7 @@ export async function getHostOverview() {
     zbx<ZHost[]>('host.get', {
       output: ['hostid', 'name', 'status', 'maintenance_status'],
       selectInterfaces: ['ip', 'type', 'available'],
+      ...SITE_SIGNALS,
       sortfield: 'name',
     }),
     cachedProblems().then(openProblems),
@@ -67,7 +73,7 @@ export async function getHostOverview() {
   }
 
   return hosts.map((h) => ({
-    ...h,
+    ...withSite(h),
     ...hostState(h, icmp.get(h.hostid)),
     problems: counts[h.hostid] ?? { total: 0, bySeverity: {} },
   }));
@@ -75,16 +81,18 @@ export async function getHostOverview() {
 
 /**
  * All hosts (+ interfaces w/ availability). Cached 30s.
- * Each host carries `site` read from its name (naming.ts), null when the name doesn't say.
+ * Each host carries `site`, by the four signals of the Sites page (sites.ts `siteRefOf`), null when none names one of HCML's sites.
  */
 export function getHosts() {
   return cached('hosts', 30_000, async () => {
     const hosts = await zbx<ZHost[]>('host.get', {
       output: ['hostid', 'name', 'status', 'maintenance_status'],
       selectInterfaces: ['ip', 'type', 'available'],
+      ...SITE_SIGNALS,
       sortfield: 'name',
     });
-    return hosts.map((h) => ({ ...h, site: siteFromHostName(h.name) }));
+    // The same site as the Sites page gives: a tag, the name, the inventory or a group (BK-94).
+    return hosts.map(withSite);
   });
 }
 
@@ -104,7 +112,7 @@ export interface ItemQuery {
 
 /**
  * Items for one host, powers the graph item picker (or specific items of any host, which resolves a deep link).
- * The list is the same for every role; the caller cuts interface items for a viewer after this cache.
+ * The list is the same for every account; the caller cuts interface items for one without the Network page after this cache.
  * It leaves out `lastvalue` and `lastclock`: Zabbix looks each one up on its own, 30 ms to 0.5 s an item on HCML's, so a host of 609
  * graphable items took 20 to 32 s (tracker BK-25). The picker needs only names and ids; last values come from /api/latest.
  */

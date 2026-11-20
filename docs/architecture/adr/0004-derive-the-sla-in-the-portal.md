@@ -3,6 +3,7 @@
 * Status: accepted
 * Deciders: HCML internship project
 * Date: 2026-09-15 (recorded as an ADR 2026-09-22, with the confirming measurement)
+* Amended: 2026-11-17, by [ADR-0018](0018-evaluate-any-sla-window-from-the-months-read-once.md): the engine reads each month once and evaluates any window from it, so the SLA can be asked for a range of days, months or years and for chosen hours of the day
 
 ## Context and Problem Statement
 

@@ -27,7 +27,7 @@ const host = (over: Partial<HostOverview> = {}): HostOverview => ({
 const stats = (): Stats => ({ hosts: 24, items: 1000, triggers: 300, groups: 8, problems: 3, unacknowledged: 1, bySeverity: { '4': 3 } });
 const fresh = (): Freshness => ({ lastCollectedAt: 1_800_000_000, ageSeconds: 30, stale: false, staleAfterSeconds: 600, pinged: 0, answering: 0, reachLost: false });
 const group = (): GroupProblems => ({ groupid: '5', name: 'Core', total: 3, bySeverity: { '4': 3 } });
-const me = (): Me => ({ authEnabled: true, user: { name: 'ana', role: 'operator' }, expiresIn: 3600, pages: { '/problems': 'viewer' } });
+const me = (): Me => ({ authEnabled: true, user: { name: 'ana', role: 'operator' }, expiresIn: 3600, pages: { '/problems': 'guest' } });
 
 describe('the problem list (the Dashboard, the Problems page and the live stream)', () => {
   const g = problemListGuard;

@@ -57,8 +57,8 @@ check('- * • bullets and 1. / 1) lists', () => {
 });
 
 check('host names that start with digits are not lists', () => {
-  assert.deepEqual(show(parseMarkdown('11.1 FG-60F-MAC-MOPU-1 is down\n2.1. SUB11FW01 too')), [
-    'P:11.1 FG-60F-MAC-MOPU-1 is down|2.1. SUB11FW01 too',
+  assert.deepEqual(show(parseMarkdown('11.1 FG-60F-BRAVO-MOPU-1 is down\n2.1. GOLF11FW01 too')), [
+    'P:11.1 FG-60F-BRAVO-MOPU-1 is down|2.1. GOLF11FW01 too',
   ]);
 });
 
@@ -71,14 +71,14 @@ check('headings become bold paragraphs; blank lines split paragraphs', () => {
 });
 
 check('streaming prefixes never throw and settle to the final shape', () => {
-  const full = 'Ya, **2 perangkat** di MOPU:\n- **11.1 FG-60F** sejak `2h`\n- 11.2.1 MAC MOPU ACS 01\n\nSelesai.';
+  const full = 'Ya, **2 perangkat** di MOPU:\n- **11.1 FG-60F** sejak `2h`\n- 11.2.1 BRAVO MOPU ACS 01\n\nSelesai.';
   for (let i = 0; i <= full.length; i++) {
     const blocks = parseMarkdown(full.slice(0, i));
     assert.ok(Array.isArray(blocks));
   }
   assert.deepEqual(show(parseMarkdown(full)), [
     'P:Ya, <b>2 perangkat</b> di MOPU:',
-    'UL:<b>11.1 FG-60F</b> sejak <c>2h</c>|11.2.1 MAC MOPU ACS 01',
+    'UL:<b>11.1 FG-60F</b> sejak <c>2h</c>|11.2.1 BRAVO MOPU ACS 01',
     'P:Selesai.',
   ]);
   // Half-way through a bold marker the text is shown literally, not dropped.

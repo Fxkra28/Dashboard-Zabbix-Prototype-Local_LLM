@@ -8,7 +8,7 @@ const now = () => Math.floor(Date.now() / 1000);
 const iface = (ip: string) => ({ interfaceid: ip.split('.').pop(), ip, dns: '', port: '161', type: '2', main: '1', useip: '1', available: '1', error: '' });
 
 const HOSTS = [
-  { hostid: '10689', host: 'IDX02CORESWITCH', name: '1.2.1 IDX02CORESWITCH', site: 'Jakarta', ip: '10.0.0.1', template: 'Cisco IOS by SNMP' },
+  { hostid: '10689', host: 'TANGO02CORESWITCH', name: '1.2.1 TANGO02CORESWITCH', site: 'Jakarta', ip: '10.0.0.1', template: 'Cisco IOS by SNMP' },
   { hostid: '10697', host: 'FPSO-ARUBA-3', name: '4.3.3 FPSO ARUBA 3', site: 'FPSO KAS3', ip: '10.0.4.3', template: 'ICMP Ping' },
   { hostid: '10800', host: 'SAMPANG-WAN-1', name: 'INET : SAMPANG WAN 1', site: 'Sampang', ip: '10.0.3.1', template: 'ICMP Ping' },
 ].map((h) => ({

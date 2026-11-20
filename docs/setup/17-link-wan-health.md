@@ -34,5 +34,5 @@ leg); HCML tags no item with it, so the pairs are made from the host names (`wan
 some up ⇒ `degraded`; none up ⇒ `degraded` if any leg is degraded, `unknown` if all are unknown, otherwise `down`.
 
 State per link is from `LINK_LOSS_WARN` (default 2%) and `LINK_LOSS_CRIT` (default 10%):
-down if the ping fails or loss ≥ crit, degraded at ≥ warn, otherwise up. Wall role or above
+down if the ping fails or loss ≥ crit, degraded at ≥ warn, otherwise up. For an account that has the Links & WAN health page
 ([§19](19-authentication-rbac.md#19-authentication--rbac)).

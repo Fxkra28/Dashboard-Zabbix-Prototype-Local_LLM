@@ -80,6 +80,49 @@ describe('the page behind a dialog (UX-43)', () => {
   });
 });
 
+// UX-74: text selected in the drawer, with the mouse let go over the backdrop, must not close it: the person loses what they were copying, and may pay for the model again.
+describe('a press that begins inside the Explain drawer (UX-74)', () => {
+  it('does not close it when it ends on the backdrop, where the browser sends the click to the element that holds both ends', () => {
+    render(<Page make={dialogs[1]![1]} />);
+    const overlay = document.querySelector('.drawer-overlay')!;
+    fireEvent.mouseDown(screen.getByRole('dialog'));
+    fireEvent.mouseUp(overlay);
+    fireEvent.click(overlay);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.queryByText('closed')).toBeNull();
+  });
+
+  it('closes it when the press begins and ends on the backdrop', () => {
+    render(<Page make={dialogs[1]![1]} />);
+    const overlay = document.querySelector('.drawer-overlay')!;
+    fireEvent.mouseDown(overlay);
+    fireEvent.mouseUp(overlay);
+    fireEvent.click(overlay);
+    expect(screen.getByText('closed')).toBeInTheDocument();
+  });
+
+  it('does not take a press that began on the backdrop earlier for the next one', () => {
+    render(<Page make={dialogs[1]![1]} />);
+    const overlay = document.querySelector('.drawer-overlay')!;
+    fireEvent.mouseDown(overlay);
+    fireEvent.mouseUp(overlay);
+    fireEvent.mouseDown(screen.getByRole('dialog'));
+    fireEvent.click(overlay);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+});
+
+// UX-77: the dialogs are centred by a class on their overlay, which every browser the build supports understands.
+describe('the dialogs that are centred (UX-77)', () => {
+  it.each([dialogs[0]!, dialogs[2]!])('has the class on the overlay of %s, and not on the Explain drawer, which is a panel at the right edge', (_name, make) => {
+    const { unmount } = render(make(() => undefined));
+    expect(document.querySelector('.drawer-overlay.centered .modal')).not.toBeNull();
+    unmount();
+    render(dialogs[1]![1](() => undefined));
+    expect(document.querySelector('.drawer-overlay.centered')).toBeNull();
+  });
+});
+
 describe('the element that carries the role of a dialog (UX-45)', () => {
   it.each(dialogs)('is not a form in %s, which HTML lets take no such role', (_name, make) => {
     render(make(() => undefined));

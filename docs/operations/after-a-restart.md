@@ -15,19 +15,21 @@ undo it on one container: `docker update --restart no <name>`.
 
 ## What has to be true first
 
-- Docker has to start. On a Mac that is Docker Desktop's setting "Start Docker Desktop when you sign in",
-  and the Mac has to be signed in. Without it nothing comes back. This repository cannot read or set it.
+- Docker has to start. On a Mac that is Docker Desktop's setting "Start Docker Desktop when you sign in", or a
+  LaunchAgent that opens it at sign-in (this Mac has had `id.hcml.docker-at-login` since 19 November, which runs
+  `/usr/bin/open -g -a Docker` at load), and the Mac has to be signed in. With FileVault on, a restart waits at the
+  lock screen until someone types the password, so nothing comes back until then. This repository cannot read or set
+  Docker Desktop's own setting.
 - For `hcml-portal-ollama`, Ollama has to be running on this Mac with its model installed. Ollama is an app on the Mac and
   not a container, so it does not come back with Docker. After a restart run `ollama list`: the model named in `AI_MODEL`
-  (`qwen3:8b` unless set otherwise) must be in it, and `ollama ps` shows whether it is loaded. The portal says so too: a
+  (the one `AI_MODEL` names: `gemma4:12b` in the example file of the local-model copy, `qwen3:8b` when nothing is set) must be in it, and `ollama ps` shows whether it is loaded. The portal says so too: a
   signed-in `/api/health` carries `ready.model`, `down` when Ollama does not answer and `missing` when it answers without
   the model (a forgotten `ollama pull`, a mistyped name), and the Explain panel and the Assistant show a line before a click that
   would only fail (BK-66). For `missing` the cure is `ollama pull <the model>`, or the right name in `AI_MODEL`.
 - The Mac has to be on HCML's office network, where Zabbix's LAN address answers. Off it, the portals come
   back and say that Zabbix cannot be read. Nothing false is recorded meanwhile, because HCML's own Zabbix
   keeps collecting.
-- Each portal folder needs its `docker-compose.override.yml`. From the office network the name
-  `zabbix.hcml.co.id` leads to a Zero Trust gateway that refuses the portal, so the file maps the name to
+- Each portal folder needs its `docker-compose.override.yml`. From the office network the file maps the name `zabbix.example.com` to
   Zabbix's LAN address for `portal-bff`, and the certificate is still checked against the name. The file
   names an internal address, so it stays on the machine: `.gitignore` keeps it out of git, and
   `docker compose` reads it by itself. Its form, with a placeholder where the address goes (Compose adds the line to the one in
@@ -37,7 +39,7 @@ undo it on one container: `docker update --restart no <name>`.
   services:
     portal-bff:
       extra_hosts:
-        - "zabbix.hcml.co.id:<Zabbix's LAN address>"
+        - "zabbix.example.com:<Zabbix's LAN address>"
   ```
 
 ## How long it takes
@@ -115,7 +117,7 @@ To check Zabbix itself from this Mac, ask it for its version at the LAN address 
 `docker-compose.override.yml` names, keeping the name so that the certificate is checked:
 
 ```bash
-curl -s --resolve zabbix.hcml.co.id:443:<LAN address> https://zabbix.hcml.co.id/zabbix/api_jsonrpc.php \
+curl -s --resolve zabbix.example.com:443:<LAN address> https://zabbix.example.com/zabbix/api_jsonrpc.php \
   -H 'Content-Type: application/json-rpc' -d '{"jsonrpc":"2.0","method":"apiinfo.version","params":{},"id":1}'
 ```
 

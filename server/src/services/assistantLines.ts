@@ -5,6 +5,12 @@
 
 import { SEVERITY_NAMES, type ZbxProblem } from '../domain/queries.js';
 
+/** "17 Nov 20:10" in the zone. */
+export function stamp(at: number, tz: string): string {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: tz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(at * 1000).map((x) => [x.type, x.value]));
+  return `${p.day} ${p.month} ${p.hour}:${p.minute}`;
+}
+
 /** Longest host or site name, and longest problem or service name, that goes into a prompt. */
 export const HOST_NAME_MAX = 80;
 

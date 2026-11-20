@@ -24,7 +24,7 @@ The code of the local-model copy: the server in `server/`, the web app in `web/`
 
 It does not hold the settings files, which hold the secrets, nor the override file that holds HCML's Zabbix address. It leaves out the folders that npm and the builds make, the screenshots taken for the pictures, the report files and the portal's saved state.
 
-The licence file grants none. The code is published to be read and reviewed, and without the author's written permission it may not be copied, changed, passed on or run for another organisation. The security policy asks for reports through GitHub's private vulnerability reporting, which is not switched on yet. Until it is, the policy says to open an issue that says only that a security report exists.
+The licence file grants none. The code is published to be read and reviewed, and without our written permission it may not be copied, changed, passed on or run for another organisation. The security policy asks for reports through GitHub's private vulnerability reporting, which is not switched on yet. Until it is, the policy says to open an issue that says only that a security report exists.
 
 ## How to get it and run it
 
@@ -46,6 +46,6 @@ The first copy, `hcml-portal`, has a repository of its own, with a longer histor
 
 ## Where it stands
 
-On 16 November 2026 the repository holds two commits. The first, on 11 November, brought the local-model copy in. The second, on 12 November, brought the shared files equal again and the files that differ by design. The owner has not yet committed the work of 12 to 16 November, more than three hundred paths, so the portal that runs on the Mac is built from the working folder, and its build is labelled with the last commit and `-dirty`.
+On 16 November 2026 the repository holds three commits. The first, on 11 November, brought the local-model copy in. The second, on 12 November, brought the shared files equal again and the files that differ by design. The third, `68ed640` at 12:10 on 16 November, brought in the work of 12 to 16 November, 346 files, and we pushed it the same day. We rebuilt the portal that runs on our Mac from the working folder at 14:14 on 16 November, after that commit, so its build is labelled `68ed640-dirty`: the commit plus changes that were not committed yet.
 
-Nobody has recorded whether this repository is private. Before the next commit and push, decide who may read each repository. The open items on this, on the checks that have never run on GitHub and on the secret in the first copy's public history are in [What is still open](../5-reference/open-items.md), and in plain words in [Open problems](../5-reference/open-problems.md).
+Both repositories are public for now, this one and the first copy's. Whether they become private is our decision. The open items on this, on the checks that have never run on GitHub and on the secret in the first copy's public history are on the handbook pages What is still open and Open problems, which HCML IT gets in the editions and which are not kept in this repository.

@@ -27,8 +27,8 @@ export const problemsApi = {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet web/src/api/index.ts#api sha=ac3032438019 -->
-`web/src/api/index.ts:21-32`
+<!-- gen:snippet web/src/api/index.ts#api sha=f4e0cd7bf3d7 -->
+`web/src/api/index.ts:22-34`
 
 ```ts
 export const api = {
@@ -42,11 +42,12 @@ export const api = {
   ...reportsApi,
   ...slaApi,
   ...assistantApi,
+  ...usersApi,
 };
 ```
 <!-- /gen -->
 
-1. A call is one line: the path, the type the answer is read as, and the guard that checks it. `problems` reads `/api/problems` as a list of `Problem` and hands `problemListGuard` to `request`. `acknowledge` is the portal's only write and goes through `post`.
+1. A call is one line: the path, the type the answer is read as, and the guard that checks it. `problems` reads `/api/problems` as a list of `Problem` and hands `problemListGuard` to `request`. `acknowledge` is the portal's only write to Zabbix and goes through `post`. The calls of the Users page and of a person's own password (`usersApi`) are spread into the same object, so a page asks for everything through `api`.
 2. `streamUrl` gives the address of the live stream, `/bff/api/stream`. The browser sends the session cookie with an `EventSource` like any same-origin request, so no token rides in the address.
 3. The file ends with a listener on `pageshow`. Back can bring a page out of the browser's back and forward cache exactly as it was left, although the session may have ended since: after a sign-out in another tab, the signed-in page would sit behind the sign-in page. So on a restored page the code asks again. A sign-out goes straight to sign-in. Otherwise the server's 401 does, and another user who signed in meanwhile gets the menus redrawn for them (`AUTH_CHANGED`).
 4. `session.ts` does not import this file or the calls. It holds the session and the sign-in, and everything else may use it.
@@ -56,7 +57,7 @@ export const api = {
 `web/src/api/client.ts`. The one place a request leaves the page, the deadline of each, the check of an answer's shape, and what a 401 or a failed reply turns into.
 
 <!-- gen:snippet web/src/api/client.ts#withSignal sha=0bcc643a7308 -->
-`web/src/api/client.ts:22-30`
+`web/src/api/client.ts:23-31`
 
 ```ts
 export function withSignal<T>(signal: AbortSignal | undefined, fn: () => T): T {
@@ -72,7 +73,7 @@ export function withSignal<T>(signal: AbortSignal | undefined, fn: () => T): T {
 <!-- /gen -->
 
 <!-- gen:snippet web/src/api/client.ts#HttpFailure sha=ae21881a5573 -->
-`web/src/api/client.ts:37-46`
+`web/src/api/client.ts:38-47`
 
 ```ts
 export class HttpFailure extends Error {
@@ -88,13 +89,14 @@ export class HttpFailure extends Error {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet web/src/api/client.ts#fetchOk sha=770d99be7392 -->
-`web/src/api/client.ts:49-70`
+<!-- gen:snippet web/src/api/client.ts#fetchOk sha=f1bbdb0d9b06 -->
+`web/src/api/client.ts:50-72`
 
 ```ts
 export async function fetchOk(path: string, signal: AbortSignal | undefined): Promise<Response> {
   // Same-origin, so the browser sends the session cookie by itself.
   const res = await fetch(`/bff${path}`, { signal });
+  noteServerTime(res.headers.get('Date'));
 
   if (res.status === 401) {
     endSession();
@@ -122,7 +124,7 @@ export async function fetchOk(path: string, signal: AbortSignal | undefined): Pr
 3. The server returns a typed body for the failures an operator can act on, such as a rejected Zabbix token or the AI layer being off, so the message is shown and not a bare status. Only words count: an empty message or an object would read as a blank or "[object Object]". When the server did not speak, as with nginx's 502 page or an empty 504, the message is only the route and the status, which is for a log and not for a person.
 
 <!-- gen:snippet web/src/api/client.ts#request sha=f64a3f45df65 -->
-`web/src/api/client.ts:89-121`
+`web/src/api/client.ts:91-123`
 
 ```ts
 export async function request<T>(
@@ -162,7 +164,7 @@ export async function request<T>(
 <!-- /gen -->
 
 <!-- gen:snippet web/src/api/client.ts#post sha=3154f192b54e -->
-`web/src/api/client.ts:173-173`
+`web/src/api/client.ts:176-176`
 
 ```ts
 export const post = <T>(path: string, body: unknown, guard?: Guard<T>, timeoutMs?: number): Promise<T> => write<T>('POST', path, body, guard, timeoutMs);
@@ -170,7 +172,7 @@ export const post = <T>(path: string, body: unknown, guard?: Guard<T>, timeoutMs
 <!-- /gen -->
 
 <!-- gen:snippet web/src/api/client.ts#qs sha=e720a6f6cbcb -->
-`web/src/api/client.ts:177-183`
+`web/src/api/client.ts:181-187`
 
 ```ts
 export const qs = (params: Record<string, string | number | undefined>) => {
@@ -185,7 +187,7 @@ export const qs = (params: Record<string, string | number | undefined>) => {
 
 1. Every request has a deadline, `REQUEST_TIMEOUT_MS`, 330 seconds. One page took HCML's Zabbix 256 seconds, and without a deadline a stalled request would freeze a page's polling until nginx gave up, with no "refresh failed" note. Explain and the first monthly SLA after a restart are given 450 seconds, below nginx's 480.
 2. The deadline is a plain controller joined to the caller's signal, because `AbortSignal.timeout` and `AbortSignal.any` are missing in older browsers. Only a deadline that passed reads as a failure, "No answer from the server within N seconds". A cancel from the caller stays a cancel.
-3. The answer is parsed and, when the call named a guard, checked by `assertFits`. A body of the wrong shape becomes the page's ordinary error and not a crash in whatever reads it. Then `noteStaleCopy` records whether the headers say it is an old copy.
+3. The answer is parsed and, when the call named a guard, checked by `assertFits`. A body of the wrong shape becomes the page's ordinary error and not a crash in whatever reads it. Then `noteStaleCopy` records whether the headers say it is an old copy, and `noteServerTime` takes the offset of the server's clock from the `Date` header of the answer (FR-74).
 4. `post` and `put` are for the writes, and both are one function with the verb as its first argument. Each sends the `X-HCML-CSRF` header, which the server refuses a cookie POST without, and turns a failure into an error whose text is the server's message. It has the deadline of a read, 330 seconds, unless the caller names another: the email is given 450, as long as a download, because the server builds the report before it sends. A timeout says that the change may have been made, because the server can finish after the page gave up and a person who sent it again would do it twice. A write may name a guard too, as a read does: the answer to saving the schedule is the schedule as it now stands, and is checked the same way.
 5. `qs` builds a query string from an object and leaves out a value that is undefined or empty, and encodes the rest.
 
@@ -193,15 +195,16 @@ Tests: `requestTimeout.test.ts` and `guardedReads.test.tsx`.
 
 ## The session
 
-`web/src/api/session.ts`. The token itself lives in an httpOnly cookie that no script on the page can read, and the browser sends it with every same-origin request. What the page keeps is when the session ends, by its own clock, from the `expiresIn` that the server gives with each sign-in, renewal and `/api/auth/me`.
+`web/src/api/session.ts`. The token itself lives in an httpOnly cookie that no script on the page can read, and the browser sends it with every same-origin request. What the page keeps is when the session ends, by its own clock, from the `expiresIn` that the server gives with each sign-in, renewal and `/api/auth/me`. A sign-in and a renewal give the whole life of the session, and `/api/auth/me` gives what is left of it: it moves the end and leaves the life alone (`recordSession` takes the kind), because the margin of a renewal is taken from the life and would shrink with every re-read of an aging session (FR-70).
 
-<!-- gen:snippet web/src/api/session.ts#recordSession sha=57d641c67a2d -->
-`web/src/api/session.ts:53-59`
+<!-- gen:snippet web/src/api/session.ts#recordSession sha=c310737f9789 -->
+`web/src/api/session.ts:56-63`
 
 ```ts
-export function recordSession(expiresIn: unknown, user?: { name: string; role: string } | null): void {
+export function recordSession(expiresIn: unknown, user?: { name: string; role: string } | null, kind: 'whole' | 'left' = 'whole'): void {
   if (typeof expiresIn === 'number' && expiresIn > 0) {
-    session = { endsAt: Date.now() + expiresIn * 1000, lifeMs: expiresIn * 1000 };
+    const ms = expiresIn * 1000;
+    session = { endsAt: Date.now() + ms, lifeMs: kind === 'left' && session ? Math.max(session.lifeMs, ms) : ms };
     signedOut = false;
   }
   if (user) lastUser = { name: user.name, role: user.role };
@@ -210,7 +213,7 @@ export function recordSession(expiresIn: unknown, user?: { name: string; role: s
 <!-- /gen -->
 
 <!-- gen:snippet web/src/api/session.ts#goToSignIn sha=8024facf2117 -->
-`web/src/api/session.ts:111-116`
+`web/src/api/session.ts:115-120`
 
 ```ts
 export function goToSignIn(): void {
@@ -223,7 +226,7 @@ export function goToSignIn(): void {
 <!-- /gen -->
 
 <!-- gen:snippet web/src/api/session.ts#doRenew sha=e7414ff3969f -->
-`web/src/api/session.ts:133-167`
+`web/src/api/session.ts:137-171`
 
 ```ts
 async function doRenew(): Promise<'renewed' | 'failed' | 'signed-out'> {
@@ -272,7 +275,7 @@ async function doRenew(): Promise<'renewed' | 'failed' | 'signed-out'> {
 6. `onSessionChange` lets a part of the page that keeps something for one person drop it when the person changes. It runs at a sign-in, at a sign-out, at a change of role, when another tab reports one and when a page comes back from the browser's back and forward cache under another person. A listener that throws is logged and does not stop the others or the sign-out. The item picker's list of a host, which the server cuts by role, is dropped this way.
 
 <!-- gen:snippet web/src/api/session.ts#login sha=a0d5389cd288 -->
-`web/src/api/session.ts:170-189`
+`web/src/api/session.ts:174-193`
 
 ```ts
 export async function login(username: string, password: string) {
@@ -299,7 +302,7 @@ export async function login(username: string, password: string) {
 <!-- /gen -->
 
 <!-- gen:snippet web/src/api/session.ts#logout sha=d72c365eca23 -->
-`web/src/api/session.ts:211-226`
+`web/src/api/session.ts:215-230`
 
 ```ts
 export async function logout(): Promise<void> {

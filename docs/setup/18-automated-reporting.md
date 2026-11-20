@@ -58,7 +58,7 @@ rather than *idle*.
 
 ## The SLA report as a file: `/api/sli/export`
 
-The monthly SLA report downloads as a PDF, to print or attach to an email, as an Excel workbook,
+The SLA report, for a month or for a range of days (FR-60), downloads as a PDF, to print or attach to an email, as an Excel workbook,
 to sort and total, or as a zip of CSV files, for a script or for a spreadsheet that wants plain
 numbers. Goal 6 is *Automated reporting*, and this is its on-demand part: someone asks,
 and the file is made. An administrator can also email the files to people they choose (*Emailing the report*, below),
@@ -66,7 +66,7 @@ and have them go by themselves on a day of each month (*The monthly send*, below
 
 On the page. The SLA page (its *Derived SLA* view) shows three buttons in the controls row,
 *PDF report*, *Excel report* and *CSV report*, and a fourth, *Number and date style*, in a group of its own. They show only when
-the period is a calendar month: the last 7 and 30 days have no SLA month to report. The page keeps the
+the period is a calendar month or a range of days you chose (the Range view, FR-60): the last 7 and 30 days have no SLA month to report. The monthly schedule stays monthly. The page keeps the
 buttons off until the figures on screen have loaded. A press calls `GET /api/sli/export` and saves the answer under the name the BFF sends, such
 as `HCML_SLA_Report_2026-08.pdf`. While a file is being prepared the button reads *Preparing PDF…*
 and a second press does nothing. A failure appears next to the buttons and names the format that
@@ -149,7 +149,7 @@ spreadsheet does not run it as a formula (the PDF and the workbook cannot run on
 builds the zip from the same document as the other two writers; the style, and the names of the file kinds, are in `server/src/core/reportChoices.ts`.
 
 The route. `GET /api/sli/export?month=YYYY-MM&format=pdf|xlsx|csv`, with the optional `decimal=dot|comma`, `date=long|numeric|iso`
-and `separator=comma|semicolon`, viewer role like the pages it
+and `separator=comma|semicolon`; for a range, `from` and `to` (Unix seconds, on the hour) take the place of `month`, and `dayHours=8-17` and `days=1,2,3,4,5` choose the hours of the day that count, as on `/api/sli` (a month may carry them too); a month and a range together are a 400. A range's file holds one figure for the whole range, says which hours were counted and has an empty Web checks table, since web checks are monthly. The route is for the guest role, like the pages it
 serves ([§19](19-authentication-rbac.md#19-authentication--rbac)), by session cookie or bearer token:
 
 ```bash
@@ -161,7 +161,7 @@ curl -fsS "$BFF/api/sli/export?month=2026-08&format=xlsx" -H "Authorization: Bea
 is a 400, refused before Zabbix is asked, so it costs nothing. So is any other parameter, so a misspelt
 `month` is not quietly read as the current month. The engine adds a 400 for a month
 that has not started or is more than about 400 days back, and a Zabbix failure is the usual 502 or
-503. The file name is made from the validated month alone, so no request text can reach a header.
+503 (and a month whose data has not been read yet is a 503 `data_not_read_yet` with `Retry-After`). The file name is made from the validated month alone, so no request text can reach a header.
 The answer carries `Cache-Control: private, no-store` and is never compressed. Nothing is kept for
 long: a built file is reused for ten seconds, so a burst of requests for one month and format shares
 one build (about 10 ms of CPU), and after that it is built again from the cached figures.
@@ -206,8 +206,8 @@ What the files leave out.
 
 ## Emailing the report: `/api/sli/email`
 
-An administrator can send a month's report to people they choose, in `hcml-portal` only: the compose file of `hcml-portal-ollama`
-passes none of the mail settings, on purpose, so that nothing leaves the machine there and the buttons are never offered. This is the second half of Goal 6's on-demand
+An administrator can send a month's report to people they choose, in either copy: both compose files pass the mail settings (FR-56). In `hcml-portal-ollama`
+the report is the one thing that can leave the machine, since its questions go to a model on the machine itself. This is the second half of Goal 6's on-demand
 part: the files are the ones the downloads give, and they travel by email instead of to the browser. The same report can also go by itself every month (*The monthly send*, below).
 
 On the page. An *Email report* button and a *Schedule* button sit in the controls row of the SLA page, in a group
@@ -226,7 +226,7 @@ While a send runs the button reads *Sending…* and the dialog cannot be closed.
 addresses the mail server refused if any and whether the list was saved, or keeps the portal's sentence about what went wrong, and what was typed, so the person can try again. When the web server answers instead of the portal, which it does while the portal restarts, the dialog says *The portal did not answer (HTTP 502). The report may or may not have gone: look under Last sends in the Schedule dialog, or ask the people it was sent to, before you press Send report again.* A connection that drops says the same, since the portal may already have the request. If the portal said the report went, in words the page cannot read (or answered success with something that is not JSON), the dialog says that it went and asks for a reload, and *Send report* gives way to *Close*. *Save* in the Schedule dialog says the same kinds of things about the schedule, and a failed read of the schedule says only that the portal did not answer and to try again (tracker FR-29).
 
 Settings. Eleven variables in the root `.env` of `hcml-portal`, handed to the container by its `docker-compose.yml`. With the first eight blank
-email is off and the buttons are not offered. `PORTAL_STATE_DIR` is not a setting you edit: the compose file sets it to the folder of the data volume.
+email is off, the buttons are not offered and an administrator reads a note that says so. `PORTAL_STATE_DIR` is not a setting you edit: the compose file sets it to the folder of the data volume.
 
 | Variable | What it holds |
 |---|---|
@@ -264,8 +264,8 @@ Recipients can be at any provider. Use a mailbox made for the portal, not a pers
 once it is in an inbox the portal's roles no longer protect it. The Gmail and iCloud settings come from Google's and Apple's own help pages, read on 4 November 2026. The Yahoo and Zoho
 settings come from third-party guides and were not checked against those providers' pages.
 
-The route. `POST /api/sli/email` with `{ "month": "2026-08", "formats": ["pdf", "csv"], "to": ["ana@example.org"], "remember": true, "style": { "decimal": "comma" } }`, administrator role (the role table in
-`server/src/security/auth.ts`), and the CSRF header like every write sent with the cookie. Only `month` and `formats` are required. `to` left out means the saved list. Nothing else in the body is
+The route. `POST /api/sli/email` with `{ "month": "2026-08", "formats": ["pdf", "csv"], "to": ["ana@example.org"], "remember": true, "style": { "decimal": "comma" } }`, or, for a range, a `window` object in place of the month, `{ "window": { "from": 1785517200, "to": 1786122000 }, "dayHours": "8-17", "days": "1,2,3,4,5", "formats": ["pdf"] }` (the window is an object because `to` is the list of people; a range sent by hand is entered in the log and not in the list of sends, and the monthly schedule stays monthly), administrator role (the route table in
+`server/src/security/modules.ts`), and the CSRF header like every write sent with the cookie. Only `formats` and a month or a window are required. `to` left out means the saved list. Nothing else in the body is
 accepted: a subject, a message, a copy or a blind copy is a 400, so no request can add text or hidden recipients to the message.
 `GET /api/sli/email` is the question the page asks. The checks run in this order, and the first to fail answers: the
 shape of the body (400), whether email is set up (503 `mail_disabled`), the month, the formats, the style and the recipients (400, each with a sentence that says what is wrong; a month that has not started, that is more than about 400 days back or that ended less than ten minutes ago, while Zabbix is still adding its last values, is one of them, so it costs neither an allowance nor a mail login), the allowance

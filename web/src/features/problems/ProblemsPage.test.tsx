@@ -5,7 +5,8 @@ import { BrowserRouter, MemoryRouter } from 'react-router-dom';
 import { api } from '../../api';
 import { resetAuthProbe } from '../../shared/hooks/useAuth';
 import ProblemsTable from './ProblemsTable';
-import type { Me, Role } from '../../types';
+import type { Me } from '../../types';
+import { meFor, type Kind } from '../../__tests__/accounts';
 import { problem } from '../../__tests__/problems';
 
 // The health answer is cached for the life of the module, so the test sets what it reports directly.
@@ -13,9 +14,9 @@ const caps = { ai: false, writeBack: true, availabilityMinSeverity: 2, known: tr
 vi.mock('../assistant/useAi', async (original) => ({ ...(await original<typeof import('../assistant/useAi')>()), useCapabilities: () => caps }));
 const { default: Problems } = await import('./Problems');
 
-const as = (role: Role): Me => ({ authEnabled: true, user: { name: 'x', role }, expiresIn: 3600 });
+const as = (kind: Kind): Me => meFor(kind);
 
-function open(url: string, role: Role = 'operator') {
+function open(url: string, role: Kind = 'operator') {
   window.history.replaceState(null, '', url);
   vi.spyOn(api, 'me').mockResolvedValue(as(role));
   return render(
@@ -137,6 +138,13 @@ describe('the count above the list', () => {
     vi.mocked(api.problems).mockResolvedValue([three[0], { ...three[1], r_eventid: '77', r_clock: '1800000100' }, three[2]]);
     open('/problems');
     expect(await screen.findByText('3 matching: 2 open, 1 just resolved')).toBeInTheDocument();
+  });
+
+  // FR-75: a problem raised in a maintenance window is left out of every count, so it is not an open one here either.
+  it('counts a problem in maintenance on its own, so that open is the Dashboard’s number', async () => {
+    vi.mocked(api.problems).mockResolvedValue([three[0], { ...three[1], suppressed: '1' }, { ...three[2], r_eventid: '77', r_clock: '1800000100' }]);
+    open('/problems');
+    expect(await screen.findByText('3 matching: 1 open, 1 in maintenance, 1 just resolved')).toBeInTheDocument();
   });
 
   it('says only how many match when none has just resolved', async () => {

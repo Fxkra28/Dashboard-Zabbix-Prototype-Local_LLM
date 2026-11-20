@@ -16,7 +16,7 @@ not discovered by a reader.
 |---|---|
 | **It cannot collect anything** | Zabbix polls; the portal reads items. If Zabbix does not collect it, no portal feature can invent it |
 | **It cannot change monitoring** | One write exists, `event.acknowledge`. No host, item, trigger or template can be created, edited or deleted. See [ADR-0006](../architecture/adr/0006-read-only-with-one-write.md) |
-| **It remembers almost nothing** | Every derived value dies on restart. The portal keeps no audit trail of its own (who acknowledged what is in the text Zabbix stores, `[portal:<user>]`, and in the BFF's log), no saved views, no user table. It keeps two things: a copy of the BFF's log in a volume, so that a rebuild does not lose it (SC-42), and, in the hosted copy, a small state file with the saved report recipients, the monthly schedule and the last 24 sends ([ADR-0003](../architecture/adr/0003-no-database.md), amended; [ADR-0015](../architecture/adr/0015-keep-a-small-state-file-for-recipients-and-the-schedule.md)) |
+| **It remembers almost nothing** | Every derived value dies on restart. The portal keeps no audit trail of its own (who acknowledged what is in the text Zabbix stores, `[portal:<user>]`, and in the BFF's log), no saved views. What it keeps is small and sits on two volumes: a copy of the BFF's log, so that a rebuild does not lose it (SC-42), and, on `portal-state`, the file of users (`users.json`, [ADR-0017](../architecture/adr/0017-keep-the-portals-users-in-a-file-of-their-own.md)), the requests for an account when the form is on (`requests.json`), the saved report recipients, the monthly schedule and the last 24 sends ([ADR-0015](../architecture/adr/0015-keep-a-small-state-file-for-recipients-and-the-schedule.md)) and the web check figures of closed months ([ADR-0016](../architecture/adr/0016-keep-the-web-check-figures-of-closed-months.md)); both copies keep them ([ADR-0003](../architecture/adr/0003-no-database.md), amended) |
 | **It cannot see past Zabbix's retention** | 31 days of raw history, 365 days of trends and events. A two-year question has no answer through this API |
 
 ## Goals only partly met
@@ -33,8 +33,8 @@ not discovered by a reader.
 
 ## Security, still open
 
-- A password can still be plain text in `.env` (an scrypt hash is accepted since 7 October 2026, SC-22)
-  and users come from environment variables, so adding one needs a restart. The audit items on this,
+- A password can still be plain text in `.env` (a hash is accepted since 7 October 2026, SC-22, and a new one is Argon2id since 18 November 2026)
+  and the first administrator, and anyone imported from `PORTAL_USERS` who is not deleted from it, stays in plain text there (SC-68); everyone else is added on the Users page, with no restart, and is kept as a hash. The audit items on this,
   BE-12 to BE-17, are closed.
 - `server/.env` has held a random `JWT_SECRET` of its own since 13 October 2026 (DOC-11, SC-04), where
   it held the placeholder the BFF is designed to refuse. It still runs with `AUTH_ENABLED=false` for local

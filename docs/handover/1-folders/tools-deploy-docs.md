@@ -2,7 +2,7 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Operators and developers | about 7 min | [The web app](web.md) | [The two copies](the-two-copies.md) |
+| Operators and developers | about 8 min | [The web app](web.md) | [The two copies](the-two-copies.md) |
 
 Beside the server and the web app sit four more places: `tools/` for scripts that check or read, `deploy/` for the scripts that rebuild and watch the running portals, `.github/` for the CI workflow, and `docs/` for everything written. None of them ships in an image. All of them matter on the day something breaks.
 
@@ -22,12 +22,12 @@ The repository checked against itself. They are read-only, CI runs them, and eac
 | [`diagrams.check.mjs`](../../../tools/check/diagrams.check.mjs) | 136 | 8 | Fails when a diagram source changed after the stamp of its render, or a render has no source. |
 | [`diagrams.stamp.mjs`](../../../tools/check/diagrams.stamp.mjs) | 46 | 0 | Writes the stamp on a diagram source after its picture was re-rendered. |
 | [`erd.check.ts`](../../../tools/check/erd.check.ts) | 280 | 6 | Fails when the two forms of the database diagram disagree. |
-| [`facts.check.mjs`](../../../tools/check/facts.check.mjs) | 733 | 23 | Fails when a count the documents state is not the count the code has. |
-| [`handover.check.mjs`](../../../tools/check/handover.check.mjs) | 582 | 19 | Fails when the handbook is out of date with the code, incomplete, or carries something it should not. |
+| [`facts.check.mjs`](../../../tools/check/facts.check.mjs) | 752 | 23 | Fails when a count the documents state is not the count the code has. |
+| [`handover.check.mjs`](../../../tools/check/handover.check.mjs) | 604 | 20 | Fails when the handbook is out of date with the code, incomplete, or carries something it should not. |
 | [`installed.check.mjs`](../../../tools/check/installed.check.mjs) | 50 | 0 | Checks that the packages installed in each copy are the versions its lock files name, before the tests that rest on them run. |
 | [`links.check.mjs`](../../../tools/check/links.check.mjs) | 300 | 4 | Fails on a broken relative link or a line citation that runs past its file. |
-| [`openapi.check.ts`](../../../tools/check/openapi.check.ts) | 831 | 14 | Fails when the API description and the routes the server registers disagree. |
-| [`parity.check.mjs`](../../../tools/check/parity.check.mjs) | 243 | 8 | Lists every file that differs between the two copies and is not on the list of files meant to differ. |
+| [`openapi.check.ts`](../../../tools/check/openapi.check.ts) | 837 | 14 | Fails when the API description and the routes the server registers disagree. |
+| [`parity.check.mjs`](../../../tools/check/parity.check.mjs) | 242 | 8 | Lists every file that differs between the two copies and is not on the list of files meant to differ. |
 <!-- /gen -->
 
 ### live
@@ -76,25 +76,34 @@ Its pieces: the scope (which files get a card), the model (the code read with Ty
 ## deploy
 
 <!-- folder deploy -->
-`deploy/` holds the three files an operator uses on the machine that runs the portals.
+`deploy/` holds what an operator uses on the machine that runs the portals: the rebuild and the watcher, the checks of a new machine, the backup and the restore of the volumes, and the probe that HCML's Zabbix reads, with the agent's keys file and a template in `zabbix/`.
 
 <!-- gen:files deploy -->
 | File | Lines | Exports | What it is |
 |---|---|---|---|
-| [`rebuild.sh`](../../../deploy/rebuild.sh) | 403 | 0 | Rebuilds both portals from the commit, checks their settings first, tags the old images, and checks the new ones. |
-| [`watch.sh`](../../../deploy/watch.sh) | 424 | 0 | Checks that the portals and their containers answer and tells you when they do not; meant to run from a timer. |
+| [`backup-state.sh`](../../../deploy/backup-state.sh) | 154 | 0 | Makes an encrypted copy of the state and log volumes, never as a plain file on the disk, and reads it back before it keeps it. |
+| [`gpu-gate.sh`](../../../deploy/gpu-gate.sh) | 125 | 0 | Reads the machine it runs on and says whether the local model can run there; it changes nothing. |
+| [`model-speed.py`](../../../deploy/model-speed.py) | 173 | 0 | Times the real question on the machine's Ollama and says PASS or FAIL against a limit on the first word. |
+| [`portal-probe.sh`](../../../deploy/portal-probe.sh) | 105 | 0 | Gives HCML's Zabbix agent one value a call: whether the portal answers, whether its Zabbix does, the days left on the certificate, the card's temperature and memory, whether the model server answers, and the age of the newest backup. |
+| [`rebuild.sh`](../../../deploy/rebuild.sh) | 468 | 0 | Rebuilds both portals from the commit, checks their settings first, tags the old images, and checks the new ones. |
+| [`restore-state.sh`](../../../deploy/restore-state.sh) | 86 | 0 | Puts a copy from `backup-state.sh` back into the volumes of a stopped stack; without `--apply` it only lists what the copy holds. |
+| [`watch.sh`](../../../deploy/watch.sh) | 426 | 0 | Checks that the portals and their containers answer and tells you when they do not; meant to run from a timer. |
 <!-- /gen -->
 
 `rebuild.sh` rebuilds both portals from the commit in the folder, the hosted copy first and then the local-model copy beside it. In a git checkout it refuses a tree whose source differs from the commit, because the build is named after the commit and a name that lies is worse than none; a folder with no git is built under the label `unknown`. `--allow-dirty` builds anyway and labels the build with `-dirty`. It checks the settings before it builds, saves the logs of the running containers, tags the images it replaces `rollback-<day><month>`, waits for both containers of each copy to be healthy, asks what an anonymous caller can see, and prints the one check it cannot make itself: the signed-in one. A copy that fails stops the run before the next one. `rebuild.sh --mark-good`, run once the signed-in check has passed, marks the running images `last-good`. If the build or its checks fail, the script lists `last-good` first, the build last marked good, and then the rollback tags it made. It never pushes anything.
 
 `watch.sh` checks from outside Docker whether each portal answers and whether its containers run, and says so when one goes down, comes back or restarts in a loop. Docker restarts a dead container but tells nobody. It counts a portal as down, Docker as not answering, and a container as stopped, paused, dead, created, restarting or being removed, only after two checks in a row, so a rebuild's restart is not news, and it gives each call to Docker 20 seconds, so a Docker that hangs is reported as not answering. On macOS it can install itself as a per-user timer.
 
+`backup-state.sh` and `restore-state.sh` move the two volumes of a copy, `portal-state` and `portal-logs`, in and out of one encrypted file. The volumes are read through the portal's own image, which has `tar`, so nothing is pulled; the passphrase is asked for or read from a file; the copy is opened again before it is kept, and the newest 14 are kept. The restore refuses while the portal runs. [`backup-and-restore.md`](../../operations/backup-and-restore.md) says what to do with the file.
+
+`portal-probe.sh` is what HCML's Zabbix agent runs, one probe a call, and prints `ZBX_NOTSUPPORTED` for what it cannot read. `deploy/zabbix/hcml-portal.conf` is the agent's file of keys and `deploy/zabbix/template-hcml-portal.yaml` the template of Zabbix 7.0 that makes an item and a trigger of each; the template has not been imported into any Zabbix.
+
 `settings.example` lists every setting that is not a secret, with the default the compose file gives it. Nothing reads it. It is the list to check a real `.env` against, and your real values belong in the encrypted backup of that `.env`.
 
 ## .github
 
 <!-- folder .github -->
-`dependabot.yml` asks for a weekly pull request for the GitHub actions, the npm packages of `server/` and `web/` (minor and patch updates grouped in one), and the Docker base images of both.
+`dependabot.yml` asks for a weekly pull request for the GitHub actions, the npm packages of `server/` and `web/` (minor and patch updates grouped in one), the Docker base images of both, and the images named in the compose files.
 
 <!-- folder .github/workflows -->
 `ci.yml` is the CI workflow. It has five jobs that run side by side, so a failure names its package: the server (install, audit, typecheck, lint, test, build), the web app (the same), the checks (everything under `tools/check` and the package checks), a secret scan of what is pushed, and a build of both Docker images with nginx's own syntax check. It pushes nothing, comments on nothing and deploys nothing. Every action is pinned to a full commit hash, and a test refuses one that is not.
@@ -109,15 +118,14 @@ Each copy is a repository of its own, `hcml-portal` and `hcml-portal-ollama` (th
 | Folder | What it holds |
 |---|---|
 | `setup/` | The guide: one part for each subsystem, indexed by `setup.md` at the root, and one part for each batch of changes. |
-| `architecture/` | The decision records, fifteen of them, each with what was considered, what was chosen and what it cost. |
+| `architecture/` | The decision records, nineteen of them, each with what was considered, what was chosen and what it cost. |
 | `api/` | The API description (`openapi.yaml`), checked against the routes the server registers, and how to view it. |
 | `schema/` | The data model at three levels of detail: conceptual, logical, physical. Differs between the copies. |
 | `erd/` | The full data model, with the entities read from Zabbix, the ones derived by the portal and the ones local to it, and the reference set behind it. |
 | `flow/` | What happens, in three views: the browser, the server and the data. Differs between the copies. |
-| `operations/` | Backing up the settings, putting TLS in front, and what comes back after a restart. |
+| `operations/` | Backing up the settings and the state volume, putting TLS in front, what comes back after a restart, what fills the disk, and the plan for the virtual machine. |
 | `design-system/` | The rules, the tokens and the components, with the token files for Figma and Sass, which a program writes. |
 | `ux/` | Who uses the portal and how, derived from the code, not from interviews. |
-| `screenshots/` | Ten pictures of the main pages with every name replaced. |
 | `handover/` | This handbook. |
 
 Most of these folders hold a README that opens them; read it first.
@@ -141,16 +149,13 @@ The full data model in one diagram and in a form split by domain, with a table o
 Three views of the system in motion: what happens in the browser, what happens to one request inside the server, and where a number comes from. Read them in that order.
 
 <!-- folder docs/operations -->
-Four short runbooks: what to back up and how to restore it, how to put TLS in front of the portal, what comes back after a machine restarts, and what fills the disk and what is safe to remove.
+Five pages: what to back up and how to restore it, how to put TLS in front of the portal, what comes back after a machine restarts, what fills the disk and what is safe to remove, and the plan for the virtual machine, step by step.
 
 <!-- folder docs/design-system -->
 The design rules, every token family and every component with its states. `tokens.json`, `_tokens.scss` and `component-tokens.md` are written by `npm run tokens:export` from the stylesheet and are never edited.
 
 <!-- folder docs/ux -->
-One page on who uses the portal: the four roles and the acknowledge journey. It says plainly that it is derived from the code and not from interviews, and how little weight that deserves.
-
-<!-- folder docs/screenshots -->
-Ten pictures of the main pages, with every host and site name replaced, and a README that describes them. The real screenshots stay in `pic/`, which is never committed.
+One page on who uses the portal: the three roles, each person's pages and the acknowledge journey. It says plainly that it is derived from the code and not from interviews, and how little weight that deserves.
 
 <!-- folder docs/handover -->
 This handbook. `manifest.json` lists its parts and pages, and `README.md` is where to start.

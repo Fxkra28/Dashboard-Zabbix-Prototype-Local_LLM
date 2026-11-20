@@ -3,6 +3,8 @@
  * The zone is the server's SLA_TIMEZONE from /api/health (features/assistant/useAi.ts), Asia/Jakarta until it is known.
  */
 
+import { serverNow } from './clock';
+
 export const DEFAULT_REPORT_TZ = 'Asia/Jakarta';
 
 let reportTz = DEFAULT_REPORT_TZ;
@@ -263,7 +265,7 @@ export function monthOf(atSeconds: number, tz = reportTz): string {
 /** The current month and the 11 before it, newest first. */
 export function recentMonths(count = 12, tz = reportTz): string[] {
   const out: string[] = [];
-  let [y, m] = monthOf(Math.floor(Date.now() / 1000), tz).split('-').map(Number);
+  let [y, m] = monthOf(Math.floor(serverNow() / 1000), tz).split('-').map(Number);
   for (let i = 0; i < count; i++) {
     out.push(`${y}-${String(m).padStart(2, '0')}`);
     m -= 1;

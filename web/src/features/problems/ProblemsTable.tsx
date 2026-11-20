@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { PageLink } from '../../shared/components/PageLink';
 import type { Problem } from '../../types';
 import { SeverityBadge } from '../../shared/components/StatusBadge';
 import { AckPill } from './AckPill';
@@ -43,10 +43,10 @@ export default function ProblemsTable({
                   {mark === 'cleared' && <span className="pill up">Cleared</span>}
                   {mark && ' '}
                   {/* The Problems page marks this row, and can open Explain or Acknowledge on it. */}
-                  <Link to={`/problems?eventid=${encodeURIComponent(p.eventid)}`}>{p.name}</Link>
+                  <PageLink to={`/problems?eventid=${encodeURIComponent(p.eventid)}`}>{p.name}</PageLink>
                 </td>
                 <td className="muted">
-                  {p.hostid ? <Link to={`/graphs?hostid=${p.hostid}`}>{p.host || 'Unknown host'}</Link> : p.host || <NoData />}
+                  {p.hostid ? <PageLink to={`/graphs?hostid=${p.hostid}`}>{p.host || 'Unknown host'}</PageLink> : p.host || <NoData />}
                 </td>
                 <td className="muted">{ago(p.clock)}</td>
                 <td>

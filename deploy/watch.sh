@@ -392,19 +392,21 @@ case "${1:-}" in
       exit 1
     }
     mkdir -p "$(dirname "$PLIST")" "$STATE_DIR"
+    # The paths go into XML: an & or a < in a folder name (a folder called R&D) would otherwise make a file that launchd refuses (IN-106).
+    xml() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
     cat >"$PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>$LABEL</string>
+  <key>Label</key><string>$(xml "$LABEL")</string>
   <key>ProgramArguments</key>
-  <array><string>/bin/bash</string><string>$SELF</string><string>--once</string></array>
+  <array><string>/bin/bash</string><string>$(xml "$SELF")</string><string>--once</string></array>
   <key>StartInterval</key><integer>60</integer>
   <key>RunAtLoad</key><true/>
   <key>EnvironmentVariables</key>
-  <dict><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:$HOME/.docker/bin:/usr/bin:/bin</string></dict>
-  <key>StandardErrorPath</key><string>$STATE_DIR/launchd.err</string>
+  <dict><key>PATH</key><string>/usr/local/bin:/opt/homebrew/bin:$(xml "$HOME")/.docker/bin:/usr/bin:/bin</string></dict>
+  <key>StandardErrorPath</key><string>$(xml "$STATE_DIR")/launchd.err</string>
 </dict>
 </plist>
 EOF

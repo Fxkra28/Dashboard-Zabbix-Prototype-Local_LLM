@@ -2,7 +2,7 @@ import { useId, useMemo } from 'react';
 import { api } from '../../api';
 import { useAsync } from '../../shared/hooks/useAsync';
 import { useUrlState } from '../../shared/hooks/useUrlState';
-import { roleAllows, useAuth } from '../../shared/hooks/useAuth';
+import { useAuth } from '../../shared/hooks/useAuth';
 import type { DeviceKind, DevicesResponse } from '../../types';
 import { Async } from '../../shared/components/states';
 import { Field, FieldGroup, FieldSpacer } from '../../shared/components/Field';
@@ -16,7 +16,7 @@ import { tally, trouble, type Tally } from './deviceTally';
  */
 export default function Devices() {
   const searchId = useId();
-  const { role } = useAuth();
+  const { can } = useAuth();
   const q = useAsync<DevicesResponse>(() => api.devices(), [], 30_000);
   // The kind, the search and the problems filter live in the URL, so Back and a shared link keep them.
   const [kind, setKind] = useUrlState<string>('type', '');
@@ -112,8 +112,8 @@ export default function Devices() {
                 hosts={filtered}
                 showSite
                 showCategory
-                // Interface data is for a wall screen, an operator and an admin (viewerPolicy.ts), and so is the page of ports.
-                portsLink={role !== null && roleAllows(role, 'wall')}
+                // Interface data is for the accounts that have the Network page (viewerPolicy.ts), and so is the page of ports.
+                portsLink={can('network')}
               />
             ) : (
               <div className="state">No device matches.</div>

@@ -45,7 +45,7 @@ interface ZItem {
 
 /** Rows for each metric when the request does not say: the Zabbix "Top hosts" widget lists ten. */
 export const TOP_HOSTS_ROWS = 10;
-/** The most a request may ask for. The cached list holds this many and a request cuts it, so every `limit` shares one read (BK-61). */
+/** The most a request of the route may ask for. The cached list holds every host and a request cuts it, so every `limit` shares one read (BK-61). */
 export const TOP_HOSTS_MAX_ROWS = 20;
 
 const METRICS = [
@@ -87,6 +87,7 @@ export async function getTopHosts(limit: number): Promise<TopHostsResponse> {
 
 /** The busiest hosts as the route and the warm-up read it: read once whatever `limit` is asked, and cut after. */
 export async function topHostsView(limit = TOP_HOSTS_ROWS): Promise<TopHostsResponse> {
-  const all = await cached('top-hosts', 30_000, () => getTopHosts(TOP_HOSTS_MAX_ROWS), SLOW_VIEW);
+  // Every host with a current reading is kept, so that the Assistant can ask for the hosts of one site and share this read with the Dashboard.
+  const all = await cached('top-hosts', 30_000, () => getTopHosts(Number.POSITIVE_INFINITY), SLOW_VIEW);
   return { ...all, metrics: all.metrics.map((m) => ({ ...m, rows: m.rows.slice(0, limit) })) };
 }

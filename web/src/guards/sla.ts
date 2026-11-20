@@ -138,6 +138,7 @@ const sli = shape<SliReport>({
   closed: flag,
   timezone: text,
   target: num,
+  dailyHours: opt(shape<NonNullable<SliReport['dailyHours']>>({ start: num, end: num, weekdays: orNull(listOf(num)), seconds: num })),
   basis: shape<SliReport['basis']>({ triggers: listOf(text), gapPolicy: text, noDataPolicy: text, maintenancePolicy: text }),
   overall: sliGroup,
   categories: listOf(sliGroup),
@@ -198,7 +199,9 @@ export const emailSentGuard = guard<EmailSent>(
   shape<EmailSent>({
     sent: num,
     refused: num,
-    month: text,
+    month: orNull(text),
+    from: opt(num),
+    to: opt(num),
     files: listOf(shape<EmailSent['files'][number]>({ format: text, fileName: text, bytes: num })),
     remembered: flag,
   }),

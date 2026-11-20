@@ -557,6 +557,72 @@ const openSla = () => {
   );
 };
 
+describe('ReportDownload for a range of days (FR-60)', () => {
+  const range = { from: 1785517200, to: 1786122000, dayHours: '8-17', days: '1,2,3,4,5', words: '3 Aug 2026, 00:00 to 10 Aug 2026, 00:00, 08:00 to 17:00, Monday to Friday' };
+  const other = { from: 1786122000, to: 1786726800, words: '10 Aug 2026, 00:00 to 17 Aug 2026, 00:00' };
+  let rangeExport: MockInstance<typeof api.sliRangeExport>;
+  beforeEach(() => {
+    rangeExport = vi.spyOn(api, 'sliRangeExport').mockResolvedValue(file('HCML_SLA_Report_2026-08-03_to_2026-08-09_0800-1700_d12345.pdf'));
+  });
+
+  it('offers the same three files in a group named for the range in words', () => {
+    render(<ReportDownload range={range} />);
+    const group = screen.getByRole('group', { name: `Download the SLA report for ${range.words}, both methods` });
+    expect(within(group).getAllByRole('button').map((b) => b.textContent?.replace(/Preparing.*/, ''))).toEqual(['PDF report', 'Excel report', 'CSV report']);
+  });
+
+  it.each([
+    ['pdf', 'PDF report'],
+    ['xlsx', 'Excel report'],
+    ['csv', 'CSV report'],
+  ] as const)('fetches the range as %s through its own call, in the style kept, and saves it under the name the BFF gave', async (format, label) => {
+    const user = userEvent.setup();
+    render(<ReportDownload range={range} />);
+    await user.click(screen.getByRole('button', { name: label }));
+    expect(rangeExport).toHaveBeenCalledWith(range, format, expect.any(AbortSignal), DEFAULT_REPORT_STYLE);
+    expect(sliExport).not.toHaveBeenCalled();
+    await waitFor(() => expect(clicked).toEqual([{ href: 'blob:report', download: 'HCML_SLA_Report_2026-08-03_to_2026-08-09_0800-1700_d12345.pdf', connected: true }]));
+  });
+
+  it('says what failed in the words a month’s failure uses, and frees the buttons', async () => {
+    rangeExport.mockRejectedValueOnce(new Error('No hour of this range falls inside the daily hours you chose.'));
+    const user = userEvent.setup();
+    render(<ReportDownload range={range} />);
+    await user.click(pdfButton());
+    expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t prepare the PDF report: No hour of this range falls inside the daily hours you chose.');
+    expect(pdfButton()).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('forgets an old error when the range changes, and the old one does not come back', async () => {
+    rangeExport.mockRejectedValueOnce(new Error('The report could not be built.'));
+    const user = userEvent.setup();
+    const { rerender } = render(<ReportDownload range={range} />);
+    await user.click(pdfButton());
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+
+    rerender(<ReportDownload range={other} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByRole('group', { name: `Download the SLA report for ${other.words}, both methods` })).toBeInTheDocument();
+    rerender(<ReportDownload range={range} />);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('keeps the same error when the page draws the same range again, which is no new range', async () => {
+    rangeExport.mockRejectedValueOnce(new Error('The report could not be built.'));
+    const user = userEvent.setup();
+    const { rerender } = render(<ReportDownload range={range} />);
+    await user.click(pdfButton());
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    rerender(<ReportDownload range={{ ...range }} />);
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+  });
+
+  it('is off while the page says the range cannot be asked for', () => {
+    render(<ReportDownload range={range} disabled />);
+    for (const b of [pdfButton(), excelButton(), csvButton()]) expect(b).toBeDisabled();
+  });
+});
+
 describe('on the SLA page', () => {
   beforeEach(pageSetup);
 

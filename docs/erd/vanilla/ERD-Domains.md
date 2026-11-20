@@ -708,9 +708,10 @@ config:
 erDiagram
     direction TB
     PORTAL_USER {
-        string name PK "parsed from PORTAL_USERS, name:password:role"
-        string pass "plain text or scrypt hash"
-        string role "viewer, wall, operator or admin"
+        string name PK "from PORTAL_USERS (name:password:role) or the users file"
+        string pass "plain text or a hash in .env, a hash in the users file"
+        string role "guest, operator or admin"
+        string modules "the pages the person has, in the users file"
     }
     STATS {
         number hosts

@@ -1,13 +1,14 @@
-import { Link } from 'react-router-dom';
+import { PageLink } from '../../shared/components/PageLink';
 import { api } from '../../api';
 import { useAsync } from '../../shared/hooks/useAsync';
 import { useUrlState } from '../../shared/hooks/useUrlState';
-import { useAuth, roleAllows } from '../../shared/hooks/useAuth';
+import { useAuth } from '../../shared/hooks/useAuth';
 import type { CapacityReport, CapacityRow } from '../../types';
 import { Async, Empty } from '../../shared/components/states';
 import { Field } from '../../shared/components/Field';
 import { TableWrap } from '../../shared/components/TableWrap';
 import { NoData } from '../../shared/components/NoData';
+import { momentWords } from '../../shared/lib/freshness';
 
 /**
  * Capacity trends (HCML Goal 6). HCML's deck already shows a
@@ -32,16 +33,19 @@ function MetricPanel({
   label,
   rows,
   days,
+  builtAt,
 }: {
   metric: string;
   label: string;
   rows: CapacityRow[];
   days: number;
+  /** When the report was built, in unix seconds, or null when the portal does not say. */
+  builtAt: number | null;
 }) {
   const iface = metric === 'ifutil';
-  // The server keeps interface items from a viewer (SC-45), so a viewer who pressed Graph there would be refused: the button is left off (FR-55).
-  const { role } = useAuth();
-  const canGraph = !iface || roleAllows(role, 'wall');
+  // The server keeps interface items from an account without the Network page (SC-45), so one that pressed Graph there would be refused: the button is left off (FR-55).
+  const { can } = useAuth();
+  const canGraph = !iface || can('network');
   return (
     <div className="panel">
       <div className="panel-head">
@@ -54,7 +58,9 @@ function MetricPanel({
       </div>
       {iface && (
         <div className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
-          Traffic in the busier direction (in or out) as a share of the port’s speed.
+          Traffic in the busier direction (in or out) as a share of the port’s speed. The list is chosen when the report is built{builtAt !== null ? `, which was ${momentWords(builtAt * 1000)}` : ''}, from the
+          ports that are busiest at that moment, and only those are then ranked by their average over the last {days === 1 ? '24 hours' : `${days} days`}. A port that was quiet then can be missing here,
+          however busy it was on other days.
         </div>
       )}
 
@@ -107,9 +113,9 @@ function MetricPanel({
                   </td>
                   {canGraph && (
                     <td className="sticky-end">
-                      <Link className="btn ghost sm" to={`/graphs?hostid=${r.hostid}&itemid=${r.itemid}`}>
+                      <PageLink className="btn ghost sm" to={`/graphs?hostid=${r.hostid}&itemid=${r.itemid}`} fallback={null}>
                         Graph
-                      </Link>
+                      </PageLink>
                     </td>
                   )}
                 </tr>
@@ -185,7 +191,7 @@ export default function Capacity() {
               )}
               <div className="grid sli-grid">
                 {data.metrics.map((m) => (
-                  <MetricPanel key={m.key} metric={m.key} label={m.label} rows={m.rows} days={data.days} />
+                  <MetricPanel key={m.key} metric={m.key} label={m.label} rows={m.rows} days={data.days} builtAt={data.generatedAt ?? null} />
                 ))}
               </div>
             </>

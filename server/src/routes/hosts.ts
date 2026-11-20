@@ -44,7 +44,7 @@ export async function hostRoutes(app: FastifyInstance): Promise<void> {
     }
     const hostid = itemids ? optionalId(q.hostid, 'hostid') : requireId(q.hostid, 'hostid');
     const found = await findItems({ hostid, itemids, search: q.search, graphable });
-    // Interface items are wall data. Cut after the cache: it holds one list for every role.
+    // Interface items are for accounts that have the Network page. Cut after the cache: it holds one list for every account.
     return hidesNetwork(req) ? withoutNetworkItems(found) : found;
   });
 

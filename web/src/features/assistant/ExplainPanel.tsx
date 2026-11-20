@@ -32,6 +32,8 @@ function Drawer({
 }) {
   const titleId = useId();
   const panel = useRef<HTMLDivElement>(null);
+  // Whether the press that ends in a click began on the backdrop: text selected in the drawer, with the mouse let go over the backdrop, must not close it and lose what was read (UX-74).
+  const pressedBackdrop = useRef(false);
 
   // Escape closes, matching how Zabbix's own overlays behave.
   useEffect(() => {
@@ -46,7 +48,13 @@ function Drawer({
   // Drawn on the page, not where it is called from: a wrapper with a transform would otherwise become its frame (UX-46).
   return createPortal(
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- Esc and the close button do this from the keyboard
-    <div className="drawer-overlay" onClick={onClose}>
+    <div
+      className="drawer-overlay"
+      onMouseDown={(e) => {
+        pressedBackdrop.current = e.target === e.currentTarget;
+      }}
+      onClick={() => pressedBackdrop.current && onClose()}
+    >
       {/* A div, not an aside: HTML lets an aside take no role of a dialog (UX-45). */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions -- only keeps the click from reaching the backdrop */}
       <div

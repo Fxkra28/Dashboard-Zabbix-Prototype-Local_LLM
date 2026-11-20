@@ -2,7 +2,7 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Developers | about 30 min | [Web app: the API client, the types and the guards](web-api-types-guards.md) | [Web app: the stylesheet](web-styles.md) |
+| Developers | about 35 min | [Web app: the API client, the types and the guards](web-api-types-guards.md) | [Web app: the stylesheet](web-styles.md) |
 
 The pages are in `web/src/features/`, one folder for each part of the portal. A page is a component that reads through `useAsync` or `useSSE`, draws what it gets with the shared components, and keeps its filters in the address with `useUrlState`. Most of them are plain and are explained by their cards. This chapter walks through the ones with something to explain: the Dashboard and its wall mode, the Problems page and the one write, the chart, the gauge, and the Assistant.
 
@@ -32,12 +32,12 @@ The sidebar is the list. Which role may see a page is not written in the web app
 
 ## The Dashboard
 
-`web/src/features/dashboard/`. The page that runs on the wall. It has three views, like the pages of a Zabbix dashboard: the problems, the hosts, and the internet traffic meters, which are for a wall screen, an operator or an admin.
+`web/src/features/dashboard/`. The page that runs on the wall. It has three views, like the pages of a Zabbix dashboard: the problems, the hosts, and the internet traffic meters, which are for the accounts that have the Network page.
 
 ### Live list or poll
 
-<!-- gen:snippet web/src/features/dashboard/Overview.tsx#Overview lines=58-96 sha=3f61407d160e -->
-`web/src/features/dashboard/Overview.tsx:179-217` (lines 58 to 96 of Overview)
+<!-- gen:snippet web/src/features/dashboard/Overview.tsx#Overview lines=58-96 sha=288c0bde15d7 -->
+`web/src/features/dashboard/Overview.tsx:181-219` (lines 58 to 96 of Overview)
 
 ```tsx
 // Live problems over SSE. The poll is a safety net for a dropped stream, not a second source of
@@ -85,7 +85,7 @@ const cutOff = reachLost(freshQ.data);
 1. The problem list comes from the stream. The poll is a safety net for a dropped stream, and not a second source of truth: at 10 seconds it would duplicate every stream tick, so it runs slowly, every 60 seconds, and only while the stream has given nothing.
 2. `streaming` is true only while the stream is connected and has sent a list. Keying the poll on `live.data` alone once stopped it for good after the first frame, so a stream that later failed left a frozen list on screen with nothing refreshing it.
 3. Switching the interval never fetches by itself, which is how `useAsync` works, so the stream connecting does not cost a second full list. When the page falls off the stream, it fetches at once rather than a full interval later.
-4. Off the stream the page shows whichever source is newer, because the poll's list from page load must not replace the stream's last frame. `shownAt` says how old what is on screen is, whichever source it came from, and the page says "data is late" when it is too old.
+4. Off the stream the page shows whichever source is newer, because the poll's list from page load must not replace the stream's last frame. `shownAt` says how old what is on screen is, whichever source it came from, and the page says "data is late" when it is too old. What counts as open is one rule shared with the Problems page (`counts.ts`: not resolved and not in maintenance, FR-75), and the link to the Problems page is a `PageLink`, which is not drawn as a link for an account without that page (UX-78).
 5. Every clock on the page is the report zone's, with the zone's name (`formatClockLabeled`, and the big digits of the wall), so a wall in a browser set to another zone shows the time the reports and the Problems page use.
 6. The server can be answering while Zabbix has stopped collecting: the stream stays up and keeps sending, all of it old. So the page reads `/api/freshness` too. `idleFor` is how long ago Zabbix last collected, and `cutOff` is true when almost nothing answers ping, which `CollectorNotice` words as "Zabbix cannot reach the network".
 
@@ -196,7 +196,7 @@ export function internetCard(d: MetersResponse | null | undefined): InternetCard
 
 `web/src/features/problems/`. The list of problems with filters, the Explain panel, and the Acknowledge dialog.
 
-<!-- gen:snippet web/src/features/problems/AckDialog.tsx#AckDialog lines=44-67 sha=126ea15d2141 -->
+<!-- gen:snippet web/src/features/problems/AckDialog.tsx#AckDialog lines=44-67 sha=df5c7ad20366 -->
 `web/src/features/problems/AckDialog.tsx:71-94` (lines 44 to 67 of AckDialog)
 
 ```tsx
@@ -236,11 +236,11 @@ const applied = (p: Problem, sent: Sent) =>
 ```
 <!-- /gen -->
 
-1. The dialog is the one place a click changes something in Zabbix, so it confirms and never acts on a single tap, and it does not offer Close for a trigger that does not allow a manual close (`manualClose`). While a request is under way the cross, Cancel and Escape are switched off and a click on the backdrop does nothing, so a refusal cannot arrive at a dialog that has gone (FR-33). Otherwise Escape closes it, and a click on the backdrop closes it unless that would throw away a typed message. The dialog is drawn on the page itself (`createPortal` into the body), so a wrapper with a transform cannot become its frame (UX-46), and the role of a dialog sits on a `div` around the form, since HTML lets a form take only the roles search, none and presentation (UX-45). While it is open the page behind it does not scroll (`useDialogFocus` takes `lockScroll`, UX-43), and its head and foot are `role="none"`, since outside `<main>` a header and a footer would count as a second banner and a second contentinfo (UX-45). The message box takes 1,974 characters, which is Zabbix's 2,048 less the longest tag the server puts in front, so the end of a long note is never cut off unseen.
+1. The dialog is the one place a click changes something in Zabbix, so it confirms and never acts on a single tap, and it does not offer Close for a trigger that does not allow a manual close (`manualClose`). While a request is under way the cross, Cancel and Escape are switched off and a click on the backdrop does nothing, so a refusal cannot arrive at a dialog that has gone (FR-33). Otherwise Escape closes it, and a click on the backdrop closes it unless that would throw away a typed message. The dialog is drawn on the page itself (`createPortal` into the body), so a wrapper with a transform cannot become its frame (UX-46), and the role of a dialog sits on a `div` around the form, since HTML lets a form take only the roles search, none and presentation (UX-45). While it is open the page behind it does not scroll (`useDialogFocus` takes `lockScroll`, UX-43), and its head and foot are `role="none"`, since outside `<main>` a header and a footer would count as a second banner and a second contentinfo (UX-45). The message box takes 1,974 characters, which is Zabbix's 2,048 less the longest tag the server puts in front, so the end of a long note is never cut off unseen. The overlay is drawn with the `centered` class, which centres the dialog without the `:has()` rule that the drawer needed (UX-77).
 2. `submit` calls `api.acknowledge` with the event id, the message, and the two flags. If the dialog is closed before Zabbix answers, the page is still told what was sent, but the late answer does not close the dialog of another problem that was opened meanwhile (`open`). On failure the dialog shows the sentence the portal sends back and puts focus back in the message box, since disabling the Confirm button had dropped focus to the page. A refusal by Zabbix, such as a close on a trigger that does not allow it, reaches the dialog in the portal's own words, "Zabbix refused the change. It may already be closed, or this account may not be allowed to change it.", with the reference to quote, and a timeout says that the change may or may not have been made (BK-43). When the web server answered instead of the portal, the dialog says "The portal did not answer (HTTP 502)" and what to check, as the report dialogs do (FR-32).
 3. The dialog also asks `/api/freshness`. With no `zabbix-server` collecting, a close is accepted and never applied, so a person is told before sending. A failed check says nothing, so it never gets in the way.
 4. Zabbix applies a change a moment after it answers. After a write the server clears the cached answers that the write changes and, for 15 seconds, keeps a new copy of each for only 2 seconds, so the next reads are fresh, though Zabbix itself may still say open for a few seconds. The page keeps what it sent for each problem (`sent`), shows it until the refreshed list says the same (`applied`), and polls every 3 seconds, instead of every 30, while a change is awaited. After `WAIT_FOR_ZABBIX_MS`, a minute, a change that has not shown stops being "waiting": the row says it is late and goes back to offering Ack.
-5. The stream's frames leave out what this page also shows, such as the tags and the live value, so they only say that something changed. The full list is then read at once, and the poll stays as the fallback. Filters (severity, acknowledged or not, search, the open Explain panel) live in the address through `useUrlState`, so Back and a shared link restore them.
+5. The stream's frames leave out what this page also shows, such as the tags and the live value, so they only say that something changed. The full list is then read at once, and the poll stays as the fallback. Filters (severity, acknowledged or not, search) live in the address through `useUrlState`, so Back and a shared link restore them. The open Explain panel does not: it is plain state, pressing Explain writes nothing to the address, and only an address written by hand with `&action=explain` opens the panel, once, so a reload, Back or a shared link does not show it.
 
 ## The chart
 
@@ -417,8 +417,8 @@ Tests: `gaugeDial.test.ts`, `Gauge.test.tsx` and `InternetMeters.test.tsx`, next
 
 `web/src/features/assistant/`. The page behind the sidebar's Assistant, and the Explain panels on the Problems and SLA pages.
 
-<!-- gen:snippet web/src/features/assistant/Assistant.tsx#Assistant lines=50-91 sha=f695221e55db -->
-`web/src/features/assistant/Assistant.tsx:128-169` (lines 50 to 91 of Assistant)
+<!-- gen:snippet web/src/features/assistant/Assistant.tsx#Assistant lines=50-91 sha=f8420895369e -->
+`web/src/features/assistant/Assistant.tsx:165-206` (lines 50 to 91 of Assistant)
 
 ```tsx
 async function send(text: string) {
@@ -437,6 +437,7 @@ async function send(text: string) {
   const ac = new AbortController();
   abortRef.current = ac;
   let answer = '';
+  let finished: ChatDone | null = null;
   try {
     await chatStream(
       next.slice(-HISTORY),
@@ -448,26 +449,25 @@ async function send(text: string) {
         },
         // The BFF's cleaned-up text (no think block, no sign-off) replaces the stream.
         onDone: (d) => {
+          finished = d;
           if (typeof d.text === 'string' && d.text) answer = d.text;
         },
       },
       ac.signal,
     );
-    setMessages((m) => [...m, { role: 'assistant', content: answer }]);
+    if (answer) setMessages((m) => withAnswer(m, next.length, answer, finished));
+    else setError('The assistant sent no answer. Ask again.');
   } catch (err) {
-    // Stopped by the reader: keep what arrived. Failed: keep it too, and say so.
-    if (answer) setMessages((m) => [...m, { role: 'assistant', content: answer }]);
+    // Stopped by the reader: keep what arrived, marked as partial. Failed: keep it too, marked, and say so.
+    if (answer) setMessages((m) => [...m, { role: 'assistant', content: answer, cut: ac.signal.aborted ? 'stopped' : 'failed' }]);
     if (!ac.signal.aborted) setError(err instanceof Error ? err.message : String(err));
   } finally {
     setPending(null);
-    abortRef.current = null;
-  }
-}
 ```
 <!-- /gen -->
 
 <!-- gen:snippet web/src/shared/lib/chatStore.ts#saveConversation sha=3896989f99f8 -->
-`web/src/shared/lib/chatStore.ts:24-32`
+`web/src/shared/lib/chatStore.ts:29-37`
 
 ```ts
 export function saveConversation(messages: ChatMessage[]): void {
@@ -483,7 +483,7 @@ export function saveConversation(messages: ChatMessage[]): void {
 <!-- /gen -->
 
 <!-- gen:snippet web/src/shared/lib/chatStore.ts#clearConversation sha=d272cdd741a3 -->
-`web/src/shared/lib/chatStore.ts:43-46`
+`web/src/shared/lib/chatStore.ts:48-51`
 
 ```ts
 export function clearConversation(): void {
@@ -493,7 +493,7 @@ export function clearConversation(): void {
 ```
 <!-- /gen -->
 
-1. `send` adds the person's question to the conversation, clears the box, and starts `chatStream` with the last `HISTORY` turns. Each `token` extends the answer on screen. The server's cleaned text, which has no think block and no sign-off, replaces the stream when the `done` event arrives.
+1. `send` adds the person's question to the conversation, clears the box, and starts `chatStream` with the last `HISTORY` turns. Each `token` extends the answer on screen. The server's cleaned text, which has no think block and no sign-off, replaces the stream when the `done` event arrives. The box stops at `QUESTION_MAX`, 2,000 characters, the most the server reads of one message, with a counter from 1,800 (FR-72). The `done` event also says `remembered`, how many turns the model was given, and the messages before them are marked as forgotten, with a line in the log where the memory ends, drawn as a note and not as a separator, so that a screen reader reads its words (FR-72); it says `language`, which marks the question and the answer for a screen reader, and the words of the page inside them (the labels You and Assistant, the note of a cut answer) are marked English (UX-73); and an answer that ended early, because the reader pressed Stop, the stream broke or the model reached its length limit (`truncated`), carries the words that say it is partial (`CUT_WORDS`, UX-72). The strip before the first answer and the footer say that an answer comes from a snapshot up to five minutes old and from what the question asks for beyond it, and one of the suggestions asks about the past, so that the page shows that last night can be asked about (DC-74).
 2. A reader who presses Stop, or navigates away, aborts the request, which makes the server stop the model. Navigating away must not leave the model generating for nobody. What had arrived stays in the conversation. A failure keeps it too and says so.
 3. The conversation is not kept on a server. The page sends its own history with every question, and keeps it in `sessionStorage`, through `chatStore`, so it survives leaving the page and not closing the tab. `clearConversation` runs when a session ends, by a sign-out, a refused session, or another tab signing out, and keeps `ended` true until the next sign-in. An answer that lands late must not write the conversation back, so `saveConversation` does nothing while `ended` is true.
 4. When the page opens it calls `chatWarm`, which loads the local model while the reader is still typing. Until the server has answered `/api/health`, "no model" is not an answer: saying so once sent people to edit `server/.env` for nothing. `useCapabilities`, in `useAi.ts`, is that one health probe shared by every page. A failure is not remembered, since one health check during a restart would hide Explain and Acknowledge for the rest of the session.

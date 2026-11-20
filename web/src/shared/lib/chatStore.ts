@@ -7,12 +7,17 @@ export const CHAT_STORAGE_KEY = 'hcml_chat';
 export function loadConversation(): ChatMessage[] {
   try {
     const saved: unknown = JSON.parse(sessionStorage.getItem(CHAT_STORAGE_KEY) ?? '[]');
-    return Array.isArray(saved)
-      ? saved.filter(
-          (m): m is ChatMessage =>
-            (m?.role === 'user' || m?.role === 'assistant') && typeof m?.content === 'string',
-        )
-      : [];
+    if (!Array.isArray(saved)) return [];
+    // Only the fields the page knows, each checked: the store is the tab's, but what it holds is not trusted to be what was written.
+    return saved
+      .filter((m) => (m?.role === 'user' || m?.role === 'assistant') && typeof m?.content === 'string')
+      .map((m): ChatMessage => ({
+        role: m.role,
+        content: m.content,
+        ...(m.lang === 'en' || m.lang === 'id' ? { lang: m.lang } : {}),
+        ...(m.cut === 'stopped' || m.cut === 'failed' || m.cut === 'limit' ? { cut: m.cut } : {}),
+        ...(m.forgotten === true ? { forgotten: true } : {}),
+      }));
   } catch {
     return [];
   }

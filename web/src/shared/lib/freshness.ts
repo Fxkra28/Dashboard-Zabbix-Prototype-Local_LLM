@@ -11,6 +11,7 @@
  *   - `GET /api/freshness` says when Zabbix last collected a value.
  */
 
+import { serverNow } from './clock';
 import { dayInZone, formatClockLabeled, formatDay } from './time';
 
 /** How old a refreshing copy must be before a page says so: younger, it is no older than Zabbix's own data. */
@@ -20,7 +21,7 @@ export const REFRESHING_NOTICE_AFTER_S = 120;
 const copies = new WeakMap<object, { asOf: number | null; refreshing: boolean }>();
 
 /** Called by the API layer for every JSON reply. Does nothing unless the reply says it is an old copy. */
-export function noteStaleCopy(body: unknown, headers: Headers, receivedAt = Date.now()): void {
+export function noteStaleCopy(body: unknown, headers: Headers, receivedAt = serverNow()): void {
   if (typeof body !== 'object' || body === null) return;
   const failed = headers.get('X-Data-Stale') === 'true';
   const refreshing = !failed && headers.get('X-Data-Refreshing') === 'true';
@@ -56,12 +57,12 @@ export function ageWords(seconds: number): string {
 }
 
 /** A moment as the clock time on its own for today, with the date in front of it for another day: the report zone's, ending in its name. */
-export function momentWords(ms: number, now = Date.now()): string {
+export function momentWords(ms: number, now = serverNow()): string {
   const time = formatClockLabeled(ms);
   return dayInZone(ms) === dayInZone(now) ? time : `${formatDay(ms)} ${time}`;
 }
 
 /** When an old copy was made, as the notice words it: "from 08:48 (1 h 12 min ago)", or '' when that is not known. */
-export function staleWhen(asOf: number | null, now = Date.now()): string {
+export function staleWhen(asOf: number | null, now = serverNow()): string {
   return asOf === null ? '' : `from ${momentWords(asOf, now)} (${ageWords((now - asOf) / 1000)} ago)`;
 }

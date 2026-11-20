@@ -11,7 +11,8 @@ export const shellApi = {
   // session has left, which times its renewal (useSessionRenewal).
   me: () =>
     request<Me>('/api/auth/me', { guard: meGuard }).then((m) => {
-      recordSession(m.expiresIn, m.user);
+      // The BFF answers with what is left of the session, not with its whole life.
+      recordSession(m.expiresIn, m.user, 'left');
       return m;
     }),
 };

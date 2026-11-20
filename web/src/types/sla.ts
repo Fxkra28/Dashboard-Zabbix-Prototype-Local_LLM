@@ -104,6 +104,13 @@ export interface SliWeb {
   dataStatus: DataStatus;
 }
 
+/** The hours of the day a window was restricted to: from `start` to `end`, through midnight when `end` is not after `start`, on the days of the week named (Monday 1 to Sunday 7) or on every day. */
+export interface DailyHours {
+  start: number;
+  end: number;
+  weekdays: number[] | null;
+}
+
 export interface SliReport {
   source: 'derived';
   label: string;
@@ -115,6 +122,8 @@ export interface SliReport {
   closed: boolean;
   timezone: string;
   target: number;
+  /** Present when only these hours of the day were measured, with the seconds of the window they keep. */
+  dailyHours?: DailyHours & { seconds: number };
   basis: {
     triggers: string[];
     gapPolicy: 'counted-as-up' | 'excluded';
@@ -237,7 +246,19 @@ export interface DeletedRecipients {
   removed: number;
 }
 
-/** What POST /api/sli/email takes besides the month. */
+/**
+ * A range of days for the files and the email (FR-60): the two times and the hours of the day that count, as the SLA page sends them to /api/sli, and `words`, which a
+ * button's name, a dialog's title and the line after a send use for it.
+ */
+export interface ReportRange {
+  from: number;
+  to: number;
+  dayHours?: string;
+  days?: string;
+  words: string;
+}
+
+/** What POST /api/sli/email takes besides the month, or the range. */
 export interface EmailRequest {
   formats: ReportFileFormat[];
   to?: string[];
@@ -249,7 +270,10 @@ export interface EmailRequest {
 export interface EmailSent {
   sent: number;
   refused: number;
-  month: string;
+  /** The month the report was for, or null for a range, which then has its two times. */
+  month: string | null;
+  from?: number;
+  to?: number;
   files: { format: ReportFileFormat; fileName: string; bytes: number }[];
   /** Whether the list was saved. */
   remembered: boolean;

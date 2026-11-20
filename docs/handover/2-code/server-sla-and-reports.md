@@ -2,7 +2,7 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Developers | about 55 min | [Server: network and capacity](server-network-and-capacity.md) | [Server: live and assistant](server-live-and-assistant.md) |
+| Developers | about 75 min | [Server: network and capacity](server-network-and-capacity.md) | [Server: live and assistant](server-live-and-assistant.md) |
 
 An SLA figure says what share of the time a device was up. HCML's Zabbix has no services configured, so Zabbix's own SLA engine has nothing to measure. The portal measures it instead, from the ICMP availability triggers that every device already carries, and calls the result the derived SLA. It is read-only and creates nothing in Zabbix. The engine is in `server/src/sli/`. The reports that sit on it, and the ones that read incident history, are in `server/src/services/`.
 
@@ -70,7 +70,7 @@ export function intersectIntervals(a: Interval[], b: Interval[]): Interval[] {
 <!-- /gen -->
 
 <!-- gen:snippet server/src/sli/intervals.ts#complementIntervals sha=b1f97cb25f7f -->
-`server/src/sli/intervals.ts:61-70`
+`server/src/sli/intervals.ts:76-85`
 
 ```ts
 export function complementIntervals(holes: Interval[], from: number, to: number): Interval[] {
@@ -98,7 +98,7 @@ Tests: `sli-engine.test.ts`.
 `server/src/sli/time.ts`. Cuts a calendar month in a named time zone.
 
 <!-- gen:snippet server/src/sli/time.ts#zonedDayStart sha=6dcb107f8536 -->
-`server/src/sli/time.ts:43-45`
+`server/src/sli/time.ts:48-50`
 
 ```ts
 export function zonedDayStart(year: number, month: number, day: number, tz: string): number {
@@ -108,7 +108,7 @@ export function zonedDayStart(year: number, month: number, day: number, tz: stri
 <!-- /gen -->
 
 <!-- gen:snippet server/src/sli/time.ts#monthBounds sha=838a5fe7b6b8 -->
-`server/src/sli/time.ts:81-87`
+`server/src/sli/time.ts:86-92`
 
 ```ts
 export function monthBounds(month: string, tz: string): { from: number; to: number } {
@@ -248,10 +248,10 @@ Tests: `sli-engine.test.ts`.
 
 ### initialState and intervalsFor
 
-`server/src/sli/engine.ts`. Replay one trigger's history across the window.
+`server/src/sli/model.ts`. Replay one trigger's history across the window.
 
-<!-- gen:snippet server/src/sli/engine.ts#initialState sha=8b2b87698a8c -->
-`server/src/sli/engine.ts:208-218`
+<!-- gen:snippet server/src/sli/model.ts#initialState sha=8b2b87698a8c -->
+`server/src/sli/model.ts:176-186`
 
 ```ts
 export function initialState(
@@ -268,8 +268,8 @@ export function initialState(
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/sli/engine.ts#intervalsFor sha=f0b5907906b6 -->
-`server/src/sli/engine.ts:172-195`
+<!-- gen:snippet server/src/sli/model.ts#intervalsFor sha=f0b5907906b6 -->
+`server/src/sli/model.ts:140-163`
 
 ```ts
 export function intervalsFor(
@@ -305,10 +305,10 @@ export function intervalsFor(
 
 ### wasMeasured and coveredFromTrends
 
-`server/src/sli/engine.ts`. Two judgements about data.
+`server/src/sli/model.ts`. Two judgements about data.
 
-<!-- gen:snippet server/src/sli/engine.ts#wasMeasured sha=212711fcefd8 -->
-`server/src/sli/engine.ts:253-256`
+<!-- gen:snippet server/src/sli/model.ts#wasMeasured sha=212711fcefd8 -->
+`server/src/sli/model.ts:213-216`
 
 ```ts
 export function wasMeasured(items: { state?: string; lastclock?: string }[], hostDisabled: boolean): boolean {
@@ -318,8 +318,8 @@ export function wasMeasured(items: { state?: string; lastclock?: string }[], hos
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/sli/engine.ts#coveredFromTrends sha=59962f9b7fce -->
-`server/src/sli/engine.ts:262-271`
+<!-- gen:snippet server/src/sli/model.ts#coveredFromTrends sha=59962f9b7fce -->
+`server/src/sli/model.ts:222-231`
 
 ```ts
 export function coveredFromTrends(
@@ -409,46 +409,29 @@ export async function maintenanceByHost(
 
 Tests: `sli-maintenance.test.ts`.
 
-## The engine: computeSli
+## The engine: two stages
 
-`server/src/sli/engine.ts`. The one function that makes a report. It is 254 lines, so it is quoted in parts.
+`server/src/sli/engine.ts` reads and `server/src/sli/evaluate.ts` works out. A report is made in two stages, so that a range of days or a year is worked out from months that were each read once (ADR 0018).
 
-<!-- gen:snippet server/src/sli/engine.ts#computeSli lines=9-28 sha=ae21acdaf1f8 -->
-`server/src/sli/engine.ts:563-582` (lines 9 to 28 of computeSli)
+1. `readSliData` is the first stage. It talks to Zabbix and returns what was found for one span of time: the triggers and their hosts, the events inside the span, the state each trigger began in, the planned maintenance and, in the strict profile, the hours in which each host collected. It works out no figure.
+2. `evaluateSli` is the second. It takes the data of one span, or of several that follow one another, and works out every figure. It does no input or output, so a test hands it data and checks the seconds.
+3. `computeSli` joins the two for one calendar month. The monthly report, the workbook, the PDF, the CSV and the email all come from it, and a golden test keeps what it returns equal to what the engine returned before the split, to the digit.
+
+### readSliData
+
+`server/src/sli/engine.ts`. The first stage, quoted in parts.
+
+<!-- gen:snippet server/src/sli/engine.ts#readSliData lines=5-18 sha=06dc3ec94ab8 -->
+`server/src/sli/engine.ts:327-340` (lines 5 to 18 of readSliData)
 
 ```ts
-const { from, to } = req.month
-  ? monthBounds(req.month, tz)
-  : { from: req.from as number, to: req.to as number };
-if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
-  throw new BadRequestError('A month (YYYY-MM) or a from/to window is required.');
-}
-checkPeriodStart(from, now);
-
+const { profile, from, to, now } = req;
+const tz = config.sla.timezone;
+const strict = profile === 'availability';
 const end = Math.min(to, now);
-const closed = to <= now;
-const window = end - from;
-// Spans declared not measured (SLA_NO_DATA_WINDOWS) are a gap in both profiles: left out of the strict figure,
-// counted as up in HCML's, as an hour nothing was collected in is.
-const declared = mergeIntervals(clipIntervals(config.sla.noDataWindows, from, end));
-const outsideDeclared = complementIntervals(declared, from, end);
-// HCML's report clips a problem still open at month end to the last second.
-const endClip = !strict && closed ? to - 1 : end;
-const counter: Counter = { calls: 0, events: 0, trendRows: 0 };
 const triggerNames = strict ? config.sla.availabilityTriggers : config.sla.reportTriggers;
 
-```
-<!-- /gen -->
-
-1. A request names a month, or a `from` and a `to`. Anything else, a window that has not started, or one that starts more than 400 days back (Zabbix keeps events for about a year) is a 400 with a plain message. The two refusals are made by `checkPeriodStart` in `server/src/sli/time.ts`, which the email route also calls before it logs in to a mail server.
-2. `end` is the part of the window that has happened, and `closed` says whether the whole window is in the past. A month that has not ended is measured as far as it has gone.
-3. `declared` is the spans from `SLA_NO_DATA_WINDOWS` inside the window, and `outsideDeclared` is the rest. `endClip` is where an open problem is cut off: the last second of a closed month for HCML's profile, and `end` for the strict one.
-4. `triggerNames` is the list of triggers that count, which is the difference between the two profiles.
-
-<!-- gen:snippet server/src/sli/engine.ts#computeSli lines=30-37 sha=ae21acdaf1f8 -->
-`server/src/sli/engine.ts:584-591` (lines 30 to 37 of computeSli)
-
-```ts
+// Every host carrying one of the triggers, including disabled hosts, which
 // HCML's report lists too.
 const triggers = await counted<ZTrigger[]>(counter, 'trigger.get', {
   output: ['triggerid', 'description', 'value', 'lastchange', 'status', 'type'],
@@ -456,19 +439,23 @@ const triggers = await counted<ZTrigger[]>(counter, 'trigger.get', {
   templated: false,
   selectHosts: ['hostid', 'name', 'status'],
 });
-
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/sli/engine.ts#computeSli lines=49-81 sha=ae21acdaf1f8 -->
-`server/src/sli/engine.ts:603-635` (lines 49 to 81 of computeSli)
+1. A span is `from` to `to`, and `end` is the part of it that has happened, so a month still running is read as far as it has gone. The first read finds the triggers by name, on real hosts only (`templated: false`), with their hosts, disabled ones included, which HCML's report lists too. `triggerNames` is the difference between the two profiles.
+
+<!-- gen:snippet server/src/sli/engine.ts#readSliData lines=30-66 sha=06dc3ec94ab8 -->
+`server/src/sli/engine.ts:352-388` (lines 30 to 66 of readSliData)
 
 ```ts
+const [parents, icmpItems, events, maintenance] = await Promise.all([
   hostids.length
-    ? counted<{ hostid: string; parentTemplates?: { name: string }[] }[]>(counter, 'host.get', {
+    ? counted<{ hostid: string; parentTemplates?: { name: string }[]; hostgroups?: ZHostMeta['hostgroups']; tags?: ZHostMeta['tags']; inventory?: ZHostMeta['inventory'] }[]>(counter, 'host.get', {
         hostids,
         output: ['hostid'],
         selectParentTemplates: ['name'],
+        // The site by the four signals of the Sites page, asked in the call that is made anyway (BK-103).
+        ...SITE_SIGNALS,
       })
     : Promise.resolve([]),
   // Every ICMP item of the reported hosts, in both profiles: `measured` needs
@@ -497,101 +484,289 @@ const triggers = await counted<ZTrigger[]>(counter, 'trigger.get', {
   maintenanceByHost(from, end, tz, () => counter.calls++),
 ]);
 counter.calls++;
+counter.events = events.length;
 ```
 <!-- /gen -->
 
-1. The first read finds the triggers by name, on real hosts only (`templated: false`), with their hosts, disabled ones included, which HCML's report lists too.
-2. Then four reads run at the same time: the hosts' parent templates, which give each host its category, every ping item of those hosts, the events of all those triggers in the window, and the maintenance windows. The events go through `fetchEventsSliced`.
-3. A trigger with no events in the window that changed only afterwards needs its first later event to know what state it was in. `firstEventsAfter` searches for it in widening steps, a week, a month, four months and a year, until it is found or reaches now. A trigger set to raise a PROBLEM event on every evaluation whose first event in the window is a PROBLEM may be repeating one that began before the window, so for those triggers only `lastEventsBefore` reads the last event before the window, one `event.get` each, and `initialState` uses it.
-4. In the strict profile, `icmpCoverage` then reads the trends of the ping items and works out, for each host, the hours in which it collected. It fills the last hour or two, which have no trends yet, from raw history, bounded to six hours; when trends stopped being written for longer than that, only the hour in progress is read, so that hour is not counted as no data. It also finds the estate's gaps: hours in which fewer than 10 percent of the items that collected anything collected data. A gap is the estate's, not a host's, so a host is not blamed for an hour nobody collected in.
+2. Then four reads run at the same time: the hosts' parent templates, which give each host its category and, asked for in the same call, its groups, tags and inventory, which give its site the way the Sites page finds it (BK-103), every ping item of those hosts, the events of all those triggers in the span, and the maintenance windows. The events go through `fetchEventsSliced`.
 
-<!-- gen:snippet server/src/sli/engine.ts#computeSli lines=122-153 sha=ae21acdaf1f8 -->
-`server/src/sli/engine.ts:676-707` (lines 122 to 153 of computeSli)
+<!-- gen:snippet server/src/sli/engine.ts#readSliData lines=85-107 sha=06dc3ec94ab8 -->
+`server/src/sli/engine.ts:407-429` (lines 85 to 107 of readSliData)
 
 ```ts
+// Triggers with no events in the window that changed only afterwards need
+// their first later event to know what state they were in during it.
+const quietChangedLater = triggers
+  .filter((t) => !eventsByTrigger.has(t.triggerid) && Number(t.lastchange) >= end)
+  .map((t) => t.triggerid);
+const firstLater = quietChangedLater.length
+  ? await firstEventsAfter(counter, quietChangedLater, end, now)
+  : new Map<string, number>();
+
+// A first PROBLEM in the window can be a repeat for a trigger set to multiple PROBLEM events; the event before the window tells.
+const repeating = triggers
+  .filter((t) => t.type === '1' && eventsByTrigger.get(t.triggerid)?.[0]?.value === 1)
+  .map((t) => t.triggerid);
+const lastBefore = repeating.length ? await lastEventsBefore(counter, repeating, from) : new Map<string, number>();
+
+const icmpByHost = new Map<string, ZIcmpItem[]>();
+for (const i of icmpItems) {
+  const list = icmpByHost.get(i.hostid) ?? [];
+  list.push(i);
+  icmpByHost.set(i.hostid, list);
+}
+
+const coverage = strict ? await readIcmpCoverage(counter, icmpItems, from, end) : undefined;
+```
+<!-- /gen -->
+
+3. A trigger with no events in the span that changed only afterwards needs its first later event to know what state it was in. `firstEventsAfter` searches for it in widening steps, a week, a month, four months and a year, until it is found or reaches now. A trigger set to raise a PROBLEM event on every evaluation whose first event in the span is a PROBLEM may be repeating one that began before the span, so for those triggers only `lastEventsBefore` reads the last event before the span, one `event.get` each, and `initialState` uses it.
+4. In the strict profile, `readIcmpCoverage` reads the trends of the ping items and works out, for each host, the hours in which it collected. It fills the last hour or two, which have no trends yet, from raw history, bounded to six hours; when trends stopped being written for longer than that, only the hour in progress is read, so that hour is not counted as no data.
+
+<!-- gen:snippet server/src/sli/engine.ts#readSliData lines=109-135 sha=06dc3ec94ab8 -->
+`server/src/sli/engine.ts:431-457` (lines 109 to 135 of readSliData)
+
+```ts
+const initial = new Map<string, boolean>();
+for (const t of triggers) {
+  initial.set(t.triggerid, initialState(eventsByTrigger.get(t.triggerid) ?? [], t, end, firstLater.get(t.triggerid), lastBefore.get(t.triggerid)));
+}
+const hosts: SliDataHost[] = [...hostMeta].map(([hostid, meta]) => ({
+  hostid,
+  name: meta.name,
+  status: meta.status,
+  triggerids: meta.triggers.map((t) => t.triggerid),
+  category: categoryByHost.get(hostid) ?? 'Other',
+  site: siteByHost.has(hostid) ? siteByHost.get(hostid)! : siteFromHostName(meta.name),
+  measured: wasMeasured(icmpByHost.get(hostid) ?? [], meta.status === '1'),
+}));
+
+return {
+  profile,
+  from,
+  to,
+  end,
+  readAt: now,
+  hosts,
+  initial,
+  events: eventsByTrigger,
+  maintenance,
+  ...(coverage ? { coverage } : {}),
+  stats: { zabbixCalls: counter.calls, triggers: triggers.length, events: counter.events, trendRows: counter.trendRows },
+};
+```
+<!-- /gen -->
+
+5. `initial` is the state each trigger began the span in, from `initialState`. `hosts` is the roster of the span, with each host's category, its site and whether its ping was ever collected (`wasMeasured`). The site is found by the site tag, the name, the inventory and the host group, in that order, as on the Hosts page (`siteRefOf`, BK-103), and only a host that the read of the parents did not return falls back to its name alone. The events are returned as they came, so that the second stage can replay them from any start it is given, and `stats` count the Zabbix calls.
+6. The estate's gaps are not found here. They depend on the window and on the chosen hours, so the second stage finds them from the hours each host collected.
+
+Tests: `sli-engine.test.ts` for the reads, with Zabbix replaced by a stand-in.
+
+### evaluateSli
+
+`server/src/sli/evaluate.ts`. The second stage, quoted in parts.
+
+<!-- gen:snippet server/src/sli/evaluate.ts#evaluateSli lines=2-27 sha=e4e636693251 -->
+`server/src/sli/evaluate.ts:182-207` (lines 2 to 27 of evaluateSli)
+
+```ts
+if (!datas.length) throw new Error('evaluateSli needs the data of at least one span.');
+for (let i = 1; i < datas.length; i++) {
+  if (datas[i].profile !== datas[0].profile || datas[i].from !== datas[i - 1].to) throw new Error('The spans of data must be of one method and follow one another.');
+}
+const first = datas[0];
+const last = datas[datas.length - 1];
+const { from, to } = q;
+if (from < first.from) throw new Error('The window starts before the data does.');
+
+const strict = first.profile === 'availability';
+const tz = config.sla.timezone;
+const target = config.sla.target;
+const now = last.readAt;
+const end = Math.min(to, last.end);
+const closed = to <= now;
+// Spans declared not measured (SLA_NO_DATA_WINDOWS) are a gap in both methods: left out of the strict figure,
+// counted as up in HCML's, as an hour nothing was collected in is.
+const declared = mergeIntervals(clipIntervals(config.sla.noDataWindows, from, end));
+const outsideDeclared = complementIntervals(declared, from, end);
+// HCML's report clips a problem still open at month end to the last second.
+const endClip = !strict && closed ? to - 1 : end;
+// What counts: the whole window, or the daily hours inside it.
+const spans = q.hours ? dailySpans(q.hours, from, end, tz) : null;
+// The same spans, merged once, for the many outages that are asked whether they touch one.
+const mergedSpans = spans ? mergeIntervals(spans) : null;
+const domain: Interval[] = spans ?? mergeIntervals([[from, end]]);
+```
+<!-- /gen -->
+
+1. The spans of data must be of one method and follow one another, and the window must not start before the first of them. `end` is the window's end, or where the newest data ends if that is earlier, and `closed` says whether the whole window is in the past. A window that has not ended is measured as far as it has gone.
+2. `declared` is the spans from `SLA_NO_DATA_WINDOWS` inside the window, and `outsideDeclared` is the rest. `endClip` is where an open problem is cut off: the last second of a closed window for HCML's profile, and `end` for the strict one. HCML's report clips a month at its last second, so a range in that profile can differ from the sum of its months by a second for each month end that an outage crosses (ADR 0018).
+3. `spans` is the daily hours inside the window, from `dailySpans`, and `domain` is what counts: those spans, or the whole window. `window` is the seconds of the domain.
+4. `triggerNames` is the list of triggers that count, which is the difference between the two profiles.
+
+<!-- gen:snippet server/src/sli/evaluate.ts#evaluateSli lines=29-45 sha=e4e636693251 -->
+`server/src/sli/evaluate.ts:209-225` (lines 29 to 45 of evaluateSli)
+
+```ts
+const triggerNames = strict ? config.sla.availabilityTriggers : config.sla.reportTriggers;
+
+const roster = new Map<string, SliDataHost>();
+for (const d of datas) {
+  for (const h of d.hosts) {
+    const before = roster.get(h.hostid);
+    roster.set(h.hostid, before ? { ...h, triggerids: [...new Set([...before.triggerids, ...h.triggerids])] } : h);
+  }
+}
+const eventsOf = (triggerid: string): TriggerEvent[] => (datas.length === 1 ? (first.events.get(triggerid) ?? []) : datas.flatMap((d) => d.events.get(triggerid) ?? []));
+/** The state when the window opens: the state when the first span did, then the events between. */
+const stateAtFrom = (triggerid: string, events: TriggerEvent[]): boolean => {
+  let state = first.initial.get(triggerid) ?? false;
+  for (const e of events) {
+    if (e.clock >= from) break;
+    state = e.value === 1;
+  }
+```
+<!-- /gen -->
+
+5. The roster is the hosts of every span, one row each, with the triggers of all the spans joined. `eventsOf` joins a trigger's events across the spans. `stateAtFrom` is the state the trigger was in when the window opened: the state its first span began in, moved by every event before `from`. An outage that crosses from one month into the next is therefore one outage, replayed once and counted once.
+
+<!-- gen:snippet server/src/sli/evaluate.ts#evaluateSli lines=47-59 sha=e4e636693251 -->
+`server/src/sli/evaluate.ts:227-239` (lines 47 to 59 of evaluateSli)
+
+```ts
+};
+
+// The hours in which each host collected, left to the window, its declared spans and its hours.
+let coverageByHost: Map<string, Interval[]> | undefined;
+if (strict) {
+  const raw = new Map<string, Interval[]>();
+  for (const d of datas) for (const [hostid, iv] of d.coverage ?? []) raw.set(hostid, [...(raw.get(hostid) ?? []), ...iv]);
+  const counted = intersectIntervals(outsideDeclared, domain);
+  coverageByHost = new Map([...raw].map(([hostid, iv]) => [hostid, intersectIntervals(iv, counted)]));
+}
+const gaps = strict ? intersectIntervals(mergeIntervals(estateGaps([...coverageByHost!.values()], domain, from, end)), outsideDeclared) : [];
+// "Partial" is judged against the time the estate as a whole was collecting:
+// an hour nobody collected in is the estate's gap, not this host's.
+```
+<!-- /gen -->
+
+6. In the strict profile, the hours each host collected are joined across the spans and cut to the window, the declared spans and the daily hours. `estateGaps` finds the estate's gaps, the hours in which fewer than a tenth of the hosts that collected anything collected data. A gap is the estate's, not a host's, so a host is not blamed for an hour nobody collected in. `estateSeconds` is the window less those gaps and the declared spans, and "partial" is judged against it.
+
+<!-- gen:snippet server/src/sli/evaluate.ts#evaluateSli lines=61-117 sha=e4e636693251 -->
+`server/src/sli/evaluate.ts:241-297` (lines 61 to 117 of evaluateSli)
+
+```ts
+const estateSeconds = Math.max(0, window - gapSeconds);
 
 const hosts: SliHost[] = [];
 const downByHost = new Map<string, Interval[]>();
 const coveredByHost = new Map<string, Interval[]>();
-for (const [hostid, meta] of hostMeta) {
+for (const [hostid, meta] of roster) {
   const all: Interval[] = [];
   let incidents = 0;
-  for (const t of meta.triggers) {
-    const evs = eventsByTrigger.get(t.triggerid) ?? [];
-    const initial = initialState(evs, t, end, firstLater.get(t.triggerid), lastBefore.get(t.triggerid));
-    const r = intervalsFor(evs, initial, from, endClip);
+  for (const triggerid of meta.triggerids) {
+    const events = eventsOf(triggerid);
+    const inWindow = events.filter((e) => e.clock >= from && e.clock < end);
+    const r = intervalsFor(inWindow, stateAtFrom(triggerid, events), from, endClip);
     all.push(...r.intervals);
-    incidents += r.incidents;
+    // HCML's method has one trigger, whose count is HCML's own. An outage counts when any part of it lies inside the chosen hours.
+    if (!strict) incidents += mergedSpans ? r.intervals.filter(([s, e]) => touchesAny(mergedSpans, s, e)).length : r.incidents;
   }
   const merged = mergeIntervals(all);
-  const category = categoryByHost.get(hostid) ?? 'Other';
+  // The strict method has two triggers, and an outage that passes through partial loss into total loss fires both: its incidents are the outages of the merged stretches, which are what the downtime and the longest outage
+  // use, and not one for each trigger (BK-82).
+  if (strict) incidents = mergedSpans ? merged.filter(([s, e]) => touchesAny(mergedSpans, s, e)).length : merged.length;
 
   // Planned maintenance leaves the measurement entirely, as a no-data hour
-  // does in the strict profile: neither down nor counted in the total.
-  const planned = clipIntervals(maintenance.get(hostid) ?? [], from, end);
-  const plannedSec = totalSeconds(planned);
-  const outsidePlanned = complementIntervals(planned, from, end);
+  // does in the strict method: neither down nor counted in the total.
+  const planned = clipIntervals(datas.flatMap((d) => d.maintenance.get(hostid) ?? []), from, end);
+  const plannedSec = totalSeconds(intersectIntervals(planned, domain));
+  const outsidePlanned = intersectIntervals(domain, complementIntervals(planned, from, end));
   const measurable = window - plannedSec;
 
-  let covered: Interval[];
-  if (strict) covered = intersectIntervals(coverage!.byHost.get(hostid) ?? [], outsidePlanned);
-  else covered = outsidePlanned;
+  const covered = strict ? intersectIntervals(coverageByHost!.get(hostid) ?? [], outsidePlanned) : outsidePlanned;
   const measured = intersectIntervals(intersectIntervals(merged, covered), outsideDeclared);
   const downtime = totalSeconds(measured);
   const coveredSec = totalSeconds(covered);
   const cov = measurable > 0 ? coveredSec / measurable : 0;
   const nodata = strict && (coveredSec === 0 || cov < config.sla.minCoverage);
+  const denominator = strict ? coveredSec : measurable;
+  const sli = nodata || denominator <= 0 ? null : Math.max(0, 100 * (1 - downtime / denominator));
+
+  downByHost.set(hostid, measured);
+  coveredByHost.set(hostid, covered);
+  const dataStatus: DataStatus = nodata ? 'nodata' : strict && coveredSec < 0.95 * Math.max(0, estateSeconds - plannedSec) ? 'partial' : 'ok';
+  hosts.push({
+    hostid,
+    name: meta.name,
+    hostStatus: meta.status,
+    site: meta.site,
+    category: meta.category,
+    deviceClass: deviceClass(meta.name, meta.category),
+    triggerids: meta.triggerids,
+    sli,
+    downtime,
+    window,
+    covered: coveredSec,
+    maintenance: plannedSec,
+    coverage: cov,
+    incidents,
+    longest: measured.reduce((m, [s, e]) => Math.max(m, e - s), 0),
+    dataStatus,
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/sli/engine.ts#computeSli lines=154-178 sha=ae21acdaf1f8 -->
-`server/src/sli/engine.ts:708-732` (lines 154 to 178 of computeSli)
+7. This is the loop over the hosts. For each trigger of a host it takes the state at the start, replays the events inside the window, and collects the down intervals. They are merged, so a host with two triggers in problem together is counted once. With daily hours, an outage counts as an incident when any part of it lies inside the chosen hours (`touchesAny`, one pass over the merged spans, BK-79). In the strict method the incidents are the merged stretches, so an outage that passes from partial into total loss and fires both triggers is one incident and not two (BK-82).
+8. `planned` is the host's maintenance inside the window, `plannedSec` its seconds inside the domain, and `measurable` is the domain less that. In the strict profile `covered` is the hours the host collected, less the maintenance. In HCML's profile it is everything inside the domain and outside the maintenance, since a missing hour counts as up.
+9. `measured` is the down intervals that fall inside `covered` and outside the declared spans. `downtime` is its seconds. The denominator is `covered` for the strict profile and `measurable` for HCML's.
+10. The figure is `100 * (1 - downtime / denominator)`, never below zero. It is null, with no figure, when the strict profile has no covered time or less than `SLI_MIN_COVERAGE` (half) of the measurable time, or when the denominator is zero.
+11. The row carries the figure and its reasons: the downtime, the window, the covered seconds, the maintenance seconds, the coverage, the incidents, the longest outage, and a `dataStatus` of `ok`, `partial` (the host collected less than 95 percent of what the estate did) or `nodata`. `meeting` compares the figure with the target, and `errorBudget` is the seconds of downtime the target still allows, which is negative when it is missed.
+
+After the loop the hosts are sorted, with the missing figures last and the worst first, and grouped by category, by the site that the first stage found for each host and by device class with `aggregate`, which takes the plain mean of the hosts that have a figure, as HCML's own reports do for every total. `buildWanPaths` follows, and the result is an `SliEvaluation`. `computeSli` adds the web checks of the strict profile and the `stats` that count the Zabbix calls, the events and the milliseconds.
+
+Tests: `sli-engine.test.ts` and `sli-window.test.ts` for the arithmetic, `sli-golden.test.ts` for the proof that the split moved no figure, and `sli-cache.test.ts` for the cache around it.
+
+### dailySpans and the checks of a window
+
+`server/src/sli/window.ts`. What a request may ask for beyond a calendar month, checked before anything is read from Zabbix, so that a window nobody can answer costs nothing.
+
+<!-- gen:snippet server/src/sli/window.ts#dailySpans sha=8ded880f8b70 -->
+`server/src/sli/window.ts:56-72`
 
 ```ts
-const denominator = strict ? coveredSec : measurable;
-const sli = nodata || denominator <= 0 ? null : Math.max(0, 100 * (1 - downtime / denominator));
-
-downByHost.set(hostid, measured);
-coveredByHost.set(hostid, covered);
-hosts.push({
-  hostid,
-  name: meta.name,
-  hostStatus: meta.status,
-  site: siteFromHostName(meta.name),
-  category,
-  deviceClass: deviceClass(meta.name, category),
-  triggerids: meta.triggers.map((t) => t.triggerid),
-  sli,
-  downtime,
-  window,
-  covered: coveredSec,
-  maintenance: plannedSec,
-  coverage: cov,
-  incidents,
-  longest: measured.reduce((m, [s, e]) => Math.max(m, e - s), 0),
-  dataStatus: nodata
-    ? 'nodata'
-    : strict && coveredSec < 0.95 * Math.max(0, estateSeconds - plannedSec)
-      ? 'partial'
+export function dailySpans(hours: DailyHours, from: number, end: number, tz: string): Interval[] {
+  if (end <= from) return [];
+  const first = zonedDate(from, tz);
+  const out: Interval[] = [];
+  // From the day before, so that a span begun then and still running at `from` is kept; 400 days is more than any window.
+  for (let i = -1; i < 400; i++) {
+    const day = new Date(Date.UTC(first.year, first.month - 1, first.day + i));
+    const [year, month, date] = [day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate()];
+    if (zonedTime(year, month, date, 0, 0, tz) >= end) break;
+    const weekday = day.getUTCDay() === 0 ? 7 : day.getUTCDay();
+    if (hours.weekdays && !hours.weekdays.includes(weekday)) continue;
+    const start = zonedTime(year, month, date, hours.start, 0, tz);
+    const stop = hours.end > hours.start ? zonedTime(year, month, date, hours.end, 0, tz) : zonedTime(year, month, date + 1, hours.end, 0, tz);
+    out.push([start, stop]);
+  }
+  return mergeIntervals(clipIntervals(out, from, end));
+}
 ```
 <!-- /gen -->
 
-1. This is the loop over the hosts. For each trigger of a host it takes the initial state, replays the events, and collects the down intervals. They are merged, so a host with two triggers in problem together is counted once.
-2. `planned` is the host's maintenance inside the window. `measurable` is the window less that. In the strict profile `covered` is the hours the host collected, less the maintenance. In HCML's profile it is everything outside the maintenance, since a missing hour counts as up.
-3. `measured` is the down intervals that fall inside `covered` and outside the declared spans. `downtime` is its seconds. The denominator is `covered` for the strict profile and `measurable` for HCML's.
-4. The figure is `100 * (1 - downtime / denominator)`, never below zero. It is null, with no figure, when the strict profile has no covered time or less than `SLI_MIN_COVERAGE` (half) of the measurable time, or when the denominator is zero.
-5. The row carries the figure and its reasons: the downtime, the window, the covered seconds, the maintenance seconds, the coverage, the incidents, the longest outage, and a `dataStatus` of `ok`, `partial` (the host collected less than 95 percent of what the estate did) or `nodata`. `meeting` compares the figure with the target, and `errorBudget` is the seconds of downtime the target still allows, which is negative when it is missed.
+1. `checkWindow` refuses a start or an end that is not a whole hour in the report zone, a window that runs backwards, one longer than 366 days (`MAX_WINDOW_DAYS`) and one that starts more than 400 days back, where Zabbix no longer keeps events.
+2. `parseDailyHours` reads `dayHours` (`8-17`, or `22-6` to run through midnight; the start from 0 to 23, the end from 0 to 24) and `days` (Monday is 1 and Sunday is 7). A choice that keeps every hour of every day is read as no choice, so "all day, every day" is the plain window's figure.
+3. `dailySpans` turns the choice into the concrete spans of the window, in the hours of the report zone (`SLA_TIMEZONE`). A span that runs past midnight belongs to the day it starts on. The count starts from the day before the window, so that a span begun then and still running when the window opens is kept.
+4. `monthsTouched` lists the calendar months a window touches, which is what `getWindowSli` reads.
 
-After the loop the hosts are sorted, with the missing figures last and the worst first, and grouped by category, by site and by device class with `aggregate`, which takes the plain mean of the hosts that have a figure, as HCML's own reports do for every total. `buildWanPaths` and, in the strict profile, `webScenarios` follow, and the result is the `SliReport` with `stats` that count the Zabbix calls, the events and the milliseconds.
-
-Tests: `sli-engine.test.ts` for the arithmetic, and `sli-cache.test.ts` for the cache around it.
+Tests: `sli-window.test.ts`.
 
 ### buildWanPaths
 
-`server/src/sli/engine.ts`. Pairs the legs of a redundant WAN path.
+`server/src/sli/evaluate.ts`. Pairs the legs of a redundant WAN path.
 
-<!-- gen:snippet server/src/sli/engine.ts#buildWanPaths sha=f10664c15cd0 -->
-`server/src/sli/engine.ts:832-876`
+<!-- gen:snippet server/src/sli/evaluate.ts#buildWanPaths sha=f184d7f8cfe4 -->
+`server/src/sli/evaluate.ts:130-175`
 
 ```ts
 function buildWanPaths(
@@ -620,7 +795,8 @@ function buildWanPaths(
       covered = intersectIntervals(covered, coveredByHost.get(leg.hostid) ?? []);
       down = intersectIntervals(down, downByHost.get(leg.hostid) ?? []);
     }
-    const coveredSec = strict ? totalSeconds(covered) : window;
+    // What the legs measured together: in HCML's method too, the window less the time both were in planned maintenance, as each leg's own figure is (BK-81).
+    const coveredSec = totalSeconds(covered);
     const downtime = totalSeconds(down);
     const coverage = window > 0 ? Math.min(1, coveredSec / window) : 0;
     const sli = nodata || coveredSec <= 0 ? null : Math.max(0, 100 * (1 - downtime / coveredSec));
@@ -643,7 +819,7 @@ function buildWanPaths(
 <!-- /gen -->
 
 1. `INET : SAMPANG WAN 1` and `WAN 2` are two legs of one path, found by `wanPairKey` from the host names.
-2. A path is down only while every leg is down. The code takes the intersection of every leg's down intervals, and the intersection of what every leg covered. That is what a redundant pair is for, and the downtime of a path is therefore never more than the downtime of its best leg.
+2. A path is down only while every leg is down. The code takes the intersection of every leg's down intervals, and the intersection of what every leg covered. That is what a redundant pair is for, and the downtime of a path is therefore never more than the downtime of its best leg. What the legs measured together is the window less the time both were in planned maintenance, in HCML's method too, as each leg's own figure is (BK-81).
 3. A path has no figure when any of its legs has none.
 
 ## The derived service tree
@@ -721,12 +897,12 @@ Tests: `api-hygiene.test.ts` checks its shape against the API description.
 
 ## Caching and the file export
 
-### getMonthlySli
+### getMonthlySli, getMonthData and getWindowSli
 
 `server/src/services/sli.ts`. The one place a report is asked for, so that every caller shares it.
 
-<!-- gen:snippet server/src/services/sli.ts#getMonthlySli sha=0aa68f4f09a2 -->
-`server/src/services/sli.ts:36-55`
+<!-- gen:snippet server/src/services/sli.ts#getMonthlySli sha=c4abc7a13a78 -->
+`server/src/services/sli.ts:53-70`
 
 ```ts
 export function getMonthlySli(month: string, profile: SliProfile, signal?: AbortSignal): Promise<SliReport> {
@@ -734,9 +910,7 @@ export function getMonthlySli(month: string, profile: SliProfile, signal?: Abort
   const now = Math.floor(Date.now() / 1000);
   // Before the gate: a month nobody can report is refused at once, and does not wait for a place behind cold months (BK-50).
   checkPeriodStart(from, now);
-  // Three phases, each with its own key: a report computed while the month was still running, or in the minutes after it
-  // ended while Zabbix still gets its last values (the monthly send waits as long), must not be kept for a day as the final figure.
-  const phase = to + SETTLE_SECONDS <= now ? 'closed' : to <= now ? 'settling' : 'open';
+  const phase = phaseOf(to, now);
   const closed = phase === 'closed';
   const ttl = closed ? 86_400_000 : 300_000;
   const key = `derived-sli:${profile}:${month}:${phase}`;
@@ -754,12 +928,94 @@ export function getMonthlySli(month: string, profile: SliProfile, signal?: Abort
 
 1. A closed month stops moving once Zabbix has had ten minutes (`SETTLE_SECONDS`) for its last values, with two exceptions: an edited maintenance period changes past months, and the readings behind the web checks age out (the engine's own floor is 31 days, `historyFloor`). The web check figures are the exception to that, and are kept (below). So its report is kept a day, not for ever, and pinned, which keeps a run of graph keys from pushing it out of the cache. The current month moves, and so do the ten minutes after it, so those are kept five minutes. A report that is not cached is computed behind `sliReads`, a gate of two (`SLI_AT_ONCE`), so that a caller who asks for every month of both profiles at once starts two reads and the rest wait (BK-50); a cached report does not wait, and two callers for one key still share one computation. A caller whose reader leaves while the read waits for a place drops it from the line, unless another caller still waits for the same month (BK-59). The report file passes its reader's signal to both of its reads, and the service tree passes the signal of its own fetch, which fires only when every reader of the tree has gone, since the tree is cached for all of them (BK-77).
 2. For as long again after that, the old report is answered at once while a new one is computed in the background, and if the new one fails the old one is served. A report takes seconds to compute, so nobody should wait for it twice.
-3. The key holds the phase as well as the month: `open`, `settling` (the month has ended and Zabbix is still getting its last values, which the monthly send waits for) or `closed`. A report computed in the first two must not be kept for a day as that month's final figure.
-4. A month that cannot be reported, one that has not started or is older than about a year, is refused with a 400 before the gate (`checkPeriodStart`), so it never waits for a place behind cold months. `forgetMonthlySli` drops what is kept for a month, in both methods and every phase, and the email path calls it when a report came back empty, so the next try reads Zabbix again (BK-51).
+3. The key holds the phase as well as the month: `open`, `settling` (the month has ended and Zabbix is still getting its last values, which the monthly send waits for) or `closed`. `phaseOf` works it out, and the two month readers below use it too. A report computed in the first two must not be kept for a day as that month's final figure.
+4. A month that cannot be reported, one that has not started or is older than about a year, is refused with a 400 before the gate (`checkPeriodStart`), so it never waits for a place behind cold months. `forgetMonthlySli` drops what is kept for a month, the report and the data under it, in both methods and every phase, and the email path calls it when a report came back empty, so the next try reads Zabbix again (BK-51).
 5. `parseProfile` in the same file turns the `profile` query value into a profile, or the default, or a 400.
 6. The report of a closed month passes through `freezeWeb` before it is cached, and only then: the web check figures of the strict method are kept and given back, with `webTakenAt` (ADR-0016, BK-60).
 
-Tests: `sli-cache.test.ts` and `sla-summary.test.ts`.
+<!-- gen:snippet server/src/services/sli.ts#getMonthData sha=a50c445a10e7 -->
+`server/src/services/sli.ts:73-83`
+
+```ts
+export function getMonthData(month: string, profile: SliProfile, signal?: AbortSignal, maxAgeMs?: number): Promise<SliData> {
+  const { from, to } = monthBounds(month, config.sla.timezone);
+  const now = Math.floor(Date.now() / 1000);
+  checkPeriodStart(from, now);
+  const phase = phaseOf(to, now);
+  const closed = phase === 'closed';
+  const ttl = closed ? 86_400_000 : 300_000;
+  const key = `sli-data:${profile}:${month}:${phase}`;
+  const read = () => readSliData({ profile, from, to, now: Math.floor(Date.now() / 1000) });
+  return cached(key, ttl, (f) => sliReads.run(read, f), { staleMs: ttl, staleIfError: true, pin: closed, signal, weigh: (d) => sliDataBytes(d as SliData), ...(maxAgeMs === undefined ? {} : { maxAgeMs }) });
+}
+```
+<!-- /gen -->
+
+<!-- gen:snippet server/src/services/sli.ts#getWindowSli sha=4200b9866f89 -->
+`server/src/services/sli.ts:100-152`
+
+```ts
+export async function getWindowSli(req: WindowRequest): Promise<SliReport> {
+  const started = Date.now();
+  const now = Math.floor(started / 1000);
+  const tz = config.sla.timezone;
+  checkWindow(req.from, req.to, now, tz);
+  const end = Math.min(req.to, now);
+  if (req.hours && totalSeconds(dailySpans(req.hours, req.from, end, tz)) === 0) {
+    throw new BadRequestError('No hour of this range falls inside the daily hours you chose.');
+  }
+
+  const months = monthsTouched(req.from, end, tz);
+  const datas = await Promise.all(months.map((m) => getMonthData(m, req.profile, req.signal)));
+  // What the newest data measures of the window: with daily hours, the seconds of those hours that it reaches. Nothing means a window of minus some seconds, or of none, and No data for every device, with a 200.
+  const newest = datas.length - 1;
+  const measured = (readEnd: number) => {
+    const to = Math.min(req.to, readEnd);
+    return to <= req.from ? 0 : req.hours ? totalSeconds(dailySpans(req.hours, req.from, to, tz)) : to - req.from;
+  };
+  // The newest data was read before the window began, or before its first hour of the day (a Day that is today asked just after midnight, a range from the top of the hour, while the month's data is kept
+  // for minutes). The month is read again, now, whatever the age of the copy: it may have been stored after the window began by a read that started before it (BK-80).
+  if (measured(datas[newest].end) === 0) datas[newest] = await getMonthData(months[newest], req.profile, req.signal, 0);
+  if (measured(datas[newest].end) === 0) {
+    throw new DataNotReadYetError('There is nothing to measure yet: the range begins at this moment and no reading is newer than it. Try again in a minute.');
+  }
+  const readAt = Math.max(...datas.map((d) => d.readAt));
+  // What one window, read from the same data, evaluates to: kept for a short time under the choices and the newest read, so the page's two methods, its refresh, a file and an email share one.
+  const hoursKey = req.hours ? `${req.hours.start}-${req.hours.end}:${req.hours.weekdays?.join(',') ?? 'all'}` : 'all';
+  const key = `sli-window:${req.profile}:${req.from}:${req.to}:${req.month ?? ''}:${hoursKey}:${readAt}`;
+  return cached(
+    key,
+    WINDOW_REPORT_MS,
+    async () => {
+      const { estateSeconds: _, outsideDeclared: __, ...evaluated } = evaluateSli(datas, { from: req.from, to: req.to, hours: req.hours });
+      const sum = (pick: (d: SliData) => number) => datas.reduce((n, d) => n + pick(d), 0);
+      return {
+        source: 'derived' as const,
+        label: DERIVED_LABEL,
+        ...evaluated,
+        month: req.month ?? null,
+        web: [],
+        stats: {
+          zabbixCalls: sum((d) => d.stats.zabbixCalls),
+          triggers: Math.max(...datas.map((d) => d.stats.triggers)),
+          events: sum((d) => d.stats.events),
+          trendRows: sum((d) => d.stats.trendRows),
+          ms: Date.now() - started,
+        },
+        generatedAt: readAt,
+      };
+    },
+    { typed: true, signal: req.signal },
+  );
+}
+```
+<!-- /gen -->
+
+7. `getMonthData` is the same cache for the first stage alone: what Zabbix said about one calendar month in one method (`SliData`, from `readSliData`), under the key `sli-data:<profile>:<month>:<phase>`, with the same phases, lifetimes, gate (`sliReads`) and pinning of a closed month. It is what a range is built from. It tells the cache how big it is (`weigh`, from `sliDataBytes`, about 45 bytes an event), because the cache's own walk stops counting at about 170,000 events and a month can hold more.
+8. `getWindowSli` answers any window of whole hours (`checkWindow`) from the months it touches (`monthsTouched`). It takes each month's data, each month through the gate, joins them in `evaluateSli` with the chosen daily hours, and returns a report with no web checks, which are monthly. A window with no hour inside the chosen daily hours is a 400, and so is a window that begins, or begins in a month that began, more than 400 days ago (`checkWindow` asks the first month's start too, since a range is read in whole months). A range costs its months, and the choice of hours costs nothing at Zabbix, because the same months serve every choice of hours. The evaluated window is kept for two minutes (`WINDOW_REPORT_MS`) under the choices and the newest read, so the page, its refresh, a file and an email share one evaluation, which costs seconds of the server's one thread; and when the newest month's data measures nothing of the window, because it ends before the window begins or before the first hour of the day that counts, that month is read again whatever the age of its copy (`getMonthData` takes a `maxAgeMs` of 0 for it: a copy stored after the window began may have been read before it, BK-80). If it still measures nothing, for example because Zabbix did not answer and the old copy was served, the answer is a 503 `data_not_read_yet` with a time to wait, and not a 400 about a request that is right.
+9. The month report and the range do not share kept data yet: a month that is asked for as a report and again inside a range is read twice, once for each cache. That is a known cost of ADR 0018 and not a fault.
+
+Tests: `sli-cache.test.ts`, `sla-summary.test.ts` and `sli-range-route.test.ts`.
 
 ### freezeWeb and closedWebStore
 
@@ -772,12 +1028,36 @@ Tests: `sli-cache.test.ts` and `sla-summary.test.ts`.
 
 Tests: `closed-web-store.test.ts`, `closed-web-freeze.test.ts` and `export-sla-report.test.ts`.
 
+### parseAsk, checkAsk and readReport
+
+`server/src/services/sliAsk.ts`. What a caller asks the derived SLA for, in the words of a query (`/api/sli`, `/api/sli/export`) or of a body (`/api/sli/email`): a calendar month, or two whole hours, and the hours of the day that count (ADR 0018).
+
+<!-- gen:snippet server/src/services/sliAsk.ts#readReport sha=369e50488956 -->
+`server/src/services/sliAsk.ts:60-65`
+
+```ts
+export function readReport(ask: SliAsk, profile: SliProfile, signal?: AbortSignal): Promise<SliReport> {
+  if (ask.kind === 'window') return getWindowSli({ from: ask.from, to: ask.to, profile, hours: ask.hours, signal });
+  if (!ask.hours) return getMonthlySli(ask.month, profile, signal);
+  const { from, to } = boundsOfAsk(ask);
+  return getWindowSli({ from, to, profile, hours: ask.hours, month: ask.month, signal });
+}
+```
+<!-- /gen -->
+
+1. `parseAsk` reads the words, text from a query and numbers from a body, into one value: a month, or a window of two times, and the daily hours. A month and a window together are a 400, and no words at all is the current month.
+2. `checkAsk` says the refusals a read would end in, before it starts: a window that is not whole hours, is longer than 366 days or has not begun, a month that has not begun, and hours that keep no hour of the window. The email route calls it before it counts an allowance, so a bad request costs nothing.
+3. `readReport` reads the report. A plain month goes through `getMonthlySli` and has its web checks; anything else, a window or a month with hours, goes through `getWindowSli` and has none. `/api/sli`, the download and the email all read through it, so a file is for the same window as the page it came from.
+4. `askForLog` gives what a log line may say of an ask, only what was validated. `forgetAsk` drops what is kept of the months an ask reads, for a report that came back empty (BK-51).
+
+Tests: `sli-ask.test.ts`, `export-route.test.ts`, `mail-route.test.ts` and `mail-range-empty.test.ts`.
+
 ### fileFor
 
-`server/src/services/sliExport.ts`. The monthly SLA as a PDF or a workbook, from the figures already in the cache.
+`server/src/services/sliExport.ts`. The SLA for a month or a range as a PDF, a workbook or a zip of CSV files, from the figures already in the cache.
 
 <!-- gen:snippet server/src/services/sliExport.ts#fileFor sha=a29445e06c39 -->
-`server/src/services/sliExport.ts:45-56`
+`server/src/services/sliExport.ts:48-59`
 
 ```ts
 export function fileFor(format: Format, strict: SliReport, hcml: SliReport, now: Date, style: ReportStyle = DEFAULT_STYLE): Buffer {
@@ -795,10 +1075,10 @@ export function fileFor(format: Format, strict: SliReport, hcml: SliReport, now:
 ```
 <!-- /gen -->
 
-1. A file holds both methods side by side, so it takes both reports, each through `getMonthlySli`. A report the page has already loaded is not computed again.
+1. A file holds both methods side by side, so it takes both reports, each through `readReport` (a plain month through `getMonthlySli`, a range through `getWindowSli`). A report the page has already loaded is not computed again.
 2. A build costs about 10 ms of CPU, and a burst of requests would run them back to back with the whole server waiting. So a repeat inside `REUSE_MS`, ten seconds, shares the file.
 3. The files are kept in `WeakMap`s keyed on the two report objects themselves. When a report is refreshed it is a new object, so a new file is built, and nothing outlives the reports it came from.
-4. The builders, `buildSlaReportDoc`, `buildPdf`, `buildXlsx` and `buildCsv`, are in `server/src/export/` and have a chapter of their own, the one called Server: export. `FORMATS` also holds each format's type and the end of its file name (`_csv.zip` for the CSV zip), so the route and the email name a file the same way.
+4. The builders, `buildSlaReportDoc`, `buildPdf`, `buildXlsx` and `buildCsv`, are in `server/src/export/` and have a chapter of their own, the one called Server: export. `FORMATS` also holds each format's type and the end of its file name (`_csv.zip` for the CSV zip), so the route and the email name a file the same way. `fileNameFor` names a plain month; `fileNameOf` names any other file from its report's own dates and hours.
 5. The key of a kept file is the format and the style. A PDF or a workbook asked for with the other CSV separator is the same file, so the separator is left out of its key; a CSV has it in.
 
 Tests: `export-route.test.ts`.

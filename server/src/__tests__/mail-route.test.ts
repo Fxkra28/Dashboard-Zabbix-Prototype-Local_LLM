@@ -7,7 +7,7 @@ import { resolveMail } from '../core/mailConfig.js';
 import { memoryState, StateWriteError } from '../core/state.js';
 import { buildSlaReportDoc } from '../export/slaReport.js';
 import { readZip } from './helpers/readZip.js';
-import { sampleSliReports } from './helpers/sliReportFixture.js';
+import { sampleRangeReports, sampleSliReports } from './helpers/sliReportFixture.js';
 
 /**
  * Emailing the SLA report: who may, what is checked before anything is read or sent, what goes out, what each
@@ -34,10 +34,11 @@ vi.mock('../clients/mail.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../clients/mail.js')>()),
   createMailer: vi.fn(() => mailer),
 }));
-const reads = vi.hoisted(() => ({ get: vi.fn() }));
+const reads = vi.hoisted(() => ({ get: vi.fn(), window: vi.fn() }));
 vi.mock('../services/sli.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../services/sli.js')>()),
   getMonthlySli: reads.get,
+  getWindowSli: reads.window,
 }));
 
 const { config } = await import('../core/config.js');
@@ -63,6 +64,12 @@ beforeEach(async () => {
   mailer.verify.mockReset().mockResolvedValue(undefined);
   mailer.send.mockReset().mockResolvedValue({ accepted: 2, refused: 0 });
   reads.get.mockReset().mockImplementation(async (_month: string, profile: string) => (profile === 'hcml-report' ? hcml : strict));
+  // The window service gives the report of the hours it was asked for, with no web checks, as /api/sli does.
+  reads.window.mockReset().mockImplementation(async (req: { profile: string; hours: { start: number; end: number; weekdays: number[] | null } | null; month?: string }) => {
+    const both = sampleRangeReports(req.hours ? { dailyHours: { ...req.hours, seconds: 5 * 9 * 3600 } } : {});
+    const report = req.profile === 'hcml-report' ? both.hcml : both.strict;
+    return req.month ? { ...report, month: req.month, from: strict.from, to: strict.to, end: strict.to } : report;
+  });
   Object.assign(config.mail, configured);
   app = Fastify({ ajv: AJV_OPTIONS, logger: { level: 'info', stream: { write: (chunk: string) => void lines.push(JSON.parse(chunk) as Line) } } });
   registerErrorHandler(app);
@@ -162,6 +169,7 @@ describe('what is checked first', () => {
     ['an empty list of formats', { month: '2026-08', formats: [] }],
     ['a month that is not one', { month: 'nope', formats: ['pdf'] }],
     ['a month in the wrong form', { month: '2026-8', formats: ['pdf'] }],
+    ['an empty month, which a query reads as the current one but a send must not', { month: '', formats: ['pdf'] }],
     ['a format it does not make', { month: '2026-08', formats: ['exe'] }],
     ['one good format and one it does not make', { month: '2026-08', formats: ['pdf', 'exe'] }],
     ['a number for the month', { month: 202608, formats: ['pdf'] }],
@@ -208,7 +216,7 @@ describe('what is checked first', () => {
   });
 
   it('says which fields it takes', async () => {
-    expect((await send({ ...ok, cc: 'x@example.org' })).json().message).toBe('Only month, formats, to, remember and style are accepted.');
+    expect((await send({ ...ok, cc: 'x@example.org' })).json().message).toBe('Only month, window, dayHours, days, formats, to, remember and style are accepted.');
     expect((await send({ ...ok, style: { colour: 'blue' } })).json().message).toBe('Only decimal, date and separator are accepted in style.');
   });
 
@@ -634,10 +642,14 @@ describe('the API description', () => {
   };
   const shapeOf = (method: 'get' | 'post') => spec.paths['/api/sli/email']![method]!.responses['200']!.content!['application/json']!.schema;
 
-  it('names the fields the answer to a send has, and no others', async () => {
-    const body = (await send(ok)).json() as object;
-    expect(Object.keys(body).sort()).toEqual([...shapeOf('post').required].sort());
-    expect(Object.keys(body).sort()).toEqual(Object.keys(shapeOf('post').properties).sort());
+  it('names the fields the answer to a send has, and no others: those of a month, and with the two times for a range', async () => {
+    const shape = shapeOf('post');
+    const month = (await send(ok)).json() as object;
+    expect(Object.keys(month).sort()).toEqual([...shape.required].sort());
+    const window = { from: Date.parse('2026-08-03T00:00:00+07:00') / 1000, to: Date.parse('2026-08-10T00:00:00+07:00') / 1000 };
+    const range = (await send({ window, formats: ['pdf'] })).json() as object;
+    expect(Object.keys(range).sort()).toEqual([...shape.required, 'from', 'to'].sort());
+    expect(Object.keys(shape.properties).sort()).toEqual([...shape.required, 'from', 'to'].sort());
   });
 
   it('names the fields the answer to the screen\u2019s question has, on and off', async () => {
@@ -843,5 +855,128 @@ describe('the ten minutes after a month ends, at their edges (BK-54)', () => {
   it('never delays the month before the one that just ended', async () => {
     later(1);
     expect((await send({ month: '2026-07', formats: ['pdf'] })).statusCode).toBe(200);
+  });
+});
+
+describe('a range of days (FR-60)', () => {
+  const at = (iso: string) => Date.parse(iso) / 1000;
+  const FROM = at('2026-08-03T00:00:00+07:00');
+  const TO = at('2026-08-10T00:00:00+07:00');
+  const range = { window: { from: FROM, to: TO }, formats: ['pdf'] };
+  const OFFICE = { dayHours: '8-17', days: '1,2,3,4,5' };
+
+  it('sends the file for two times, named by their dates, after reading both methods for that window and not the month', async () => {
+    const res = await send(range);
+    expect(res.statusCode).toBe(200);
+    const size = mailer.send.mock.calls[0][0].attachments[0].content.length;
+    expect(res.json()).toEqual({
+      sent: 2,
+      refused: 0,
+      month: null,
+      from: FROM,
+      to: TO,
+      files: [{ format: 'pdf', fileName: 'HCML_SLA_Report_2026-08-03_to_2026-08-09.pdf', bytes: size }],
+      remembered: false,
+    });
+    const mail = mailer.send.mock.calls[0][0];
+    expect(mail.subject).toBe('HCML SLA availability report, 3 Aug 2026 to 9 Aug 2026');
+    expect(mail.attachments[0].content.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(reads.get).not.toHaveBeenCalled();
+    expect(reads.window).toHaveBeenCalledTimes(2);
+    expect(reads.window).toHaveBeenCalledWith(expect.objectContaining({ from: FROM, to: TO, profile: 'availability', hours: null }));
+    expect(reads.window).toHaveBeenCalledWith(expect.objectContaining({ from: FROM, to: TO, profile: 'hcml-report', hours: null }));
+  });
+
+  it('says the hours that were counted in the subject, the body and the file name', async () => {
+    const res = await send({ ...range, ...OFFICE, formats: ['xlsx'] });
+    expect(res.statusCode).toBe(200);
+    const mail = mailer.send.mock.calls[0][0];
+    expect(mail.subject).toBe('HCML SLA availability report, 3 Aug 2026 to 9 Aug 2026, 08:00 to 17:00, Monday to Friday');
+    expect(mail.text).toContain('Counted 08:00 to 17:00, Monday to Friday');
+    expect(mail.attachments[0].filename).toBe('HCML_SLA_Report_2026-08-03_to_2026-08-09_0800-1700_d12345.xlsx');
+    expect(reads.window).toHaveBeenCalledWith(expect.objectContaining({ hours: { start: 8, end: 17, weekdays: [1, 2, 3, 4, 5] } }));
+  });
+
+  it('sends a month in the hours of the day as its own file, which is not the plain month’s', async () => {
+    const res = await send({ month: '2026-08', dayHours: '8-17', formats: ['csv'] });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ month: '2026-08', files: [{ format: 'csv', fileName: 'HCML_SLA_Report_2026-08_0800-1700_csv.zip' }] });
+    expect(reads.get).not.toHaveBeenCalled();
+    expect(reads.window).toHaveBeenCalledWith(expect.objectContaining({ month: '2026-08', hours: { start: 8, end: 17, weekdays: null } }));
+  });
+
+  it('logs the window and the hours, never a month it was not asked for, and keeps the people out of the line', async () => {
+    await send({ ...range, ...OFFICE });
+    expect(emails()).toHaveLength(1);
+    expect(emails()[0]).toMatchObject({ trigger: 'manual', report: 'sla', from: FROM, to: TO, dayHours: '8-17', days: '1,2,3,4,5', outcome: 'sent', recipients: 2, domains: ['example.org'] });
+    expect(emails()[0]).not.toHaveProperty('month');
+    expect(JSON.stringify(lines)).not.toContain('ana@example.org');
+  });
+
+  it('keeps no record in the list of sends, which is the monthly schedule’s book: only the plain month goes in it', async () => {
+    await send(range);
+    await send({ month: '2026-08', dayHours: '8-17', formats: ['pdf'] });
+    expect(portalState().read().mail.sends).toEqual([]);
+    await send({ month: '2026-08', formats: ['pdf'] });
+    expect(portalState().read().mail.sends).toHaveLength(1);
+    expect(portalState().read().mail.sends[0]).toMatchObject({ month: '2026-08', trigger: 'manual', outcome: 'sent' });
+  });
+
+  it('saves the addresses when asked to, for a range as for a month', async () => {
+    const res = await send({ ...range, to: ['cici@example.org'], remember: true });
+    expect(res.json()).toMatchObject({ remembered: true });
+    expect(portalState().read().mail.recipients).toEqual(['cici@example.org']);
+  });
+
+  it('records a failure in the log, with the window, and tells the person what went wrong', async () => {
+    mailer.send.mockRejectedValue(new MailError('connect', 'could not reach the mail server'));
+    const res = await send({ ...range, ...OFFICE });
+    expect(res.statusCode).toBe(502);
+    expect(emails()[0]).toMatchObject({ outcome: 'failed', from: FROM, to: TO, dayHours: '8-17' });
+    expect(portalState().read().mail.sends).toEqual([]);
+  });
+
+  it.each([
+    ['a month and a window together', { month: '2026-08', window: { from: FROM, to: TO }, formats: ['pdf'] }, 'Give a month, or from and to, and not both.'],
+    ['a window with no end', { window: { from: FROM }, formats: ['pdf'] }, 'to must be a time in Unix seconds.'],
+    ['an empty window', { window: {}, formats: ['pdf'] }, 'from must be a time in Unix seconds.'],
+    ['a field of its own in the window', { window: { from: FROM, to: TO, step: 1 }, formats: ['pdf'] }, 'Only from and to are accepted in window.'],
+    ['times written as text', { window: { from: String(FROM), to: String(TO) }, formats: ['pdf'] }, ''],
+    ['a fraction of a second', { window: { from: FROM + 0.5, to: TO }, formats: ['pdf'] }, ''],
+    ['a start that is not a whole hour', { window: { from: FROM + 60, to: TO }, formats: ['pdf'] }, 'from and to must be whole hours.'],
+    ['an end before the start', { window: { from: TO, to: FROM }, formats: ['pdf'] }, 'from must be before to.'],
+    ['a window that has not begun', { window: { from: at('2026-10-01T00:00:00+07:00'), to: at('2026-10-02T00:00:00+07:00') }, formats: ['pdf'] }, 'That period has not started yet.'],
+    ['a window longer than a year', { window: { from: FROM, to: FROM + 367 * 86400 }, formats: ['pdf'] }, 'A range can cover at most'],
+    ['hours that are not hours', { ...range, dayHours: 'eight' }, 'dayHours must be two whole hours'],
+    ['days that are not days', { ...range, days: 'mon' }, 'days must be weekdays from 1 (Monday) to 7 (Sunday)'],
+    ['days that hold none of the window', { window: { from: at('2026-08-01T00:00:00+07:00'), to: at('2026-08-03T00:00:00+07:00') }, formats: ['pdf'], days: '1,2,3,4,5' }, 'No hour of this range falls inside the daily hours you chose.'],
+  ])('refuses %s with a 400, before the mail login is tried or a report is read', async (_what, body, message) => {
+    const res = await send(body);
+    expect(res.statusCode).toBe(400);
+    if (message) expect(res.json().message).toContain(message);
+    expect(mailer.verify).not.toHaveBeenCalled();
+    expect(reads.window).not.toHaveBeenCalled();
+    expect(reads.get).not.toHaveBeenCalled();
+    expect(mailer.send).not.toHaveBeenCalled();
+  });
+
+  it('waits ten minutes after a range ends, as it does for a month, and takes one that is still running', async () => {
+    // Now is 10:00 in Jakarta. A range that ends at 10:00 has ended this moment.
+    const justEnded = { window: { from: at('2026-09-17T08:00:00+07:00'), to: at('2026-09-17T10:00:00+07:00') }, formats: ['pdf'] };
+    const res = await send(justEnded);
+    expect(res.statusCode).toBe(400);
+    expect(res.json().message).toBe('That range ended a moment ago, and Zabbix is still adding its last values. Send it in about 10 minutes.');
+    expect(reads.window).not.toHaveBeenCalled();
+    expect(mailer.send).not.toHaveBeenCalled();
+    vi.setSystemTime(new Date('2026-09-17T03:10:01Z'));
+    expect((await send(justEnded)).statusCode).toBe(200);
+    const running = { window: { from: at('2026-09-17T08:00:00+07:00'), to: at('2026-09-18T00:00:00+07:00') }, formats: ['pdf'] };
+    expect((await send(running)).statusCode).toBe(200);
+  });
+
+  it('is for administrators only, like the month’s', async () => {
+    expect((await send(range, bearer('olu', 'operator'))).statusCode).toBe(403);
+    expect((await send(range, bearer('ana', 'viewer'))).statusCode).toBe(403);
+    expect(mailer.send).not.toHaveBeenCalled();
   });
 });

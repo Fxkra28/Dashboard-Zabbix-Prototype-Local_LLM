@@ -76,10 +76,8 @@
 }
 .meter-title a {
   color: inherit;
-  text-decoration: none;
-}
-.meter-title a:hover {
   text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 /* The title clips what overflows it, so the focus ring sits inside the link and is not cut off. */
 .meter-title a:focus-visible {

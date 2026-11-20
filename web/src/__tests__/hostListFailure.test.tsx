@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { meFor } from './accounts';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { api } from '../api';
@@ -17,7 +18,7 @@ const DOWN = 'The data source is not answering. Tell an administrator and quote 
 
 beforeEach(() => {
   resetAuthProbe();
-  vi.spyOn(api, 'me').mockResolvedValue({ authEnabled: true, user: { name: 'x', role: 'viewer' }, expiresIn: 3600 });
+  vi.spyOn(api, 'me').mockResolvedValue(meFor('viewer'));
   vi.spyOn(api, 'health').mockResolvedValue({} as never);
 });
 afterEach(() => vi.restoreAllMocks());
@@ -104,7 +105,7 @@ describe('Latest data', () => {
 describe('the hint under an error', () => {
   const asRole = (role: 'viewer' | 'admin') => {
     resetAuthProbe();
-    vi.spyOn(api, 'me').mockResolvedValue({ authEnabled: true, user: { name: 'x', role }, expiresIn: 3600 });
+    vi.spyOn(api, 'me').mockResolvedValue(meFor(role));
   };
 
   it('gives the administrator the settings to check, and everyone else nothing the sentence has not said', async () => {
@@ -134,10 +135,10 @@ describe('the hint under an error', () => {
     expect(screen.getByText(/signed in as an operator/)).toBeInTheDocument();
   });
 
-  it('reads the wording for network interface data the same way, and names the wall role as wall screens', async () => {
+  it('names a role it has no plural for as the role itself, which is what a role added later would get', async () => {
     asRole('viewer');
-    render(<ErrorState message={'Network interface data needs the "wall" role; you are signed in as "viewer".'} />);
-    expect(await screen.findByRole('status')).toHaveTextContent('This page is for wall screens');
+    render(<ErrorState message={'This view needs the "auditor" role; you are signed in as "viewer".'} />);
+    expect(await screen.findByRole('status')).toHaveTextContent('This page is for the auditor role');
     expect(screen.getByText(/signed in as a viewer\. Ask the portal admin/)).toBeInTheDocument();
   });
 });

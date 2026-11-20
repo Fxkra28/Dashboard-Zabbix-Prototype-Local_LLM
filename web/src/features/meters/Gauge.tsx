@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { Link } from 'react-router-dom';
+import { PageLink, useCanOpen } from '../../shared/components/PageLink';
 import type { Meter } from '../../types';
 import { DIAL, arcPath, dialPoint, footWords, hasDial, headline, historyLink, otherWords, segments, ticks, valueWords } from './gaugeDial';
 
@@ -12,6 +12,8 @@ export default function Gauge({ meter: m, now }: { meter: Meter; now: number }) 
   const noteId = useId();
   const linkNoteId = useId();
   const history = historyLink(m);
+  // The note about the link is for a link that is there: not for an account that has no Graphs page.
+  const linked = useCanOpen(history ?? '/') && history !== null;
   const dial = hasDial(m);
   const max = m.max ?? 0;
   const segs = dial ? segments(m.zones, m.min, max) : [];
@@ -31,9 +33,9 @@ export default function Gauge({ meter: m, now }: { meter: Meter; now: number }) 
       <div className="meter-head">
         <p className="meter-title" id={titleId} title={where ? `${m.title}\n${where}` : m.title}>
           {history ? (
-            <Link to={history} className="meter-link" aria-describedby={linkNoteId}>
+            <PageLink to={history} className="meter-link" aria-describedby={linkNoteId}>
               {m.title}
-            </Link>
+            </PageLink>
           ) : (
             m.title
           )}
@@ -101,7 +103,7 @@ export default function Gauge({ meter: m, now }: { meter: Meter; now: number }) 
 
       {other && <p className={`meter-other other-${m.other?.zone}`}>{other}</p>}
       <p className="meter-foot">{footWords(m, now)}</p>
-      {history && (
+      {history && linked && (
         <span className="sr-only" id={linkNoteId}>
           Opens the history of this link in Graphs
         </span>

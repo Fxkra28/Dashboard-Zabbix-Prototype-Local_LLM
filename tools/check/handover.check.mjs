@@ -26,7 +26,7 @@
  *
  *   node tools/check/handover.check.mjs [repo root]   (default: two levels up)
  */
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { maskBlocks, splitBlocks } from '../handover/lib/blocks.mjs';
@@ -106,6 +106,17 @@ export function checkStyle(text, { chars = true, words = true } = {}) {
 
 const SAFE_IPV4 = /^(?:127\.0\.0\.1|0\.0\.0\.0|255\.255\.255\.\d+|192\.0\.2\.\d+|198\.51\.100\.\d+|203\.0\.113\.\d+)$/;
 
+const HOME_FOLDER = /\/Users\/\w+|\b[A-Z]:\\Users\\/;
+
+/** The home-folder rule alone, for the setup pages and the tracker, which are public as the handbook is and which carry made-up addresses and package versions the other rules would refuse (DC-79). */
+export function checkHomeFolders(text) {
+  const found = [];
+  text.split('\n').forEach((line, i) => {
+    if (HOME_FOLDER.test(line)) found.push({ line: i + 1, message: 'a home folder path' });
+  });
+  return found;
+}
+
 /** The problems in `text` for the secrets rule: an address, a mailbox, a token, a home folder. */
 export function checkSecrets(text) {
   const found = [];
@@ -118,7 +129,7 @@ export function checkSecrets(text) {
     if (/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/.test(line)) found.push({ line: at, message: 'a bearer token' });
     if (/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/.test(line)) found.push({ line: at, message: 'a JSON web token' });
     if (/\bsk-[A-Za-z0-9_-]{20,}/.test(line) || /\bAKIA[0-9A-Z]{16}\b/.test(line)) found.push({ line: at, message: 'an API key' });
-    if (/\/Users\/\w+|\b[A-Z]:\\Users\\/.test(line)) found.push({ line: at, message: 'a home folder path' });
+    if (HOME_FOLDER.test(line)) found.push({ line: at, message: 'a home folder path' });
     for (const m of line.matchAll(/\b[\w-]+\.hcml\.co\.id\b/gi)) if (!/^(?:zabbix|www)\./i.test(m[0])) found.push({ line: at, message: `an internal host name (${m[0]})` });
   });
   return found;
@@ -435,6 +446,14 @@ export function checkHandbook(root) {
     add(rel, 'purposes', purposeProblems(text));
   }
 
+  // The setup pages and the tracker are public too, and a folder of the owner's account was in two of them (DC-79).
+  const setupDir = join(root, 'docs', 'setup');
+  const publicPages = [
+    ...(existsSync(setupDir) ? readdirSync(setupDir).filter((f) => f.endsWith('.md')).map((f) => join('docs', 'setup', f)) : []),
+    ...(existsSync(join(root, 'tracker.md')) ? ['tracker.md'] : []),
+  ];
+  for (const rel of publicPages) add(rel, 'secrets', checkHomeFolders(readFileSync(join(root, rel), 'utf8')));
+
   if (state.folders === 'complete') {
     add(null, 'folders', folderProblems([...pages].filter(([rel]) => below(rel).startsWith('1-folders/')), root));
     const tables = new Set();
@@ -484,8 +503,11 @@ export function selfTest() {
   expect('a mixed-case token is caught', hits(checkSecrets('key Abc123Def456Ghi789Jkl012Mno345Pqr678Stu')), 1);
   expect('a bearer token is caught', hits(checkSecrets('Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345')), 1);
   expect('a home folder is caught', hits(checkSecrets('see /Users/someone/work')), 1);
+  expect('a home folder is caught by the rule the setup pages and the tracker are held to', hits(checkHomeFolders('cd /Users/someone/work')), 1);
+  expect('a folder written as a placeholder passes that rule', hits(checkHomeFolders('cd <folder that holds both copies>/hcml-portal')), 0);
+  expect('that rule leaves an address alone, which a setup page may use as an example', hits(checkHomeFolders('a stand-in at 198.18.0.20')), 0);
   expect('an internal host is caught', hits(checkSecrets('the box db01.hcml.co.id')), 1);
-  expect('the public Zabbix host is fine', hits(checkSecrets('https://zabbix.hcml.co.id/zabbix')), 0);
+  expect('the public Zabbix host is fine', hits(checkSecrets('https://zabbix.example.com/zabbix')), 0);
   expect('a long kebab-case file name is not a token', hits(checkSecrets('40-what-changed-from-26-to-30-october-2026-the-new-look-option-b')), 0);
 
   const box = (who, time, first, next) => `# T\n\n| Who it is for | Reading time | Read first | Read next |\n|---|---|---|---|\n| ${who} | ${time} | ${first} | ${next} |\n`;

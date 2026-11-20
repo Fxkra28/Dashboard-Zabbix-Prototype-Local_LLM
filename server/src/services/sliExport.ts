@@ -1,18 +1,18 @@
 import { BadRequestError } from '../core/validate.js';
 import { buildCsv } from '../export/csv.js';
 import { buildPdf } from '../export/pdf.js';
-import { buildSlaReportDoc, reportFileBase } from '../export/slaReport.js';
+import { buildSlaReportDoc, reportFileBase, reportFileBaseOf } from '../export/slaReport.js';
 import { DATES, DECIMALS, DEFAULT_STYLE, FORMAT_NAMES, SEPARATORS, styleKey, type Format, type ReportStyle } from '../core/reportChoices.js';
 import { CSV_TYPE, PDF_TYPE, XLSX_TYPE, type ReportDoc } from '../export/types.js';
 import { buildXlsx } from '../export/xlsx.js';
 import type { SliReport } from '../sli/engine.js';
 
 /**
- * The monthly SLA as a file, the figures /api/sli shows, on demand.
+ * The SLA as a file, the figures /api/sli shows, on demand: a month, or any two whole hours and the hours of the day that count (FR-60).
  *
- *   GET /api/sli/export?month=YYYY-MM&format=pdf|xlsx|csv[&decimal=dot|comma][&date=long|numeric|iso][&separator=comma|semicolon]
+ *   GET /api/sli/export?month=YYYY-MM|from=&to=[&dayHours=8-17][&days=1,2,3,4,5]&format=pdf|xlsx|csv[&decimal=dot|comma][&date=long|numeric|iso][&separator=comma|semicolon]
  *
- * It reads both methods through getMonthlySli, so a report the page has
+ * It reads both methods through the same service as the page (services/sliAsk.ts), so a report the page has
  * already loaded is not computed again. Nothing is kept for long: a file is
  * reused for a few seconds and then built again from the cached figures.
  */
@@ -30,6 +30,9 @@ export type { Format };
 
 /** Named from the validated month alone, so no request text reaches a header. */
 export const fileNameFor = (month: string, format: Format): string => `${reportFileBase(month)}${FORMATS[format].suffix}`;
+
+/** Named from the report's own dates and hours, which are numbers, for a range or a month in the hours of the day: no request text reaches a header either. */
+export const fileNameOf = (report: SliReport, format: Format): string => `${reportFileBaseOf(report)}${FORMATS[format].suffix}`;
 
 /**
  * A build costs about 10 ms of CPU, and a burst of requests would run them back to back with

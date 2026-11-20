@@ -4,7 +4,7 @@
     "title": "HCML Monitoring Portal (BFF)",
     "version": "1.0.0",
     "summary": "A read-only backend-for-frontend over the Zabbix 7.0 JSON-RPC API.",
-    "description": "The portal owns no database. Every response below is either passed through from Zabbix or\nderived in-process and cached in an LRU of at most 500 entries or about 64 MB, whichever is\nreached first, that is lost on restart. Sites, links,\nincidents, host reachability and the monthly SLA have no table anywhere.\n\n**One write exists** in the whole surface: `POST /api/problems/acknowledge`. It uses a separate\nwrite-capable Zabbix token and is refused with 503 when that token is unset.\n\n### Authentication\n\nOne credential, a JWT carrying `{ sub, role, ep, jti, sid }` that lasts 12 hours unless `SESSION_HOURS` sets another\nlength (2 to 24), presented one of two ways.\nEvery guarded path takes either:\n\n- `sessionCookie`, the browser's way. `POST /api/auth/login` and `POST /api/auth/refresh` set it\n  with `Set-Cookie`: `HttpOnly`, `SameSite=Strict`, `Path=/`, a `Max-Age` equal to the session length\n  (43200 at the default 12 hours), and `Secure` when\n  the request arrived over HTTPS. No script on the page can read it, and no response body carries\n  the token. An open portal renews it with `POST /api/auth/refresh` an hour before it runs out;\n  `POST /api/auth/logout` clears it.\n- `bearerAuth`, `Authorization: Bearer <jwt>`, for scripts and tests. A script takes the token\n  from the login response's `Set-Cookie` header. When a request carries both, the header wins.\n\nNo path takes a token in the query string, `/api/stream` included: `EventSource` sends the cookie\nlike any same-origin request, so a `?token=` gets 401. `logging.ts` and nginx still redact one\nfrom their logs, for pages loaded before the cookie change.\n\n**Forgery check.** A `POST`, `PUT`, `PATCH` or `DELETE` on `/api/*` that authenticates with the\ncookie, and every call to `POST /api/auth/login` and `POST /api/auth/logout`, must carry the\nheader `X-HCML-CSRF: 1`. When the browser sends an `Origin`, it must name the request's own host\nand port. Anything else gets `403 csrf` (`CsrfRefused`), before the guard runs and with auth on\nor off. A request with a Bearer header is not checked, except on sign-in and sign-out, since a browser\nnever adds one by itself.\n`csrfRefusal` in `security/auth.ts`; ADR-0010.\n\nThe guard judges the route the router matched, not the URL text, so a percent-encoded path such\nas `/%61pi/hosts` is guarded like `/api/hosts`. Only `/api/health`, `/api/auth/login`,\n`/api/auth/me` and `/api/auth/logout` are outside it, matched exactly.\n\nWhen `AUTH_ENABLED=false` no route is guarded at all and every caller is treated as `admin`. The\nforgery check still applies to sign-in and sign-out.\n\n### Roles\n\nOpenAPI cannot express a role requirement per path, so each operation states its role in the\ndescription. From `ROUTE_RULES` (`server/src/security/auth.ts`), first match wins, unmatched is\n`viewer`:\n\n| Role | Paths |\n|---|---|\n| `admin` | `/api/reports/inventory`, `/api/sli/email`, `/api/sli/schedule`, `/api/sli/recipients` |\n| `operator` | `POST /api/problems/acknowledge` |\n| `wall` | `/api/links`, `/api/net/*`: the network pages, read only, for a NOC screen's account |\n| `viewer` | everything else |\n\nThe ranks run viewer, wall, operator, admin, and a role passes every rule below its own.\n\n### Errors\n\nEvery error, at every status, is `{ \"error\": string, \"message\": string, \"requestId\": string }`. There\nis no `statusCode` in the body and no other field. `requestId` is the reply's `X-Request-Id` (see\nRequest ids below), so a person who reads it out lets an admin find the request in the logs.\n\n### Request ids\n\nEvery reply, at every status and on the live stream too, carries an `X-Request-Id` header. nginx makes\nthe id for each request (`$request_id`, 32 hex characters), replacing any value the client sent, and\nthe BFF uses it: it is `reqId` on every BFF log line of the request, the header on the reply, and\n`requestId` in the body of an error. nginx writes it in its own access log as `rid=`. A request that\nreaches the BFF some other way keeps a sent id only when it is 8 to 64 characters of letters, digits,\n`.`, `_` and `-`, and gets a new one otherwise.\n\nTwo pairs are easy to conflate and are deliberately different:\n\n- A rejected portal JWT is `401 unauthorized`. A rejected Zabbix API token is\n  `503 zabbix_auth`. Different tokens, different codes.\n- An unreachable or erroring Zabbix is `502 zabbix_error`; a Zabbix that does not answer within\n  `ZABBIX_TIMEOUT_MS` is `503 zabbix_timeout`. **Nothing in this server ever returns 504.**\n\n### Sign-in off\n\nWith `AUTH_ENABLED=false` (local development only) every caller is admin, so the server answers\nonly to a `Host` header that names this machine: `localhost`, `127.0.0.1`, `::1` or the\n`WEB_ORIGIN` host, on any port. Any other `Host` gets `421 misdirected_request`, which stops a\npage on another site that points its own domain at 127.0.0.1 (DNS rebinding). With sign-in on\nthis does nothing, a token is checked instead.\n\n### Compression\n\nJSON responses of 1024 bytes or more are compressed with brotli (quality 4) or gzip (level 6);\nbrotli wins ties. `Vary: Accept-Encoding` is set on every eligible JSON response whether or not\ncompression actually happened. The two SSE paths bypass the hook entirely.\n\n### Stale answers\n\nThe slow reports are served with `staleIfError`: `/api/reports/availability`,\n`/api/reports/noise`, `/api/reports/capacity`, and the derived monthly SLA behind `/api/sli`,\n`/api/sli/export`, `/api/services/derived` and `/api/explain/sla` with `source=derived`. When\nZabbix fails they return **200 with an old copy, of any age**, rather than 502/503. The status code\ndoes not say so, but two response headers do:\n\n- `X-Data-Stale: true`\n- `X-Data-Age-Seconds: <how old the copy is, in seconds>`\n\nThey appear only on an answer that read an old copy kept because Zabbix failed, never on a live\nanswer, a cache hit or an error, and the JSON body is not changed. When one request read several\ncached reports, the age is that of the oldest. A cached answer that was itself built on a stale\nreport, `/api/services/derived` for its 30 s and `/api/explain/sla`, is not flagged again.\n\nHCML's Zabbix takes tens of seconds to build some views, so past their cache time these answer at\nonce with their last copy while one refresh runs, for up to 10 minutes: `/api/hosts/overview`,\n`/api/devices`, `/api/net/devices`, `/api/net/interfaces`, `/api/net/meters`,\n`/api/reports/top-hosts`, `/api/reports/web-monitoring`, `/api/services`, `/api/services/derived`,\n`/api/maps/detail`, `/api/sla` and `/api/sla/sli`, and, for as long as their cache time again,\n`/api/reports/availability` (a window, or `basis=all-problems`), `/api/reports/noise` and\n`/api/reports/capacity` (a day for the last). Such an answer carries\n\n- `X-Data-Refreshing: true`\n- `X-Data-Age-Seconds: <how old the copy is, in seconds>`\n\nand never `X-Data-Stale`, which wins when one request saw both. The problem list is never served\nthis way. The derived monthly SLA behind `/api/sli`, `/api/sli/export`, `/api/explain/sla` and a\n`month` of `/api/reports/availability` with the default basis is also answered from its old copy\nwhile a new one is built, but without these two headers. The body of `/api/sli` carries `generatedAt`,\nand the SLA page prints it; the body of the availability report has no such field, so a script that\nneeds the age of a month reads it from `/api/sli`.\n\n### Reads dropped when the reader leaves\n\nA slow read that is still waiting for its place when the connection of the person who asked closes\nis never started, and the answer that nobody reads is **499 `cancelled`** (`Cancelled` in\n`core/gate.ts`). Only a script that gives up can see it. It is documented on the seven routes that can\ndrop a read: `/api/sli`, `/api/reports/availability`, `/api/reports/noise`, `/api/reports/capacity`,\n`/api/reports/top-triggers` and the two Explain routes, where it also ends a model call that is running. A read that has\nalready started finishes and is kept for the next reader, except a model call that nobody waits for any more.\n",
+    "description": "The portal owns no database. Every response below is either passed through from Zabbix or\nderived in-process and cached in an LRU of at most 500 entries or about 64 MB, whichever is\nreached first, that is lost on restart. Sites, links,\nincidents, host reachability and the monthly SLA have no table anywhere.\n\n**One write exists** in the whole surface: `POST /api/problems/acknowledge`. It uses a separate\nwrite-capable Zabbix token and is refused with 503 when that token is unset.\n\n### Authentication\n\nOne credential, a JWT carrying `{ sub, role, ep, jti, sid }` that lasts 12 hours unless `SESSION_HOURS` sets another\nlength (2 to 24), presented one of two ways.\nEvery guarded path takes either:\n\n- `sessionCookie`, the browser's way. `POST /api/auth/login`, `POST /api/auth/refresh` and `POST /api/auth/password` set it\n  with `Set-Cookie`: `HttpOnly`, `SameSite=Strict`, `Path=/`, a `Max-Age` equal to the session length\n  (43200 at the default 12 hours), and `Secure` when\n  the request arrived over HTTPS. No script on the page can read it, and no response body carries\n  the token. An open portal renews it with `POST /api/auth/refresh` an hour before it runs out;\n  `POST /api/auth/logout` clears it.\n- `bearerAuth`, `Authorization: Bearer <jwt>`, for scripts and tests. A script takes the token\n  from the login response's `Set-Cookie` header. When a request carries both, the header wins.\n\nNo path takes a token in the query string, `/api/stream` included: `EventSource` sends the cookie\nlike any same-origin request, so a `?token=` gets 401. `logging.ts` and nginx still redact one\nfrom their logs, for pages loaded before the cookie change.\n\n**Forgery check.** A `POST`, `PUT`, `PATCH` or `DELETE` on `/api/*` that authenticates with the\ncookie, and every call to `POST /api/auth/login`, `POST /api/auth/logout` and `POST /api/auth/request`, must carry the\nheader `X-HCML-CSRF: 1`. When the browser sends an `Origin`, it must name the request's own host\nand port. Anything else gets `403 csrf` (`CsrfRefused`), before the guard runs and with auth on\nor off. A request with a Bearer header is not checked, except on sign-in, sign-out and the request for an account, since a browser\nnever adds one by itself.\n`csrfRefusal` in `security/auth.ts`; ADR-0010.\n\nThe guard judges the route the router matched, not the URL text, so a percent-encoded path such\nas `/%61pi/hosts` is guarded like `/api/hosts`. Only `/api/health`, `/api/auth/login`,\n`/api/auth/me`, `/api/auth/logout` and `/api/auth/request` are outside it, matched exactly. The last is the one public\nroute that writes to disk, and it is off unless `ACCOUNT_REQUESTS=true`.\n\nWhen `AUTH_ENABLED=false` no route is guarded at all and every caller is treated as `admin`. The\nforgery check still applies to sign-in, sign-out and the request for an account.\n\n### Roles\n\nOpenAPI cannot express a role or a module per path, so each operation states what it needs in its\ndescription. Who may use a route is two things (ADR-0017): a **role**, which says what the user may do, and\nthe **modules** the user holds, which say what they may see. The table of routes in\n`server/src/security/modules.ts` gives each route the modules that own it (holding any one is enough) and the role it\nneeds; first match wins, and a route with no row is closed to everyone but administrators. An administrator holds every module.\n\n| Role | What it adds |\n|---|---|\n| `guest` | Reads. |\n| `operator` | `POST /api/problems/acknowledge`. |\n| `admin` | `/api/users*`, `/api/reports/inventory`, `/api/sli/email`, `/api/sli/schedule`, `/api/sli/recipients`. |\n\nThe ranks run guest, operator, admin, and a role passes every rule below its own. The pages of the menu are the modules: the Dashboard, Problems, Sites, Hosts, Devices,\nLatest data, Graphs, Maps, Network, Links & WAN health, Services, SLA, Capacity trends, Alert noise, Top 100 triggers, Inventory & ownership scorecard, the Assistant,\nand Users and access. `/api/net/*` belongs to the Network module and `/api/links` to Links & WAN health; the routes that two pages share belong to both. The names `viewer` and `wall`\nthat `.env` and older sessions carry still read: as a guest, a `wall` account with the Network and Links pages as well.\n\n### Errors\n\nEvery error, at every status, is `{ \"error\": string, \"message\": string, \"requestId\": string }`. There\nis no `statusCode` in the body and no other field. `requestId` is the reply's `X-Request-Id` (see\nRequest ids below), so a person who reads it out lets an admin find the request in the logs.\n\n### Request ids\n\nEvery reply, at every status and on the live stream too, carries an `X-Request-Id` header. nginx makes\nthe id for each request (`$request_id`, 32 hex characters), replacing any value the client sent, and\nthe BFF uses it: it is `reqId` on every BFF log line of the request, the header on the reply, and\n`requestId` in the body of an error. nginx writes it in its own access log as `rid=`. A request that\nreaches the BFF some other way keeps a sent id only when it is 8 to 64 characters of letters, digits,\n`.`, `_` and `-`, and gets a new one otherwise.\n\nTwo pairs are easy to conflate and are deliberately different:\n\n- A rejected portal JWT is `401 unauthorized`. A rejected Zabbix API token is\n  `503 zabbix_auth`. Different tokens, different codes.\n- An unreachable or erroring Zabbix is `502 zabbix_error`; a Zabbix that does not answer within\n  `ZABBIX_TIMEOUT_MS` is `503 zabbix_timeout`. **Nothing in this server ever returns 504.**\n\n### Sign-in off\n\nWith `AUTH_ENABLED=false` (local development only) every caller is admin, so the server answers\nonly to a `Host` header that names this machine: `localhost`, `127.0.0.1`, `::1` or the\n`WEB_ORIGIN` host, on any port. Any other `Host` gets `421 misdirected_request`, which stops a\npage on another site that points its own domain at 127.0.0.1 (DNS rebinding). With sign-in on\nthis does nothing, a token is checked instead.\n\n### Compression\n\nJSON responses of 1024 bytes or more are compressed with brotli (quality 4) or gzip (level 6);\nbrotli wins ties. `Vary: Accept-Encoding` is set on every eligible JSON response whether or not\ncompression actually happened. The two SSE paths bypass the hook entirely.\n\n### Stale answers\n\nThe slow reports are served with `staleIfError`: `/api/reports/availability`,\n`/api/reports/noise`, `/api/reports/capacity`, and the derived monthly SLA behind `/api/sli`,\n`/api/sli/export`, `/api/services/derived` and `/api/explain/sla` with `source=derived`. When\nZabbix fails they return **200 with an old copy, of any age**, rather than 502/503. The status code\ndoes not say so, but two response headers do:\n\n- `X-Data-Stale: true`\n- `X-Data-Age-Seconds: <how old the copy is, in seconds>`\n\nThey appear only on an answer that read an old copy kept because Zabbix failed, never on a live\nanswer, a cache hit or an error, and the JSON body is not changed. When one request read several\ncached reports, the age is that of the oldest. A cached answer that was itself built on a stale\nreport, `/api/services/derived` for its 30 s and `/api/explain/sla`, is not flagged again.\n\nHCML's Zabbix takes tens of seconds to build some views, so past their cache time these answer at\nonce with their last copy while one refresh runs, for up to 10 minutes: `/api/hosts/overview`,\n`/api/devices`, `/api/net/devices`, `/api/net/interfaces`, `/api/net/meters`,\n`/api/reports/top-hosts`, `/api/reports/web-monitoring`, `/api/services`, `/api/services/derived`,\n`/api/maps/detail`, `/api/sla` and `/api/sla/sli`, and, for as long as their cache time again,\n`/api/reports/availability` (a window, or `basis=all-problems`), `/api/reports/noise` and\n`/api/reports/capacity` (a day for the last). Such an answer carries\n\n- `X-Data-Refreshing: true`\n- `X-Data-Age-Seconds: <how old the copy is, in seconds>`\n\nand never `X-Data-Stale`, which wins when one request saw both. The problem list is never served\nthis way. The derived monthly SLA behind `/api/sli`, `/api/sli/export`, `/api/explain/sla` and a\n`month` of `/api/reports/availability` with the default basis is also answered from its old copy\nwhile a new one is built, but without these two headers. The body of `/api/sli` carries `generatedAt`,\nand the SLA page prints it; the body of the availability report has no such field, so a script that\nneeds the age of a month reads it from `/api/sli`.\n\n### Reads dropped when the reader leaves\n\nA slow read that is still waiting for its place when the connection of the person who asked closes\nis never started, and the answer that nobody reads is **499 `cancelled`** (`Cancelled` in\n`core/gate.ts`). Only a script that gives up can see it. It is documented on the nine routes that can\ndrop a read: `/api/sli`, `/api/sli/export`, `/api/reports/availability`, `/api/reports/noise`, `/api/reports/capacity`,\n`/api/reports/top-triggers`, `/api/services/derived` and the two Explain routes, where it also ends a model call that is running. A read that has\nalready started finishes and is kept for the next reader, except a model call that nobody waits for any more.\n",
     "contact": {
       "name": "HCML Monitoring Portal",
       "url": "https://github.com/Fxkra28/Dashboard-Zabbix-Prototype"
@@ -13,7 +13,7 @@
   "tags": [
     {
       "name": "Meta",
-      "description": "Health, readiness and authentication. Only `/api/ready` is guarded; the others are registered before the guard."
+      "description": "Health, readiness and authentication. `/api/ready`, `/api/auth/refresh` and `/api/auth/password` are guarded; `/api/health`, `/api/auth/login`, `/api/auth/me`, `/api/auth/logout` and `/api/auth/request` are public."
     },
     {
       "name": "Hosts",
@@ -29,7 +29,7 @@
     },
     {
       "name": "Network",
-      "description": "Devices, interfaces and ports. **wall.** `server/src/routes/net.ts`"
+      "description": "Devices, interfaces and ports. **Network page.** `server/src/routes/net.ts`"
     },
     {
       "name": "Reports",
@@ -54,6 +54,10 @@
     {
       "name": "AI",
       "description": "The plain-language layer. On demand only, never called on page load."
+    },
+    {
+      "name": "Users",
+      "description": "The portal's users, their roles and their modules (ADR-0017). **admin.** `server/src/routes/users.ts`"
     }
   ],
   "security": [
@@ -114,7 +118,7 @@
                     },
                     "aiExternal": {
                       "type": "boolean",
-                      "description": "Whether a question leaves this machine's own network: true when the hosted Anthropic backend is configured, or when\nthe model is on a host that is not local (`AI_BASE_URL` names a public address). The Assistant and Explain then say so\nnext to every answer; a model on this machine, on a private address or on a name that only resolves inside a\nnetwork shows nothing.\n"
+                      "description": "Whether a question leaves this machine's own network: true when the hosted Anthropic backend is configured, or when\nthe model is on a host that is not local (`AI_BASE_URL` names a public address) or has a name that Ollama sends to ollama.com (it ends in `cloud` after a colon, an underscore or a hyphen, as `kimi-k2:cloud` does). The Assistant and Explain then say so\nnext to every answer; a model on this machine, on a private address or on a name that only resolves inside a\nnetwork shows nothing.\n"
                     },
                     "writeBack": {
                       "type": "boolean",
@@ -242,7 +246,7 @@
     "/api/ready": {
       "get": {
         "summary": "Whether the portal can read Zabbix, as a status code",
-        "description": "For a monitor that holds a session cookie or a Bearer token, so it is guarded like any route and\nneeds `viewer`. `GET /api/health` always answers 200 and says inside `ready` whether Zabbix does;\nthis answers `503` while the portal cannot read Zabbix, so a status check is enough.\n\nIt reads the same cached check as `/api/health`: one `host.get` with the read-only token, given up\nafter 2 s, one at a time, kept for 15 s. Asking both, or asking often, costs Zabbix at most one call\nin 15 s. The model never changes the status: the AI layer is optional, and `model` only reports it.\n\nThe body is the same at both statuses: the check's own fields, as `ready` carries them in\n`/api/health`, and the version, start time, build and screens a signed-in `/api/health` carries.\nIt holds no address, token or error text. The status says whether to worry, `zabbix` says why.\n",
+        "description": "For a monitor that holds a session cookie or a Bearer token, so it is guarded like any route and\nneeds `guest`. `GET /api/health` always answers 200 and says inside `ready` whether Zabbix does;\nthis answers `503` while the portal cannot read Zabbix, so a status check is enough.\n\nIt reads the same cached check as `/api/health`: one `host.get` with the read-only token, given up\nafter 2 s, one at a time, kept for 15 s. Asking both, or asking often, costs Zabbix at most one call\nin 15 s. The model never changes the status: the AI layer is optional, and `model` only reports it.\n\nThe body is the same at both statuses: the check's own fields, as `ready` carries them in\n`/api/health`, and the version, start time, build and screens a signed-in `/api/health` carries.\nIt holds no address, token or error text. The status says whether to worry, `zabbix` says why.\n",
         "operationId": "getReady",
         "tags": [
           "Meta"
@@ -277,7 +281,7 @@
     "/api/auth/login": {
       "post": {
         "summary": "Exchange credentials for a session cookie",
-        "description": "Registered before the guard, so it is reachable unauthenticated. Rate-limited twice,\ndeliberately, since it is otherwise an unthrottled password oracle: the global limit, and 10\nattempts a minute per account and address of its own (`LOGIN_ATTEMPTS_PER_MINUTE` in `auth.ts`).\nAfter 10 failures in a row for one account from one address, sign-in is locked for a minute,\ndoubling with each further failure up to 5 minutes; a success clears it. Both answer 429 with\n`Retry-After`.\n\nCredentials come from `PORTAL_USERS` (comma-separated `name:password:role` triples) or from\n`PORTAL_USER`/`PORTAL_PASS` as a single-admin shorthand. A password is plain text or an scrypt\nhash (`scrypt.N.r.p.salt.hash`, made by `server/scripts/hash-password.ts`), and either is compared\nin constant time. A plain one is still plain text in the environment.\n\nThe token goes into the session cookie, never the body. Needs `X-HCML-CSRF: 1`, with or\nwithout a cookie, and with auth off too: a refused sign-in gets 403 and sets no cookie.\n\nThe body must be a JSON object with a text `username` and a text `password`. One that is not,\nfor example a missing field or a number, is a 400 `bad_request`, not a 401, and does not count\nas a failed sign-in. Empty text is still a wrong password: 401. Other fields are ignored.\n",
+        "description": "Registered before the guard, so it is reachable unauthenticated. Rate-limited twice,\ndeliberately, since it is otherwise an unthrottled password oracle: the global limit, and 10\nattempts a minute per account and address of its own (`LOGIN_ATTEMPTS_PER_MINUTE` in `auth.ts`).\nAfter 10 failures in a row for one account from one address, sign-in is locked for a minute,\ndoubling with each further failure up to 5 minutes; a success clears it. An address that fails 30 times within 15 minutes, across at least 10 different names, is locked the same way\nwhatever the names: a password tried once against many accounts never trips the lock of one (SC-61; `SPRAY_FAILURES` and `SPRAY_NAMES` in `auth.ts`). All answer 429 with\n`Retry-After`.\n\nCredentials come from the file of users (`users.json` in the data folder, managed on the Users page) and from `.env`: `PORTAL_USERS` (comma-separated\n`name:password:role` triples) or `PORTAL_USER`/`PORTAL_PASS` as a single-admin shorthand, whose first administrator always signs in from `.env` (ADR-0017). A password is plain text or an Argon2id\nhash (`argon2id.m.t.p.salt.hash`, or an older `scrypt.N.r.p.salt.hash`, made by `server/scripts/hash-password.ts`), and either is compared\nin constant time. A plain one is still plain text in the environment. A disabled user, and one past their expiry, is refused with the same 401 as a wrong password. Where hashes are in use, a name nobody has costs as long to refuse as a wrong password for a name\nthat exists, so the time of the answer does not say which names are real (SC-60).\n\nThe token goes into the session cookie, never the body. Needs `X-HCML-CSRF: 1`, with or\nwithout a cookie, and with auth off too: a refused sign-in gets 403 and sets no cookie.\n\nThe body must be a JSON object with a text `username` and a text `password`. One that is not,\nfor example a missing field or a number, is a 400 `bad_request`, not a 401, and does not count\nas a failed sign-in. Empty text is still a wrong password: 401. Other fields are ignored.\n",
         "operationId": "login",
         "tags": [
           "Meta"
@@ -364,7 +368,7 @@
     "/api/auth/me": {
       "get": {
         "summary": "Who the current session says you are, and how long it has left",
-        "description": "Self-verifying: registered before the guard and calls `jwtVerify()` itself, on the cookie or\na Bearer header. Drives the sidebar's role filter, which is cosmetic: the BFF enforces with a\n403 regardless. `pages` gives the role each menu page needs, worked out from the guard's own\nrules (`pageAccess.ts`), so the sidebar keeps no second copy of them. `expiresIn` is relative,\nso the page times its renewal without trusting its own clock.\n\nWhen `AUTH_ENABLED=false` this returns `{ authEnabled: false, user: { name: \"anonymous\",\nrole: \"admin\" }, expiresIn: null, pages }`. `user` is **never** null, despite `web/src/types.ts`\nallowing it.\n",
+        "description": "Self-verifying: registered before the guard and calls `jwtVerify()` itself, on the cookie or\na Bearer header. Drives the sidebar's filter, which is cosmetic: the BFF enforces with a\n403 regardless. `pages` gives the pages this user has, each with the role it needs, worked out from the table of routes\n(`modules.ts`), so the sidebar keeps no second copy of it, and a page the user lacks is not in it. `modules` is the list of the modules the user holds.\nThe role and the modules are those of now, not those the session began with. `expiresIn` is relative,\nso the page times its renewal without trusting its own clock. `mustChange` is present, and true, when the password is a temporary one: nothing else can be read until it is changed.\n`user.source` says where the account is kept, `file` for the file of users and `env` for `.env`: one of `.env` cannot change its password on the Account page (FR-73).\nThe web app asks again when its tab is shown or gains focus (at most once a minute), after each renewal, and every ten minutes while the page stays in view, so a page an\nadministrator gives or takes away reaches a screen that is already open (FR-70).\n\nWhen `AUTH_ENABLED=false` this returns `{ authEnabled: false, user: { name: \"anonymous\",\nrole: \"admin\" }, expiresIn: null, pages, modules }`, with every module but the Users page. `user` is **never** null, despite `web/src/types/auth.ts`\nallowing it.\n",
         "operationId": "getMe",
         "tags": [
           "Meta"
@@ -380,7 +384,8 @@
                     "authEnabled",
                     "user",
                     "expiresIn",
-                    "pages"
+                    "pages",
+                    "modules"
                   ],
                   "properties": {
                     "authEnabled": {
@@ -399,16 +404,26 @@
                     },
                     "pages": {
                       "type": "object",
-                      "description": "The minimum role for each menu page, by path, such as `/network`.",
+                      "description": "The pages this user has, by path such as `/network`, each with the minimum role it needs. A page the user lacks is not here.",
                       "additionalProperties": {
                         "type": "string",
                         "enum": [
-                          "viewer",
-                          "wall",
+                          "guest",
                           "operator",
                           "admin"
                         ]
                       }
+                    },
+                    "modules": {
+                      "type": "array",
+                      "description": "The modules the user holds, by id.",
+                      "items": {
+                        "$ref": "#/components/schemas/ModuleId"
+                      }
+                    },
+                    "mustChange": {
+                      "type": "boolean",
+                      "description": "True when the password is a temporary one that must be changed first."
                     }
                   }
                 }
@@ -427,7 +442,7 @@
     "/api/auth/refresh": {
       "post": {
         "summary": "Swap a valid session for a fresh one",
-        "description": "Keeps an open portal signed in, for every user, for as long as the page stays open\n(DESIGN.md section 9, \"Wall sign-in\"; ADR-0009). The web app calls it an hour before the\nsession ends, timed from the `expiresIn` of the last sign-in, renewal or `GET /api/auth/me`.\nA closed tab renews nothing.\n\nBehind the guard, so it takes the cookie or a Bearer header; a `?token=` is refused like on\nevery route. A cookie renewal is a cookie POST and needs `X-HCML-CSRF: 1`; a Bearer renewal\ndoes not. The user is looked up again in the current user list: one removed from\n`PORTAL_USERS`, or a name listed there twice, gets 401 and no cookie, and the new token carries\nthe role configured now, not the one in the old token. It takes no body: none, or a JSON\nobject that is ignored. Any other JSON body is a 400. Registered only when\n`AUTH_ENABLED=true`; otherwise 404.\n",
+        "description": "Keeps an open portal signed in, for every user, for as long as the page stays open\n(DESIGN.md section 9, \"Wall sign-in\"; ADR-0009). The web app calls it an hour before the\nsession ends, timed from the `expiresIn` of the last sign-in, renewal or `GET /api/auth/me`.\nA closed tab renews nothing.\n\nBehind the guard, so it takes the cookie or a Bearer header; a `?token=` is refused like on\nevery route. A cookie renewal is a cookie POST and needs `X-HCML-CSRF: 1`; a Bearer renewal\ndoes not. The user is looked up again in the current user list: one removed from\n`PORTAL_USERS`, a name listed there twice, a user disabled on the Users page and one past their expiry get 401 and no cookie, and the new token carries\nthe role configured now, not the one in the old token. It takes no body: none, or a JSON\nobject that is ignored. Any other JSON body is a 400. Registered only when\n`AUTH_ENABLED=true`; otherwise 404.\n",
         "operationId": "refreshToken",
         "tags": [
           "Meta"
@@ -479,10 +494,97 @@
         }
       }
     },
+    "/api/auth/password": {
+      "post": {
+        "summary": "Change your own password",
+        "description": "For a user of the file of users (ADR-0017); a user kept in `.env`, the first administrator, is refused with 409, since their password is changed there, and the Account page shows\na sentence instead of the form for them (`user.source` of `GET /api/auth/me`, FR-73). Asks for the current password, which is\ntried at most 10 times a minute for each user, and for a new one that is at least 8 and at most 256 characters, not on the lists of passwords that anyone can guess (the common ones, one of their base words with digits or signs after it, or one character repeated), and not holding `hcml` or the sign-in name, and that is not the current one. A change ends every older\nsession of the person, renews this one (the new session cookie is set, as for `POST /api/auth/refresh`), and clears `mustChange`. It is the one call, with sign-out, renewal and\n`GET /api/auth/me`, that a user with a temporary password may make. It needs `X-HCML-CSRF: 1` with a cookie. The log gets one line, never the password.\n",
+        "operationId": "changePassword",
+        "tags": [
+          "Meta"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfHeader"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "current",
+                  "password"
+                ],
+                "properties": {
+                  "current": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Changed. The session cookie is set again with a fresh token.",
+            "headers": {
+              "Set-Cookie": {
+                "$ref": "#/components/headers/SetSessionCookie"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Session"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "ok"
+                      ],
+                      "properties": {
+                        "ok": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/CsrfRefused"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      }
+    },
     "/api/auth/logout": {
       "post": {
         "summary": "Sign out by clearing the session cookie",
-        "description": "Public, so a missing or expired cookie can still be cleared: answers 200 with or without one,\nand with auth off. The `Set-Cookie` header empties the cookie with the attributes it was set\nwith. It also ends the session on the server: every token of that sign-in, the ones a renewal gave\ntoo, is refused from then on (a list in memory, which a restart forgets), and the live streams of\nthe session are closed at once. A copy of a token that someone keeps renewing after the owner only\nclosed the tab, without signing out, works until the user is taken out of `PORTAL_USERS`, a new\n`JWT_SECRET` is set, or a higher `SESSION_EPOCH` is set and the server restarted (SC-14); there is no\nabsolute age, because a wall screen must stay signed in. A live stream also ends when its token expires, and the browser reconnects (SC-15). Needs `X-HCML-CSRF: 1` like any POST that touches the cookie. It takes no body: none, or a JSON object that is ignored. Any other JSON body is a 400.\n",
+        "description": "Public, so a missing or expired cookie can still be cleared: answers 200 with or without one,\nand with auth off. The `Set-Cookie` header empties the cookie with the attributes it was set\nwith. It also ends the session on the server: every token of that sign-in, the ones a renewal gave\ntoo, is refused from then on (a list in memory, which a restart forgets), and the live streams of\nthe session are closed at once. A copy of a token that someone keeps renewing after the owner only\nclosed the tab, without signing out, works until the user is disabled on the Users page (or, for a user of `.env` alone, taken out of `PORTAL_USERS` and the container recreated), a new\n`JWT_SECRET` is set, or a higher `SESSION_EPOCH` is set and the server restarted (SC-14); there is no\nabsolute age, because a wall screen must stay signed in. A live stream also ends when its token expires, and the browser reconnects (SC-15). Needs `X-HCML-CSRF: 1` like any POST that touches the cookie. It takes no body: none, or a JSON object that is ignored. Any other JSON body is a 400.\n",
         "operationId": "logout",
         "tags": [
           "Meta"
@@ -541,10 +643,123 @@
         }
       }
     },
+    "/api/auth/request": {
+      "get": {
+        "summary": "Whether the sign-in page offers a request for an account, and for which pages",
+        "description": "Public, like sign-in. Answers `{ \"enabled\": false }` unless `ACCOUNT_REQUESTS=true`, sign-in is on, and the portal has a data folder to keep the requests and the users in (FR-62).\nWhen it is on it lists the pages a person may ask for, those a guest can hold (not the Users page or the scorecard), and the longest name and reason it keeps.\n",
+        "operationId": "getAccountRequestInfo",
+        "tags": [
+          "Meta"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Whether requests are accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRequestInfo"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        }
+      },
+      "post": {
+        "summary": "Leave a request for an account",
+        "description": "Public, and the one public route that writes to disk, so it is held tight (FR-62). A 404 while the setting is off. It is checked like sign-in is: it needs `X-HCML-CSRF: 1` and an `Origin`\nof the portal's own, and a body over 8 KB is a 413. The body is a name, the pages wanted, chosen from the list `GET /api/auth/request` gives (at most 20), and a reason. The name is cut at\n80 characters and the reason at 500; control characters are dropped. What is wrong with a body is a 400 in words: a name under 2 characters, no page, a page that is not on the list, a reason\nunder 3 characters, or a field the portal does not know. One address may leave `ACCOUNT_REQUESTS_PER_ADDRESS` requests a day (3 by default; 429 with `Retry-After`; the addresses of one IPv6 network, a /64, count as one, as they do for sign-in), at most\n`ACCOUNT_REQUESTS_MAX_PENDING` wait at once (50 by default; 503 `requests_full`), and a request nobody answers is dropped after 30 days. A request whose name is already waiting, whatever the case,\nis dropped, and the answer is the same 202 as for one that was kept, so the form says nothing about who is known. When the list is full it is the same 503 for a name that is waiting and for one that is not, for the same reason.\nThe log gets the step and the name, never the reason.\n",
+        "operationId": "leaveAccountRequest",
+        "tags": [
+          "Meta"
+        ],
+        "security": [],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfHeader"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountRequestBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Kept, or a copy of one that was waiting. Nothing says which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "403": {
+            "$ref": "#/components/responses/CsrfRefused"
+          },
+          "404": {
+            "description": "`not_found`, this portal does not accept requests for an account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "description": "`rate_limited`, this address has left as many requests as it may for one day, or the 300 requests a minute of the client address. `Retry-After` says how long to wait.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/RequestsError"
+          },
+          "503": {
+            "description": "`requests_full`, the list of requests is full; an administrator has to clear it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/hosts": {
       "get": {
-        "summary": "Every monitored host, with its resolved site",
-        "description": "Cached 30 s. `site` is derived by `naming.ts` from four ranked signals: tag, host name,\ninventory, group, because no HCML host carries a site tag. It is null when none match.\n",
+        "summary": "Every host, disabled ones included, with its resolved site",
+        "description": "Cached 30 s. `site` is resolved by `siteRefOf` in `sites.ts` from four ranked signals: tag, host name,\ninventory, group, because no HCML host carries a site tag. It is null when none of them names one of HCML's sites. The\nSites page and the scorecard use the same rule, and so do `/api/hosts/overview`, `/api/devices` and `/api/net/devices`, so a host is under one site on every page (BK-94).\n",
         "operationId": "getHosts",
         "tags": [
           "Hosts"
@@ -597,7 +812,7 @@
     "/api/hosts/overview": {
       "get": {
         "summary": "Hosts with reachability state and problem counts",
-        "description": "Cached 15 s. `state` is the portal's own reachability judgement (`reachability.ts`), ping\nfirst, interface flags only as a fallback, on 17 Sep, 16 of 23 hosts Zabbix called\nunavailable answered ping. `reason` records which signal decided it.\n",
+        "description": "Cached 15 s. `state` is the portal's own reachability judgement (`reachability.ts`), ping\nfirst, interface flags only as a fallback, on 17 Sep, 16 of 23 hosts Zabbix called\nunavailable answered ping. `reason` records which signal decided it. `site` is the same as on `/api/hosts`.\n",
         "operationId": "getHostsOverview",
         "tags": [
           "Hosts"
@@ -619,7 +834,8 @@
                         "required": [
                           "state",
                           "reason",
-                          "problems"
+                          "problems",
+                          "site"
                         ],
                         "properties": {
                           "state": {
@@ -630,6 +846,16 @@
                           },
                           "problems": {
                             "$ref": "#/components/schemas/ProblemCounts"
+                          },
+                          "site": {
+                            "oneOf": [
+                              {
+                                "$ref": "#/components/schemas/SiteRef"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
                           }
                         }
                       }
@@ -732,7 +958,7 @@
     "/api/items": {
       "get": {
         "summary": "Items for a host, or by explicit ids",
-        "description": "Cached 30 s. `hostid` is required unless `itemids` is given.\n\n`search` is passed to Zabbix with `startSearch: true` deliberately: without it Zabbix runs\n`LIKE '%…%'` and scans all 51,845 items at about 105 ms per call.\n\nThe items carry no `lastvalue` or `lastclock`. Zabbix looks each of them up on its own, from 30 ms to half a second an\nitem on HCML's, which made a host of 609 items take 20 to 32 s, and the item picker never shows them. `/api/latest` has them.\n\nA request with a `search` of more than spaces counts against 120 searches a minute for each signed-in person (or each\nclient address with sign-in off), since a search with new text is a cold read of Zabbix. `/api/latest` shares that count.\nThe text is trimmed before it is used. Ids are digits, at most 20 of them, and not above 18446744073709551615.\n",
+        "description": "Cached 30 s. `hostid` is required unless `itemids` is given.\n\n`search` is a substring match on the item's key (`search: { key_ }`, with no `startSearch`), so it finds text in the middle of a key. A prefix match would be quicker for Zabbix,\nbut the picker would stop finding mid-key text; the words here once said the prefix match was in use, and it never was.\n\nThe items carry no `lastvalue` or `lastclock`. Zabbix looks each of them up on its own, from 30 ms to half a second an\nitem on HCML's, which made a host of 609 items take 20 to 32 s, and the item picker never shows them. `/api/latest` has them.\n\nA request with a `search` of more than spaces counts against 120 searches a minute for each signed-in person (or each\nclient address with sign-in off), since a search with new text is a cold read of Zabbix. `/api/latest` shares that count.\nThe text is trimmed before it is used. Ids are digits, at most 20 of them, and not above 18446744073709551615.\n",
         "operationId": "getItems",
         "tags": [
           "Hosts"
@@ -758,7 +984,7 @@
           {
             "name": "search",
             "in": "query",
-            "description": "Prefix match on `key_`.",
+            "description": "Substring match on `key_`.",
             "schema": {
               "type": "string"
             }
@@ -965,14 +1191,14 @@
     "/api/stream": {
       "get": {
         "summary": "Live problem stream (SSE)",
-        "description": "`text/event-stream`. **Exempt from the rate limit, but capped:** at most `STREAM_MAX_CLIENTS`\n(default 100) screens in all and `STREAM_MAX_PER_USER` (default 5) for one signed-in user, or for\none client address with auth off. A screen past either limit gets `429 too_many_streams` with\n`Retry-After: 30`, before any stream header. The browser's `EventSource` cannot read that body,\nso it falls back to polling and retries.\n\nOne shared 15 s ticker serves every client, the pace the problem list is cached. A frame is sent at once when the fingerprint over\n`eventid:severity:acknowledged:suppressed:r_eventid` changes. A list identical to the last one\nsent is never sent again, and one where only a name or host changed goes after at most 30 s. A change in tags alone is not in the frame. A\nnew client receives the current frame immediately, and an acknowledge force-pushes one.\n\nThree frame kinds:\n\n| Frame | Payload |\n|---|---|\n| `event: problems` | the problems of `GET /api/problems`, cut to the fields the Dashboard reads: `eventid`, `objectid`, `object`, `name`, `severity`, `clock`, `r_eventid`, `acknowledged`, `suppressed`, `host` and `hostid`. No tags, `opdata`, `r_clock`, `manualClose` or other field Zabbix returns (about half the size of the full list) |\n| `event: error` | `{ \"message\": string }` |\n| `event: ping` | after 15 s with nothing else sent, so a client can tell a quiet line from a dead one: `{ \"ageMs\": n }`, the age of the last good read of the list, when known, and `{}` otherwise |\n\nA client that sends `Accept-Encoding: gzip` (every browser does) gets the stream gzip-compressed,\nflushed after every frame and keep-alive, with `Content-Encoding: gzip` and `Vary: Accept-Encoding`;\non HCML's list the first frame goes from 166 kB to 19 kB.\n\nThe stream ends when the session token it was opened with expires, so the browser reconnects\nwith the renewed cookie or is sent to sign in, and when the BFF shuts down on `SIGTERM`.\n\nNo `id:` field is emitted, so `Last-Event-ID` resumption is not supported. Browsers cannot\nset headers on `EventSource`, but it sends the session cookie on a same-origin request like\nany other, so the stream authenticates by cookie. A `?token=` is refused with 401 here as on\nevery route.\n",
+        "description": "`text/event-stream`. **Exempt from the rate limit, but capped:** at most `STREAM_MAX_CLIENTS`\n(default 100) screens in all and `STREAM_MAX_PER_USER` (default 5) for one signed-in user, or for\none client address with auth off. A screen past either limit gets `429 too_many_streams` with\n`Retry-After: 30`, before any stream header. The browser's `EventSource` cannot read that body,\nso it falls back to polling and retries.\n\nOne shared 15 s ticker serves every client, the pace the problem list is cached. A frame is sent at once when the fingerprint over\n`eventid:severity:acknowledged:suppressed:r_eventid` changes. A list identical to the last one\nsent is never sent again, and one where only a name or host changed goes after at most 30 s. A change in tags alone is not in the frame. A\nnew client receives the current frame immediately, and an acknowledge force-pushes one.\n\nThree frame kinds:\n\n| Frame | Payload |\n|---|---|\n| `event: problems` | the problems of `GET /api/problems`, cut to the fields the Dashboard reads: `eventid`, `objectid`, `object`, `name`, `severity`, `clock`, `r_eventid`, `acknowledged`, `suppressed`, `host` and `hostid`. No tags, `opdata`, `r_clock`, `manualClose` or other field Zabbix returns (about half the size of the full list) |\n| `event: error` | `{ \"message\": string }` |\n| `event: ping` | after 15 s with nothing else sent, so a client can tell a quiet line from a dead one: `{ \"ageMs\": n }`, the age of the last good read of the list, when known, and `{}` otherwise |\n\nA client that sends `Accept-Encoding: gzip` (every browser does) gets the stream gzip-compressed,\nflushed after every frame and keep-alive, with `Content-Encoding: gzip` and `Vary: Accept-Encoding`;\non HCML's list the first frame goes from 166 kB to 19 kB.\n\nThe stream ends, and the browser reconnects with the renewed cookie or is sent to sign in, when: the session token it was opened with expires, or the person's account does, whichever is\nfirst (SC-57); the person signs out; an administrator changes the person (disables them, sets an expiry, changes the role or the pages, resets the password or asks for a new one) or the\nperson changes their own password, so that the screen comes back as the account allows now (SC-57); and when the BFF shuts down on `SIGTERM`.\n\nNo `id:` field is emitted, so `Last-Event-ID` resumption is not supported. Browsers cannot\nset headers on `EventSource`, but it sends the session cookie on a same-origin request like\nany other, so the stream authenticates by cookie. A `?token=` is refused with 401 here as on\nevery route.\n",
         "operationId": "streamProblems",
         "tags": [
           "Problems"
         ],
         "responses": {
           "200": {
-            "description": "The stream opens and stays open until its token expires.",
+            "description": "The stream opens and stays open until its token or the account expires, or the account changes.",
             "content": {
               "text/event-stream": {
                 "schema": {
@@ -1096,7 +1322,7 @@
             "$ref": "#/components/responses/Unauthorized"
           },
           "403": {
-            "description": "`forbidden`, a viewer asked for a network interface item (key starting `net.if`). Wall screens, operators and admins may read them.",
+            "description": "`forbidden`, an account without the Network page asked for a network interface item (key starting `net.if`). Accounts that have the Network page, and administrators, may read them.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1117,7 +1343,7 @@
     "/api/net/devices": {
       "get": {
         "summary": "Network devices with ICMP state",
-        "description": "**wall.** Cached 30 s. Narrowed to `NET_GROUP_IDS` when that is configured.",
+        "description": "**Network page.** Cached 30 s. Narrowed to `NET_GROUP_IDS` when that is configured.",
         "operationId": "getNetDevices",
         "tags": [
           "Network"
@@ -1154,7 +1380,7 @@
     "/api/net/meters": {
       "get": {
         "summary": "Internet traffic meters, read from the gauge widgets of a Zabbix dashboard",
-        "description": "**wall.** Cached 30 s. The dashboard itself is kept for two minutes.\n\nReads the dashboard named by `INTERNET_METERS_DASHBOARD` (default `Global view`, HCML's own) with\n`dashboard.get` and makes one meter of each gauge widget: the interface item it is bound to, the\ncapacity it was given as its maximum, and its colour zones. The meters come in the order a person\nreads the pages, and a later page that repeats an item adds nothing. Nothing is created or changed\nin Zabbix.\n\nThe value is the item's last value. Zabbix keeps that only for a day, so an item with none (silent\nfor longer, or collected by a copy of Zabbix that has stopped) is read from history, one newest\nrow each, and comes back as `stale` with its own time. A reading counts as current for three\nupdate intervals, and at least ten minutes. When no dashboard of that name is visible to the\nZabbix token, `found` is false and `meters` is empty.\n\nTwo more things are read for each gauge, from the items beside its own on the same host and the same\ninterface (the same ifIndex): the interface's status item, and the item of the opposite direction.\nThey are searched for once in two minutes (`item.get` by key prefix) and their values asked for with\nthe gauge's own. Only a current value counts, and none is ever read from history: a status or a\ntraffic figure from days ago says nothing about the link today. `link` says whether the interface is\nup or down, and `other` is the opposite direction on the gauge's own scale and zones, which assumes a\nlink that is the same size both ways.\n",
+        "description": "**Network page.** Cached 30 s. The dashboard itself is kept for two minutes.\n\nReads the dashboard named by `INTERNET_METERS_DASHBOARD` (default `Global view`, HCML's own) with\n`dashboard.get` and makes one meter of each gauge widget: the interface item it is bound to, the\ncapacity it was given as its maximum, and its colour zones. The meters come in the order a person\nreads the pages, and a later page that repeats an item adds nothing. Nothing is created or changed\nin Zabbix.\n\nThe value is the item's last value. Zabbix keeps that only for a day, so an item with none (silent\nfor longer, or collected by a copy of Zabbix that has stopped) is read from history, one newest\nrow each, and comes back as `stale` with its own time. A reading counts as current for three\nupdate intervals, and at least ten minutes. When no dashboard of that name is visible to the\nZabbix token, `found` is false and `meters` is empty.\n\nTwo more things are read for each gauge, from the items beside its own on the same host and the same\ninterface (the same ifIndex): the interface's status item, and the item of the opposite direction.\nThey are searched for once in two minutes (`item.get` by key prefix) and their values asked for with\nthe gauge's own. Only a current value counts, and none is ever read from history: a status or a\ntraffic figure from days ago says nothing about the link today. `link` says whether the interface is\nup or down, and `other` is the opposite direction on the gauge's own scale and zones, which assumes a\nlink that is the same size both ways.\n",
         "operationId": "getNetMeters",
         "tags": [
           "Network"
@@ -1188,7 +1414,7 @@
     "/api/net/interfaces": {
       "get": {
         "summary": "Interfaces for one device, searched then filtered then paged",
-        "description": "**wall.** Cached 15 s.\n\nOrder matters and is observable: `search` is applied first, `summary` is computed over the\nsearched set, *then* `status` filters, *then* the page is sliced. So `summary` counts more\nrows than `rows` contains whenever `status` is set.\n\n**`status` fails silently.** Any value outside the enum is treated as no filter rather than\nrejected with 400.\n\n**A page past the last is the last page.** `page` in the answer says which page the rows are, so an old\naddress, or a list that shrank, never reads as empty.\n",
+        "description": "**Network page.** Cached 15 s.\n\nOrder matters and is observable: `search` is applied first, `summary` is computed over the\nsearched set, *then* `status` filters, *then* the page is sliced. So `summary` counts more\nrows than `rows` contains whenever `status` is set.\n\n**`status` fails silently.** Any value outside the enum is treated as no filter rather than\nrejected with 400.\n\n**A page past the last is the last page.** `page` in the answer says which page the rows are, so an old\naddress, or a list that shrank, never reads as empty.\n",
         "operationId": "getNetInterfaces",
         "tags": [
           "Network"
@@ -1934,7 +2160,7 @@
     "/api/reports/capacity": {
       "get": {
         "summary": "Average and peak utilisation per item",
-        "description": "Rebuilt about hourly: cached an hour, then the last report is answered with\n`X-Data-Refreshing` for up to a day while the next one is built, and with `X-Data-Stale` when\na rebuild fails (`staleIfError`). The ports' link speeds are kept a day. **The heaviest\nendpoint in the portal**: one run took HCML's Zabbix 256 s on 29 October 2026. At `days=365` it\nissues roughly 112 Zabbix calls, because `trend.get` is sliced to keep Zabbix's PHP within\nits memory limit, and each call costs about 20 SQL statements upstream, 10,771 in total,\nmeasured 22 Sep.\n\n`avg` is the unweighted mean of the hourly averages, not a sample-weighted mean.\n",
+        "description": "Rebuilt about hourly: cached an hour, then the last report is answered with\n`X-Data-Refreshing` for up to a day while the next one is built, and with `X-Data-Stale` when\na rebuild fails (`staleIfError`). The ports' link speeds are kept a day. **The heaviest\nendpoint in the portal**: one run took HCML's Zabbix 256 s on 29 October 2026. At `days=365` it\nissues roughly 112 Zabbix calls, because `trend.get` is sliced to keep Zabbix's PHP within\nits memory limit, and each call costs about 20 SQL statements upstream, 10,771 in total,\nmeasured 22 Sep.\n\n`avg` is the unweighted mean of the hourly averages, not a sample-weighted mean.\n\nThe busiest interfaces are those of the moment the report was built: the 40 with the highest last rate against the port's speed (four times `top` when that is more) are chosen then, and only those are read for the\n`days` asked for and ranked by their average over them. A link that was quiet at that moment, and busy before it, is not in the list. `generatedAt` says when (BK-92).\n",
         "operationId": "getCapacityReport",
         "tags": [
           "Reports"
@@ -2003,7 +2229,7 @@
     "/api/reports/inventory": {
       "get": {
         "summary": "Naming, site, owner and criticality completeness",
-        "description": "**admin: the only admin-gated path.** Cached 60 s, and the cheapest heavy report: exactly\none Zabbix call, everything else computed in process.\n\n`dimensions` always has four entries in the order `naming`, `site`, `owner`, `criticality`.\n`scored: false` means the deployment has not configured that check.\n",
+        "description": "**admin.** Cached 60 s, and the cheapest heavy report: exactly\none Zabbix call, everything else computed in process.\n\n`dimensions` always has four entries in the order `naming`, `site`, `owner`, `criticality`.\n`scored: false` means the deployment has not configured that check.\n",
         "operationId": "getInventoryScorecard",
         "tags": [
           "Reports"
@@ -2037,7 +2263,7 @@
     "/api/links": {
       "get": {
         "summary": "WAN links and paths, from ICMP item triplets",
-        "description": "**wall.** Cached 20 s.\n\nA \"link\" is not a Zabbix entity. It is synthesised from the `icmpping`, `icmppingloss` and\n`icmppingsec` items on a host, paired into a path by the `link_group` item tag. `jitter` is\nmax minus min RTT and appears only where min/max-mode items exist. The portal never speaks\nICMP itself, Zabbix polls, this reads the items.\n",
+        "description": "**Links page.** Cached 20 s.\n\nA \"link\" is not a Zabbix entity. It is synthesised from the `icmpping`, `icmppingloss` and\n`icmppingsec` items on a host, paired into a path by the `link_group` item tag. `jitter` is\nmax minus min RTT and appears only where min/max-mode items exist. The portal never speaks\nICMP itself, Zabbix polls, this reads the items.\n",
         "operationId": "getLinks",
         "tags": [
           "Network"
@@ -2071,7 +2297,7 @@
     "/api/sites": {
       "get": {
         "summary": "Hosts grouped into sites",
-        "description": "Cached 15 s. Zabbix has no site entity. `naming.ts` resolves one from four ranked\nsignals, tag, host name, inventory, group, and `coverage` reports how many hosts each\nsignal accounted for, which is the metric for the standardisation goal.\n",
+        "description": "Cached 15 s. Zabbix has no site entity. `resolveSite` (`services/sites.ts`) resolves one from four ranked\nsignals, tag, host name, inventory, group, and `coverage` reports how many hosts each\nsignal accounted for, which is the metric for the standardisation goal.\n",
         "operationId": "getSites",
         "tags": [
           "Sites"
@@ -2102,7 +2328,7 @@
     "/api/services": {
       "get": {
         "summary": "Zabbix-native service tree",
-        "description": "Cached 30 s. Recursive, depth-capped at 12, and de-duplicated by `serviceid` because a shared\ndependency legitimately appears under two parents: it is a DAG, not a tree.\n\n**At HCML this returns an empty tree**: the `services` table has zero rows. Use\n`/api/sla/source` to decide whether to render this or the derived equivalent.\n",
+        "description": "Cached 30 s. Recursive, depth-capped at 12. A shared\ndependency legitimately appears under two parents (it is a DAG, not a tree), so it is built under each of them, and `descendants` counts each distinct `serviceid` once. A service below several parents is built under each of them, so the tree stops at 5,000 nodes and says so\nwith `truncated: true` (BK-96).\n\n**At HCML this returns an empty tree**: the `services` table has zero rows. Use\n`/api/sla/source` to decide whether to render this or the derived equivalent.\n",
         "operationId": "getServices",
         "tags": [
           "Services"
@@ -2347,7 +2573,7 @@
           {
             "name": "month",
             "in": "query",
-            "description": "Defaults to the current month in `Asia/Jakarta`.",
+            "description": "Defaults to the current month in `Asia/Jakarta`. Not with `from` and `to`.",
             "schema": {
               "type": "string",
               "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
@@ -2363,11 +2589,47 @@
                 "hcml-report"
               ]
             }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "The start of a window that is not a calendar month, in Unix seconds, on the hour in the report's time zone. Goes with `to`. The month\nit starts in must have begun no more than 400 days ago, since Zabbix keeps events for about a year, and the window may be at most 366 days.\n",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,12}$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "The end of the window, in Unix seconds, on the hour. A window that ends in the future is measured up to now.",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,12}$"
+            }
+          },
+          {
+            "name": "dayHours",
+            "in": "query",
+            "description": "Count only these hours of the day, as `start-end` in whole hours: `8-17` is 08:00 to 17:00, `22-6` runs from 22:00 through midnight to 06:00 of the next day,\nand a span belongs to the day it starts. With `month` or with `from` and `to`.\n",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,2}-\\d{1,2}$"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "description": "Count only spans that begin on these days of the week, Monday 1 to Sunday 7, separated by commas. All days when left out.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-7](,[1-7])*$"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "The monthly report.",
+            "description": "The report. For a calendar month with no `dayHours` or `days` it is the monthly report, with its web checks. For any other window it has no web checks\n(`web` is empty), since those need the raw readings of the last 31 days and are kept monthly, and `month` is null unless the window was given as a month.\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -2399,15 +2661,552 @@
             "$ref": "#/components/responses/ZabbixError"
           },
           "503": {
-            "$ref": "#/components/responses/ZabbixUnavailable"
+            "$ref": "#/components/responses/SliUnavailable"
+          }
+        }
+      }
+    },
+    "/api/users": {
+      "get": {
+        "summary": "The users, the modules, and whether they can be changed",
+        "description": "**admin.** The users that can sign in (the break-glass account first, then by name), the modules a user can be given, the modules a new user of each role starts with,\nand whether the users are kept across a restart (`durable`) and may be changed here (`editable`). Without a data folder the users are those of `.env` and neither is true. `secure` says that this\nrequest came over HTTPS: real accounts wait for it. With sign-in off (`AUTH_ENABLED=false`) all of the Users routes answer 503 `sign_in_off`, since nobody could be told from an administrator (SC-59).\nThe requests waiting for an account are read from `GET /api/users/requests`.\n",
+        "operationId": "listUsers",
+        "tags": [
+          "Users"
+        ],
+        "responses": {
+          "200": {
+            "description": "The users.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "users",
+                    "modules",
+                    "presets",
+                    "durable",
+                    "editable",
+                    "failing",
+                    "secure"
+                  ],
+                  "properties": {
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/UserRecord"
+                      }
+                    },
+                    "modules": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ModuleInfo"
+                      }
+                    },
+                    "presets": {
+                      "type": "object",
+                      "description": "The modules a new user of each role starts with. Only a start: what is stored is the user's own list.",
+                      "required": [
+                        "guest",
+                        "operator",
+                        "admin"
+                      ],
+                      "properties": {
+                        "guest": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ModuleId"
+                          }
+                        },
+                        "operator": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ModuleId"
+                          }
+                        },
+                        "admin": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/ModuleId"
+                          }
+                        }
+                      }
+                    },
+                    "durable": {
+                      "type": "boolean"
+                    },
+                    "editable": {
+                      "type": "boolean"
+                    },
+                    "failing": {
+                      "type": "boolean",
+                      "description": "A save failed and has not worked since."
+                    },
+                    "secure": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/SignInOff"
+          }
+        }
+      },
+      "post": {
+        "summary": "Add a user",
+        "description": "**admin.** The name is 3 to 64 letters, digits and `. _ @ -`, beginning and ending with a letter or digit, and unique whatever the case. The role is `guest`, `operator` or `admin`; the modules\nare those of the role's preset when left out, and an administrator always has every one. The password is at least 8 and at most 256 characters, not on the lists of passwords that anyone can guess (the common ones, one of their base words with digits or signs after it, or one character repeated), and not holding `hcml` or the sign-in name, and the user must\nchange it at the first sign-in unless `mustChange` is false. 409 when the name is taken, when there is no data folder to keep users in, or when the portal holds the most it can (200).\nA field the portal does not know is a 400 that names it; it is not dropped, so a mistyped field cannot pass as a change that did nothing (BK-97). The log gets one line, never the password.\n",
+        "operationId": "createUser",
+        "tags": [
+          "Users"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfHeader"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewUser"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Added.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "user"
+                  ],
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/UserRecord"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/UsersError"
+          },
+          "503": {
+            "$ref": "#/components/responses/SignInOff"
+          }
+        }
+      }
+    },
+    "/api/users/{name}": {
+      "patch": {
+        "summary": "Change a user",
+        "description": "**admin.** Any of the name shown, the role, the modules, the language, the expiry, `disabled` and `mustChange`; at least one. A user is never deleted, only disabled. A new role keeps the modules the user\nmay still have. 409 for a user kept in `.env`, for a change that would leave no administrator who can sign in, and for an administrator who disables, demotes or expires their own account. Takes effect on the user's next request, and the person's open live streams end so that they come back as the account allows now (SC-57).\nA field the portal does not know is a 400 that names it; it is not dropped, so a mistyped field cannot pass as a change that did nothing (BK-97).\n",
+        "operationId": "updateUser",
+        "tags": [
+          "Users"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfHeader"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "user"
+                  ],
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/UserRecord"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/UsersError"
+          },
+          "503": {
+            "$ref": "#/components/responses/SignInOff"
+          }
+        }
+      }
+    },
+    "/api/users/{name}/password": {
+      "post": {
+        "summary": "Set a user's password",
+        "description": "**admin.** A reset. The user must change it at the next sign-in unless `mustChange` is false, and every session of theirs begun before now ends, and so do their open live streams. The password is held to the same rule as a new user's: at least 8 and at most 256 characters, not on the lists of passwords that anyone can guess (the common ones, one of their base words with digits or signs after it, or one character repeated), and not holding `hcml` or the sign-in name. A field the portal does not know is a 400 that names it; it is not dropped, so a mistyped field cannot pass as a change that did nothing (BK-97).\n",
+        "operationId": "resetUserPassword",
+        "tags": [
+          "Users"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfHeader"
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "password"
+                ],
+                "properties": {
+                  "password": {
+                    "type": "string"
+                  },
+                  "mustChange": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Set.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "user"
+                  ],
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/UserRecord"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/UsersError"
+          },
+          "503": {
+            "$ref": "#/components/responses/SignInOff"
+          }
+        }
+      }
+    },
+    "/api/users/requests": {
+      "get": {
+        "summary": "The requests for an account that are waiting",
+        "description": "**admin.** The requests left on the sign-in page (FR-62), the oldest first. `enabled` is whether the portal accepts them now, `max` how many may wait at once\n(`ACCOUNT_REQUESTS_MAX_PENDING`). A request nobody answers is dropped after 30 days. With sign-in off this answers 503 `sign_in_off`, as the other Users routes do.\n",
+        "operationId": "listAccountRequests",
+        "tags": [
+          "Users"
+        ],
+        "responses": {
+          "200": {
+            "description": "The requests.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccountRequestList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/SignInOff"
+          }
+        }
+      }
+    },
+    "/api/users/requests/{id}/approve": {
+      "post": {
+        "summary": "Approve a request by making the account",
+        "description": "**admin.** The body is the one of `POST /api/users`: the administrator types the name (it need not be the one asked for), the role, the pages and a temporary password, and the account is made\nexactly as the Users page makes any. The request is taken off the list first, in one step, so that of two administrators who answer it at once only one gets it and the other has 404; when the account cannot be made (the name is taken, there is no data folder, the password is not accepted)\nit is put back where it was. 404 when the request is gone, for example answered by another administrator. A field the portal does not know is a 400 that names it; it is not dropped, so a mistyped field cannot pass as a change that did nothing (BK-97). The log gets the step and the names, never a password.\n",
+        "operationId": "approveAccountRequest",
+        "tags": [
+          "Users"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfHeader"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NewUser"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The account is made and the request is off the list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "user"
+                  ],
+                  "properties": {
+                    "user": {
+                      "$ref": "#/components/schemas/UserRecord"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "description": "`users_error` (the file of users could not be saved) or `requests_error` (the file of requests could not be saved): see `UsersError` and `RequestsError`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "$ref": "#/components/responses/SignInOff"
+          }
+        }
+      }
+    },
+    "/api/users/requests/{id}/refuse": {
+      "post": {
+        "summary": "Refuse a request",
+        "description": "**admin.** Takes the request off the list and makes no account. It takes no body: none, or a JSON object that is ignored. 404 when the request is gone.\n",
+        "operationId": "refuseAccountRequest",
+        "tags": [
+          "Users"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CsrfHeader"
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "description": "Ignored. Nothing, or a JSON object.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Refused.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "ok"
+                  ],
+                  "properties": {
+                    "ok": {
+                      "type": "boolean",
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/RequestsError"
+          },
+          "503": {
+            "$ref": "#/components/responses/SignInOff"
           }
         }
       }
     },
     "/api/sli/export": {
       "get": {
-        "summary": "The monthly SLA report as a PDF, Excel or CSV download",
-        "description": "**viewer.** The figures `/api/sli` shows for one month, both methods side by side, as one\nfile. `format=pdf` is the printable report; `format=xlsx` is the workbook, a Summary sheet and\none sheet per table; `format=csv` is one zip holding a CSV file for the first page and for each\ntable, and a notes file that explains them. The file states when it was generated and, for the\ncurrent month, that its figures are not final.\n\n`decimal`, `date` and `separator` choose how numbers and dates are written, and never what they say:\na figure, a verdict and the order of the rows are the same in every style. `decimal` is the mark in a\npercentage (`dot` or `comma`), `date` is the shape of the dates in the report's text (`long` as in\n`4 Nov 2026`, `numeric` as in `04/11/2026`, `iso` as in `2026-11-04`), and `separator` is what a CSV file\nputs between its fields (`comma` or `semicolon`; the PDF and the workbook have none and ignore it).\nAll three are optional and default to `dot`, `long` and `comma`; anything else, or a value given twice, is a 400.\n\nIt reads the same cached reports as `/api/sli`, so a month the page has already loaded costs\nno further Zabbix call, and it inherits that route's `staleIfError`: while Zabbix is failing it\ncan answer 200 with a file built from older figures, not 502, and says so with\n`X-Data-Stale` and `X-Data-Age-Seconds`. Nothing is kept for long: a\nbuilt file is reused for ten seconds, then built again from the cached figures.\n\n`format` and the style are checked before Zabbix is asked, so a bad request costs nothing. `month`,\n`format`, `decimal`, `date` and `separator` are the only parameters: any other is a 400, so a misspelt\n`month` is never read as the current month. `month` is\nvalidated as on `/api/sli`, and a month that has not started, or is more than about 400 days\nback, is a 400. The file name is made from the validated month alone, `HCML_SLA_Report_<month>.pdf`,\n`.xlsx` or `_csv.zip`, never from other request text.\n\nThe body is not JSON, so it is never compressed whatever `Accept-Encoding` says, and\n`Cache-Control: private, no-store` keeps a shared cache from holding on to it.\n",
+        "summary": "The SLA report for a month, or for a range of days, as a PDF, Excel or CSV download",
+        "description": "**guest.** The figures `/api/sli` shows for one month, or for a window of whole hours and the hours of the day that count (`from`, `to`, `dayHours`,\n`days`, read as `/api/sli` reads them), both methods side by side, as one file. `format=pdf` is the printable report; `format=xlsx` is the workbook, a Summary sheet and\none sheet per table; `format=csv` is one zip holding a CSV file for the first page and for each\ntable, and a notes file that explains them. The file states when it was generated and, for the\ncurrent month, that its figures are not final.\n\nA file for a window is the same file with the period in place of the month. It has one figure for the whole window, not one for each month it touches, and\nits first page, its period line and its notes say which hours of the day were counted. Its Web checks table is there and empty, with the reason, since web checks are\nmeasured by calendar month: choose a month for them. A month with `dayHours` or `days` is a file of that kind too, and is named apart from the plain month's.\n\n`decimal`, `date` and `separator` choose how numbers and dates are written, and never what they say:\na figure, a verdict and the order of the rows are the same in every style. `decimal` is the mark in a\npercentage (`dot` or `comma`), `date` is the shape of the dates in the report's text (`long` as in\n`4 Nov 2026`, `numeric` as in `04/11/2026`, `iso` as in `2026-11-04`), and `separator` is what a CSV file\nputs between its fields (`comma` or `semicolon`; the PDF and the workbook have none and ignore it).\nAll three are optional and default to `dot`, `long` and `comma`; anything else, or a value given twice, is a 400.\n\nIt reads the same cached reports as `/api/sli`, so a month the page has already loaded costs\nno further Zabbix call, and it inherits that route's `staleIfError`: while Zabbix is failing it\ncan answer 200 with a file built from older figures, not 502, and says so with\n`X-Data-Stale` and `X-Data-Age-Seconds`. Nothing is kept for long: a\nbuilt file is reused for ten seconds, then built again from the cached figures.\n\n`format`, the style, the window and the hours are checked before Zabbix is asked, so a bad request costs nothing. `month`, `from`, `to`, `dayHours`, `days`,\n`format`, `decimal`, `date` and `separator` are the only parameters: any other is a 400, so a misspelt\n`month` is never read as the current month. A month and a window together are a 400. `month` is\nvalidated as on `/api/sli`, and a month that has not started, or is more than about 400 days\nback, is a 400, as is a window that begins in such a month or that has no hour inside the daily hours chosen. The file name is made from the validated month, or from the dates and hours of the\nreport itself, never from other request text: `HCML_SLA_Report_<month>.pdf`, `.xlsx` or `_csv.zip` for a month,\n`HCML_SLA_Report_<first day>_to_<last day>` for a window, and `_0800-1700` and `_d12345` after it when hours of the day were chosen.\n\nThe body is not JSON, so it is never compressed whatever `Accept-Encoding` says, and\n`Cache-Control: private, no-store` keeps a shared cache from holding on to it.\n",
         "operationId": "exportSli",
         "tags": [
           "SLA"
@@ -2416,10 +3215,46 @@
           {
             "name": "month",
             "in": "query",
-            "description": "Defaults to the current month in `Asia/Jakarta`. An empty value means the default.",
+            "description": "Defaults to the current month in `Asia/Jakarta`. An empty value means the default. Not with `from` and `to`.",
             "schema": {
               "type": "string",
               "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "description": "The start of a window that is not a calendar month, in Unix seconds, on the hour in the report's time zone. Goes with `to`, as on `/api/sli`.",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,12}$"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "The end of the window, in Unix seconds, on the hour. A window that ends in the future is measured up to now, and its file says the figures are not final.",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,12}$"
+            }
+          },
+          {
+            "name": "dayHours",
+            "in": "query",
+            "description": "Count only these hours of the day, as `start-end` in whole hours, as on `/api/sli`. With `month` or with `from` and `to`.",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{1,2}-\\d{1,2}$"
+            }
+          },
+          {
+            "name": "days",
+            "in": "query",
+            "description": "Count only spans that begin on these days of the week, Monday 1 to Sunday 7, separated by commas. All days when left out.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[1-7](,[1-7])*$"
             }
           },
           {
@@ -2542,7 +3377,7 @@
             "$ref": "#/components/responses/ZabbixError"
           },
           "503": {
-            "$ref": "#/components/responses/ZabbixUnavailable"
+            "$ref": "#/components/responses/SliUnavailable"
           }
         }
       }
@@ -2614,8 +3449,8 @@
         }
       },
       "post": {
-        "summary": "Email one month's SLA report",
-        "description": "**admin.** Builds the files `/api/sli/export` gives for the month, one to three formats, and sends them as attachments\nto one message, with the four figures of the report's first page in its text, through the SMTP server the `MAIL_`\nsettings name. `to` is who it goes to: one to ten plain addresses, each in `allowedDomains` when that list is not empty.\nLeft out, the saved list is used (`GET`), and with `remember: true` the list that was given is saved once the report has gone.\n`style` is written as `/api/sli/export` writes it. Any other field, in the body or in `style`, is a 400: there is no subject\nand no message to set, and no copy or blind copy.\n\nChecked in this order: the shape of the body (400), whether email is set up (503 `mail_disabled`), the month, the formats, the\nstyle and the recipients (400, each with a sentence that says what is wrong; a month that has not started, that is more than about 400 days back or that ended less than ten minutes ago, is one of them), the allowance of 5 sends an hour for each person\n(429 with `Retry-After`; only a request that gets this far is counted), the mail login (502 `mail_error`, before Zabbix is\nasked, so a wrong password fails in a second), and then the two reports are read and the message is sent. A month in which neither method\nfinds a device is not sent (502 `empty_report`). A month that is\nnot cached can take as long as the download does.\n\nEvery send and every failure is logged with the user, the month, the formats, the size, the number of recipients and the\ndomains they are in, and never the addresses, the subject or a file; the portal also keeps a short record of it (counts only). A send that the mail server took for only some of the addresses is logged at warning level.\nA failure at the mail server is one fixed sentence for its kind (`login`, `connect`, `timeout`, `tls`, `recipients`,\n`rejected`, `other`); what the server said goes to the log only. The sentence for `timeout` says that the report may or may not have gone,\nbecause the server may have had the whole message when it stopped answering.\n",
+        "summary": "Email the SLA report for a month, or for a range of days",
+        "description": "**admin.** Builds the files `/api/sli/export` gives for the month, or for the `window` and the hours of the day, one to three formats, and sends them as attachments\nto one message, with the four figures of the report's first page in its text, through the SMTP server the `MAIL_`\nsettings name. `to` is who it goes to: one to ten plain addresses, each in `allowedDomains` when that list is not empty.\nLeft out, the saved list is used (`GET`), and with `remember: true` the list that was given is saved once the report has gone.\n`style` is written as `/api/sli/export` writes it. Any other field, in the body, in `window` or in `style`, is a 400: there is no subject\nand no message to set, and no copy or blind copy.\n\nThe body names a `month`, or a `window` with `from` and `to` in Unix seconds (inside an object, since `to` is the list of people), and with either one\n`dayHours` and `days` as on `/api/sli`. Neither, or both, is a 400. A range waits ten minutes after its end, as a month does. Only a plain month is entered in the portal's short\nrecord of sends, which is the monthly schedule's book and is kept by month; a range, or a month in the hours of the day, is in the log alone. The schedule itself stays monthly.\n\nChecked in this order: the shape of the body (400), whether email is set up (503 `mail_disabled`), the month, the formats, the\nstyle and the recipients (400, each with a sentence that says what is wrong; a month or a window that has not started, that begins more than about 400 days back, that has no hour inside the daily hours chosen or that ended less than ten minutes ago, is one of them), the allowance of 5 sends an hour for each person\n(429 with `Retry-After`; only a request that gets this far is counted), the mail login (502 `mail_error`, before Zabbix is\nasked, so a wrong password fails in a second), and then the two reports are read and the message is sent. A month in which neither method\nfinds a device is not sent (502 `empty_report`). A month that is\nnot cached can take as long as the download does.\n\nEvery send and every failure is logged with the user, the month (or the window's two times and the hours), the formats, the size, the number of recipients and the\ndomains they are in, and never the addresses, the subject or a file; the portal also keeps a short record of it (counts only). A send that the mail server took for only some of the addresses is logged at warning level.\nA failure at the mail server is one fixed sentence for its kind (`login`, `connect`, `timeout`, `tls`, `recipients`,\n`rejected`, `other`); what the server said goes to the log only. The sentence for `timeout` says that the report may or may not have gone,\nbecause the server may have had the whole message when it stopped answering.\n",
         "operationId": "emailSli",
         "tags": [
           "SLA"
@@ -2632,13 +3467,39 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "month",
                   "formats"
                 ],
                 "properties": {
                   "month": {
                     "type": "string",
-                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$"
+                    "pattern": "^\\d{4}-(0[1-9]|1[0-2])$",
+                    "description": "A calendar month. Not with `window`."
+                  },
+                  "window": {
+                    "type": "object",
+                    "description": "A window of whole hours that is not a calendar month. Both times are needed, on the hour in the report's time zone, and the window may be at most 366 days. Not with `month`.",
+                    "properties": {
+                      "from": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "The start, in Unix seconds."
+                      },
+                      "to": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "description": "The end, in Unix seconds."
+                      }
+                    }
+                  },
+                  "dayHours": {
+                    "type": "string",
+                    "pattern": "^\\d{1,2}-\\d{1,2}$",
+                    "description": "Count only these hours of the day, as `8-17`. As on `/api/sli`."
+                  },
+                  "days": {
+                    "type": "string",
+                    "pattern": "^[1-7](,[1-7])*$",
+                    "description": "Count only spans that begin on these days of the week, Monday 1 to Sunday 7."
                   },
                   "formats": {
                     "type": "array",
@@ -2723,7 +3584,23 @@
                       "description": "How many it refused. The message still went to the others."
                     },
                     "month": {
-                      "type": "string"
+                      "oneOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "The month the report was for, or null for a window."
+                    },
+                    "from": {
+                      "type": "integer",
+                      "description": "The window's start. Only for a window."
+                    },
+                    "to": {
+                      "type": "integer",
+                      "description": "The window's end. Only for a window."
                     },
                     "files": {
                       "type": "array",
@@ -2745,7 +3622,7 @@
                           },
                           "fileName": {
                             "type": "string",
-                            "description": "The attached file, `HCML_SLA_Report_<month>.pdf`, `.xlsx` or `_csv.zip`."
+                            "description": "The attached file, named as `/api/sli/export` names it."
                           },
                           "bytes": {
                             "type": "integer"
@@ -2799,7 +3676,7 @@
             }
           },
           "503": {
-            "description": "`mail_disabled`, email is not set up on this portal, or it is off while sign-in is off and `ALLOW_EMAIL_WITHOUT_AUTH` is not true, or a Zabbix state (`zabbix_timeout`, `zabbix_auth`).",
+            "description": "`mail_disabled`, email is not set up on this portal, or it is off while sign-in is off and `ALLOW_EMAIL_WITHOUT_AUTH` is not true, `data_not_read_yet` (no reading is newer than the start of the range; `Retry-After`; see `SliUnavailable`), or a Zabbix state (`zabbix_timeout`, `zabbix_auth`).",
             "content": {
               "application/json": {
                 "schema": {
@@ -3108,7 +3985,7 @@
     "/api/explain/problem": {
       "get": {
         "summary": "Plain-language explanation of one problem",
-        "description": "Cached 1 h, keyed by the event id together with its acknowledged and resolved state, so\nan explanation is not reused after the problem changes.\n\nBuffered JSON, not streamed. This path sends the host name, trigger name, opdata, severity,\nstart time, flags and the problem's tags to the model: in `hcml-portal` that means they\nleave the machine.\n",
+        "description": "Cached 1 h, keyed by the event id together with its acknowledged and resolved state, so\nan explanation is not reused after the problem changes. It follows the Problems and Dashboard pages: a person who holds only the Assistant page does not have it (SC-62).\n\nBuffered JSON, not streamed. This path sends the host name, trigger name, opdata, severity,\nstart time and flags to the model, and the problem's tags (up to 20) only to a model on this\nmachine: in `hcml-portal` that means the rest leaves the machine and the tags do not (SC-72).\n",
         "operationId": "explainProblem",
         "tags": [
           "AI"
@@ -3176,7 +4053,7 @@
     "/api/explain/sla": {
       "get": {
         "summary": "Plain-language explanation of an SLA figure",
-        "description": "Cached 300 s. **Two mutually exclusive modes.**\n\nWith `source=derived` it explains the portal's own monthly figure and takes `month`,\n`profile` and `scope`, where scope is `overall`, `site:<code>` or `category:<NAME>`; an\nunmatched scope is 404. Otherwise it explains a Zabbix-native SLA and requires `slaid`.\n\n`noData: true` marks an answer produced without calling the model because there was\nnothing to measure.\n",
+        "description": "Cached 300 s. **Two mutually exclusive modes.**\n\nWith `source=derived` it explains the portal's own monthly figure and takes `month`,\n`profile` and `scope`, where scope is `overall`, `site:<code>` or `category:<NAME>`; an\nunmatched scope is 404. Otherwise it explains a Zabbix-native SLA and requires `slaid`.\n\n`noData: true` marks an answer produced without calling the model because there was\nnothing to measure.\n\nIt follows the SLA and Services pages: a person who holds only the Assistant page does not have it (SC-62).\n",
         "operationId": "explainSla",
         "tags": [
           "AI"
@@ -3266,7 +4143,7 @@
             }
           },
           "429": {
-            "description": "`rate_limited`, more calls than the per-user limit a minute (`AI_CHAT_PER_MINUTE` and `AI_EXPLAIN_PER_MINUTE`, 10 each by default), or, with a\nlocal model, a call of the same person that is still waiting or running (one for each person); or `ai_budget`, the daily token budget is used\nup (hosted Claude and a model at an outside address, counted by the tokens it reports or else by the size of what went in and out; `AI_DAILY_TOKENS_PER_USER` and `AI_DAILY_TOKENS_TOTAL`). `Retry-After` says how long to wait.\n",
+            "description": "`rate_limited`, more calls than the per-user limit a minute (`AI_CHAT_PER_MINUTE` and `AI_EXPLAIN_PER_MINUTE`, 10 each by default), or, with a\nlocal model, a call of the same person that is still waiting or running (one for each person); with `source=derived`, also more than four of the person's reads of the derived SLA at once (`Retry-After` 10); or `ai_budget`, the daily token budget is used\nup (hosted Claude and a model at an outside address, counted by the tokens it reports or else by the size of what went in and out; `AI_DAILY_TOKENS_PER_USER` and `AI_DAILY_TOKENS_TOTAL`). `Retry-After` says how long to wait.\n",
             "content": {
               "application/json": {
                 "schema": {
@@ -3337,7 +4214,7 @@
     "/api/chat": {
       "post": {
         "summary": "Ask the assistant (SSE)",
-        "description": "`text/event-stream`, streamed token by token, never cached.\n\nThe request body is normalised rather than strictly validated: blank turns are dropped, each\nturn is silently truncated at 2,000 characters, and the oldest turns are dropped until the\nwhole history fits a 3,000-character budget. What *is* rejected with 400: a non-array or\nempty `messages`, a bad `role`, a non-string `content`, or a conversation not ending in a\nuser turn.\n\nFour event names:\n\n| Event | Payload |\n|---|---|\n| `context` | the estate snapshot's metadata, counts and a `truncated` flag |\n| `token` | `{ \"t\": string }`, concatenate in order |\n| `done` | `{ ms, text, firstTokenMs }`, `text` is the cleaned answer and replaces the concatenated tokens |\n| `error` | `{ \"message\": string }` |\n\nOnce the response is hijacked the HTTP status can no longer change, so failures after that\npoint arrive as an `error` frame on a 200. Its message is fixed wording, as on `AiError`.\n\nThe snapshot and the focused-site block are sent between `~~~ BEGIN` and `~~~ END` lines and\nthe system prompt says they are data. Host, site, problem and service names in them are cut to\none line, with control characters removed, and capped at 80 characters (hosts and sites) or 200\n(problems, services and SLAs), so text typed into a device cannot pose as an instruction.\n",
+        "description": "`text/event-stream`, streamed token by token, never cached.\n\nThe request body is normalised rather than strictly validated: blank turns are dropped, each\nturn is silently truncated at 2,000 characters, and the oldest turns are dropped until the\nwhole history fits a 3,000-character budget. What *is* rejected with 400: a non-array or\nempty `messages`, a bad `role`, a non-string `content`, or a conversation not ending in a\nuser turn.\n\nFour event names:\n\n| Event | Payload |\n|---|---|\n| `context` | the estate snapshot's metadata, counts and a `truncated` flag; for a user whose pages show only part of the estate, `shown` names the parts the model was given, and the counts of the others are 0 |\n| `token` | `{ \"t\": string }`, concatenate in order |\n| `done` | `{ ms, text, firstTokenMs, truncated, remembered, language }`: `text` is the cleaned answer and replaces the concatenated tokens; `truncated` is true when the model stopped at its length limit; `remembered` is how many turns of the conversation the model was given, the question included, so the page can show where its memory ends (FR-72); `language` is the one the answer was asked in, `en` or `id` (UX-73) |\n| `error` | `{ \"message\": string }` |\n\nOnce the response is hijacked the HTTP status can no longer change, so failures after that\npoint arrive as an `error` frame on a 200. Its message is fixed wording, as on `AiError`.\n\nThe snapshot and the focused-site block are sent between `~~~ BEGIN` and `~~~ END` lines and\nthe system prompt says they are data. Host, site, problem and service names in them are cut to\none line, with control characters removed, and capped at 80 characters (hosts and sites) or 200\n(problems, services and SLAs), so text typed into a device cannot pose as an instruction.\n",
         "operationId": "chat",
         "tags": [
           "AI"
@@ -3763,13 +4640,13 @@
         "type": "apiKey",
         "in": "cookie",
         "name": "hcml_session",
-        "description": "The browser's scheme. The JWT in an httpOnly, SameSite=Strict cookie, set by\n`POST /api/auth/login` and `POST /api/auth/refresh` and cleared by `POST /api/auth/logout`.\nExpires after `SESSION_HOURS` (12 hours by default), renewable while valid, carries\n`{ sub, role, ep, jti, sid }`. The name is `SESSION_COOKIE`,\ndefault `hcml_session`. Cookies ignore ports, so the Docker stack of hcml-portal-ollama\n(port 8082) names it `hcml_session_ollama`, or signing in to one portal would replace the\nother's session. Unsafe methods sent with this cookie need `X-HCML-CSRF: 1` (`CsrfHeader`).\n"
+        "description": "The browser's scheme. The JWT in an httpOnly, SameSite=Strict cookie, set by\n`POST /api/auth/login`, `POST /api/auth/refresh` and `POST /api/auth/password` and cleared by `POST /api/auth/logout`.\nExpires after `SESSION_HOURS` (12 hours by default), renewable while valid, carries\n`{ sub, role, ep, jti, sid }`. The name is `SESSION_COOKIE`,\ndefault `hcml_session`. Cookies ignore ports, so the Docker stack of hcml-portal-ollama\n(port 8082) names it `hcml_session_ollama`, or signing in to one portal would replace the\nother's session. Unsafe methods sent with this cookie need `X-HCML-CSRF: 1` (`CsrfHeader`).\n"
       },
       "bearerAuth": {
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT",
-        "description": "The same JWT in an `Authorization` header, for scripts and tests: take it from the login\nresponse's `Set-Cookie` header. Wins when a request carries the cookie too. Needs no\n`X-HCML-CSRF` header, except on sign-in and sign-out, which always need it.\n"
+        "description": "The same JWT in an `Authorization` header, for scripts and tests: take it from the login\nresponse's `Set-Cookie` header. Wins when a request carries the cookie too. Needs no\n`X-HCML-CSRF` header, except on sign-in, sign-out and the request for an account, which always need it.\n"
       }
     },
     "parameters": {
@@ -3777,7 +4654,7 @@
         "name": "X-HCML-CSRF",
         "in": "header",
         "required": false,
-        "description": "Must be `1` on sign-in, sign-out and every `POST`, `PUT`, `PATCH` or `DELETE` that\nauthenticates with the session cookie. A page on another site cannot add a custom header\nwithout a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a\nBearer header, except on sign-in and sign-out.\n",
+        "description": "Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that\nauthenticates with the session cookie. A page on another site cannot add a custom header\nwithout a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a\nBearer header, except on sign-in, sign-out and the request for an account.\n",
         "schema": {
           "type": "string",
           "const": "1"
@@ -3814,7 +4691,27 @@
         }
       },
       "Forbidden": {
-        "description": "`forbidden`, authenticated, but the role is below what this path requires.",
+        "description": "`forbidden`, authenticated, but the role is below what this path requires, or the user does not hold a module that owns it. `password_change_required` when the password is a temporary one.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "`not_found`, there is no such user, or no such request for an account.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "`conflict`, the change cannot be made: the name is taken, the user is kept in `.env`, there is no data folder, or it would leave no administrator who can sign in.",
         "content": {
           "application/json": {
             "schema": {
@@ -3834,7 +4731,7 @@
         }
       },
       "PayloadTooLarge": {
-        "description": "Body over Fastify's 1 MiB default, or over 4 KB on `POST /api/auth/login`.",
+        "description": "Body over Fastify's 1 MiB default, or over the limit of the route, which is 4 KB on `POST /api/auth/login`, `POST /api/auth/password` and `POST /api/users/{name}/password`, 8 KB on `POST /api/auth/request`, `POST /api/users`, `PATCH /api/users/{name}` and the approval of a request, and 1 KB on the refusal of a request.\n",
         "content": {
           "application/json": {
             "schema": {
@@ -3844,7 +4741,7 @@
         }
       },
       "RateLimited": {
-        "description": "300 requests per minute per client, counted before the guard, so refused requests count too.\n`/api/health`, `/api/stream` and `POST /api/auth/logout` are exempt. The stream has its own cap\ninstead, `429 too_many_streams`, described under `/api/stream`.\n",
+        "description": "300 requests per minute per client, counted before the guard, so refused requests count too.\n`/api/health`, `/api/stream` and `POST /api/auth/logout` are exempt. The stream has its own cap\ninstead, `429 too_many_streams`, described under `/api/stream`. `Retry-After` says how many seconds to wait.\n",
         "content": {
           "application/json": {
             "schema": {
@@ -3865,6 +4762,54 @@
       },
       "Internal": {
         "description": "`internal`. The message is fixed; the detail is in the BFF log only.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "UsersError": {
+        "description": "`users_error`, the file of users could not be saved, for example because the data volume is full or read-only. The message says to check the data folder; the detail is in the BFF log only (BK-99).\nAny other failure is `internal`.\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "RequestsError": {
+        "description": "`requests_error`, the file of requests for an account could not be saved, for example because the data volume is full or read-only. The message says to check the data folder; the detail is in the BFF log only.\nAny other failure is `internal`.\n",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "SliUnavailable": {
+        "description": "`data_not_read_yet`: the request is right and the figures are not there yet, because no reading is newer than the start of the range and the month could not be read again now. `Retry-After` says 60 seconds,\nand the same request is answered once the next read has run (BK-80). Or `zabbix_timeout`, `zabbix_auth`, as for any read (`ZabbixUnavailable`).\n",
+        "headers": {
+          "Retry-After": {
+            "description": "Seconds to wait before asking again (`data_not_read_yet`).",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "SignInOff": {
+        "description": "`sign_in_off`, the users cannot be managed while sign-in is off (`AUTH_ENABLED=false`). The guard that tells an administrator from anyone else is not installed then, so these routes refuse everyone (SC-59).\n",
         "content": {
           "application/json": {
             "schema": {
@@ -4289,11 +5234,428 @@
           "role": {
             "type": "string",
             "enum": [
-              "viewer",
-              "wall",
+              "guest",
               "operator",
               "admin"
             ]
+          },
+          "displayName": {
+            "type": "string",
+            "description": "The name shown, on `GET /api/auth/me`."
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "env",
+              "file"
+            ],
+            "description": "On `GET /api/auth/me`: `env` for an account kept in `.env`, which cannot change its password on the Account page (FR-73), `file` for one of the file of users."
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "id"
+            ],
+            "description": "The language the person chose for the Assistant, on `GET /api/auth/me`, when they chose one."
+          }
+        }
+      },
+      "ModuleId": {
+        "type": "string",
+        "enum": [
+          "dashboard",
+          "problems",
+          "sites",
+          "hosts",
+          "devices",
+          "latest",
+          "graphs",
+          "maps",
+          "network",
+          "links",
+          "services",
+          "sla",
+          "capacity",
+          "noise",
+          "top-triggers",
+          "inventory",
+          "assistant",
+          "users"
+        ],
+        "description": "One page of the menu. `inventory` and `users` are for administrators and cannot be given to anyone else."
+      },
+      "ModuleInfo": {
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "page",
+          "adminOnly"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/ModuleId"
+          },
+          "label": {
+            "type": "string"
+          },
+          "page": {
+            "type": "string",
+            "description": "The path of its page, such as `/network`."
+          },
+          "adminOnly": {
+            "type": "boolean",
+            "description": "Its page needs the administrator role, so it cannot be given to anyone else."
+          }
+        }
+      },
+      "NewUser": {
+        "type": "object",
+        "required": [
+          "name",
+          "role",
+          "password"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "guest",
+              "operator",
+              "admin"
+            ]
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModuleId"
+            }
+          },
+          "language": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "en",
+                  "id"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "password": {
+            "type": "string"
+          },
+          "expires": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mustChange": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UserPatch": {
+        "type": "object",
+        "minProperties": 1,
+        "properties": {
+          "displayName": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "guest",
+              "operator",
+              "admin"
+            ]
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModuleId"
+            }
+          },
+          "language": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "en",
+                  "id"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "disabled": {
+            "type": "boolean"
+          },
+          "expires": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "mustChange": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UserRecord": {
+        "type": "object",
+        "description": "A user as the Users page reads them. Never a password or a hash.",
+        "required": [
+          "name",
+          "displayName",
+          "role",
+          "modules",
+          "language",
+          "source",
+          "breakGlass",
+          "disabled",
+          "expires",
+          "mustChange",
+          "created",
+          "createdBy",
+          "lastSignIn"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "guest",
+              "operator",
+              "admin"
+            ]
+          },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModuleId"
+            }
+          },
+          "language": {
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "en",
+                  "id"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "env",
+              "file"
+            ],
+            "description": "`env` for a user kept in `.env`, which the page cannot change; `file` for one of the file of users."
+          },
+          "breakGlass": {
+            "type": "boolean",
+            "description": "The first administrator of `.env`: it signs in with the password in `.env` whatever the state of the file."
+          },
+          "disabled": {
+            "type": "boolean"
+          },
+          "expires": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Unix seconds after which the user cannot sign in, or null."
+          },
+          "mustChange": {
+            "type": "boolean"
+          },
+          "created": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "createdBy": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "lastSignIn": {
+            "oneOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AccountRequestInfo": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "description": "What the sign-in page asks before it offers the form for a request for an account (FR-62).",
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "False unless ACCOUNT_REQUESTS is on, sign-in is on, and there is a data folder."
+          },
+          "pages": {
+            "type": "array",
+            "description": "The pages a person may ask for. Only when `enabled`.",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "label"
+              ],
+              "properties": {
+                "id": {
+                  "$ref": "#/components/schemas/ModuleId"
+                },
+                "label": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "nameMax": {
+            "type": "integer",
+            "description": "The longest name kept. Only when `enabled`."
+          },
+          "reasonMax": {
+            "type": "integer",
+            "description": "The longest reason kept. Only when `enabled`."
+          }
+        }
+      },
+      "AccountRequestBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "pages",
+          "reason"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 400
+          },
+          "pages": {
+            "type": "array",
+            "maxItems": 64,
+            "items": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 4000
+          }
+        }
+      },
+      "AccountRequest": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "pages",
+          "reason",
+          "created"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModuleId"
+            }
+          },
+          "reason": {
+            "type": "string"
+          },
+          "created": {
+            "type": "integer",
+            "description": "Unix seconds when it was left."
+          }
+        }
+      },
+      "AccountRequestList": {
+        "type": "object",
+        "required": [
+          "enabled",
+          "max",
+          "requests"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the portal accepts requests now."
+          },
+          "max": {
+            "type": "integer",
+            "description": "How many requests may wait at once."
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccountRequest"
+            }
           }
         }
       },
@@ -4307,6 +5669,10 @@
         "properties": {
           "user": {
             "$ref": "#/components/schemas/User"
+          },
+          "mustChange": {
+            "type": "boolean",
+            "description": "True when the password is a temporary one that must be changed first."
           },
           "expiresIn": {
             "type": "integer",
@@ -5989,6 +7355,11 @@
           "worst": {
             "type": "integer",
             "description": "Worst status anywhere; -1 when everything is fine."
+          },
+          "truncated": {
+            "type": "boolean",
+            "const": true,
+            "description": "Present, and true, when the tree was cut at 5,000 nodes because services that share children appear under each parent."
           }
         }
       },
@@ -6005,7 +7376,7 @@
           "worst",
           "descendants"
         ],
-        "description": "Recursive, depth-capped at 12. De-duplicated by `serviceid`, the graph is a DAG.",
+        "description": "Recursive, depth-capped at 12. The graph is a DAG, so a service below several parents is built under each of them, and `descendants` counts each distinct `serviceid` once.",
         "properties": {
           "serviceid": {
             "type": "string"
@@ -6384,6 +7755,49 @@
           },
           "target": {
             "type": "number"
+          },
+          "dailyHours": {
+            "type": "object",
+            "required": [
+              "start",
+              "end",
+              "weekdays",
+              "seconds"
+            ],
+            "description": "Present when the window was restricted to hours of the day. Only these hours were measured: `window` of each host is `seconds`, an outage counts as an incident\nwhen any part of it lies inside them, and `longest` is the longest part inside them.\n",
+            "properties": {
+              "start": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 23
+              },
+              "end": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 24,
+                "description": "Not after `start` means the span runs through midnight into the next morning."
+              },
+              "weekdays": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "items": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 7
+                    }
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Days the spans begin on, Monday 1 to Sunday 7, or null for every day."
+              },
+              "seconds": {
+                "type": "integer",
+                "description": "The seconds of the window that the hours keep."
+              }
+            }
           },
           "basis": {
             "type": "object",
@@ -7295,11 +8709,16 @@
         "type": "object",
         "required": [
           "days",
-          "metrics"
+          "metrics",
+          "generatedAt"
         ],
         "properties": {
           "days": {
             "type": "integer"
+          },
+          "generatedAt": {
+            "type": "integer",
+            "description": "Unix seconds when the report was built. The list of busiest interfaces was chosen at that moment, from the latest rate of each port, and only then ranked by the days."
           },
           "metrics": {
             "type": "array",
@@ -7657,6 +9076,7 @@
           },
           "tagsExplained": {
             "type": "array",
+            "description": "One row for each tag the model was given, so none when the model is outside the machine (SC-72).",
             "items": {
               "type": "object",
               "required": [

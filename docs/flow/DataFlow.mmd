@@ -13,27 +13,33 @@ flowchart TB
     %%          built per request, cached for seconds, gone on restart.
     %%  Amber   lives in the browser.
     %%  Purple  the portal's single write back to Zabbix.
-    %%  Red     it would leave this machine, and in this copy there
-    %%          is none.
+    %%  Red     it leaves this machine: in this copy only the report
+    %%          by email.
+    %%  Grey    the portal keeps it: one small file on its own volume,
+    %%          lane 6 only.
 
     %%  The write path (lane 5) ends in its own terminal box rather than
     %%  looping back to lane 1. That arrow would be a cycle, and one
     %%  cycle is enough to make the layout engine scramble the reading
     %%  order of every other lane. It is the same Zabbix API.
 
+    %%  Lane 6 is the report by email, off until the MAIL_ settings are
+    %%  usable. It also ends in a terminal box: the send writes a record
+    %%  to the state file, and an arrow back there would be a cycle.
+
     %%  Laid out with the default engine, not elk: lanes stack downwards
     %%  and each lane reads left to right, which needs per-subgraph
     %%  `direction`, and elk ignores it, flattening the whole chart
     %%  into a 6:1 strip.
 
-    %%  In this copy the plain-language layer is qwen3:8b, served by
-    %%  Ollama on this host, so there is no red on this diagram at all
-    %%  and no boundary to mark: the estate data never crosses one. The
-    %%  hosted-model copy is hcml-portal, where that one box is red and
-    %%  carries a LEAVES THIS MACHINE warning beside it, and which adds
-    %%  a lane 6, the report by email with its small state file. This
-    %%  copy passes no MAIL_ settings and declares no volume, so it has
-    %%  no such lane. Nothing else on this diagram differs.
+    %%  In this copy the plain-language layer is the model that
+    %%  AI_MODEL names, served by Ollama on this host, so the model
+    %%  box is green and has no boundary to mark: no question and
+    %%  no summary of the estate crosses one. The one red box is the
+    %%  report by email in lane 6, as in hcml-portal (FR-56). The
+    %%  hosted-model copy is hcml-portal, where the model box is red
+    %%  too and carries a LEAVES THIS MACHINE warning beside it.
+    %%  Nothing else on this diagram differs.
 
     %%  Careful when editing: the subgraph IDs do not match the lane
     %%  numbers. Lane 3 "Plain language" is `subgraph D4` and lane 4
@@ -61,7 +67,7 @@ flowchart TB
     %%  an empty value). A typo such as AI_PROVIDER=ollama selects the
     %%  hosted backend; this copy sets and passes no Anthropic key, so
     %%  that switches the AI off rather than sending anything. Only with a
-    %%  key added would this green diagram turn back into the red one,
+    %%  key added would the model box turn red,
     %%  with no visible difference in the UI. Going hosted->local also needs two
     %%  variables, not one: AI_PROVIDER and AI_BASE_URL.
 
@@ -88,7 +94,7 @@ flowchart TB
     subgraph D4["3 &middot; Plain language: on demand only"]
         direction LR
         SNAP["<b>estate snapshot</b><br>built from the same caches<br>frozen 5 min &middot; capped at 20 problems<br>and a character budget per section"]
-        MODEL["<b>qwen3:8b</b><br>served by Ollama on this host<br>native /api/chat &middot; kept loaded 30 min"]
+        MODEL["<b>the local model</b><br>the one AI_MODEL names<br>served by Ollama on this host<br>native /api/chat &middot; kept loaded 30 min"]
         LEAVES["<b>STAYS ON THIS MACHINE</b><br>host names, trigger names and problem<br>text reach a process on this host and<br>stop there. No third party, so the<br>Private and Confidential stamp<br>raises no question"]
         ANSWER["<b>the answer</b><br>Explain: one JSON reply, cached 1 h<br>per problem + state &middot; not streamed<br>Assistant: streamed token by token,<br>never cached"]
 
@@ -115,12 +121,23 @@ flowchart TB
         WTOK --> INVAL
     end
 
+    subgraph D6["6 &middot; The report by email: optional"]
+        direction LR
+        STATE[("<b>portal-state volume</b><br>portal-state.json:<br>saved recipients,<br>the monthly schedule,<br>a record of each send<br><i>no figure, no report,<br>no password</i>")]
+        SEND["<b>the send</b><br>by an administrator, or by<br>the scheduler on its day:<br>the month's SLA, both<br>methods, as files"]
+        MAILOUT["<b>LEAVES THIS MACHINE</b><br>the month's figures and<br>files, and the addresses,<br>go to the mail server<br>over SMTP"]
+
+        STATE --> SEND --> MAILOUT
+    end
+
     ZAPI ==>|"JSON-RPC, read"| RTOK
     SHAPE ==>|"HTTP + brotli"| NGINX
     SHAPE -.->|"SSE on each tick: a frame<br>only when something changed"| LIVE
     DERIVE -.->|"host, trigger, severity, opdata,<br>plus tags on the Explain path only"| SNAP
     ANSWER -.-> SCREEN
     SCREEN -->|"acknowledge / close<br>operator role"| WTOK
+    SCREEN -->|"Email report, Schedule<br>administrator role"| SEND
+    DERIVE -.->|"the month's SLA"| SEND
 
     %% Frames must stay unfilled or they paint over the relationship lines.
 
@@ -129,16 +146,20 @@ flowchart TB
     classDef browser  fill:#fef3c7,stroke:#d97706,color:#451a03
     classDef written  fill:#ede9fe,stroke:#7c3aed,color:#2e1065
     classDef external fill:#fee2e2,stroke:#dc2626,color:#450a0a
+    classDef kept     fill:#e2e8f0,stroke:#475569,color:#0f172a
 
     style D1 fill:none,stroke:#94a3b8
     style D2 fill:none,stroke:#94a3b8
     style D3 fill:none,stroke:#94a3b8
     style D4 fill:none,stroke:#94a3b8
     style D5 fill:none,stroke:#94a3b8
+    style D6 fill:none,stroke:#94a3b8
 
     class DEV,ZSRV,ZDB,ZAPI zbx
-    class RTOK,CACHE,DERIVE,SHAPE,SNAP,ANSWER,INVAL derived
+    class RTOK,CACHE,DERIVE,SHAPE,SNAP,ANSWER,INVAL,SEND derived
     class NGINX,SCREEN,LIVE browser
     class WTOK,ZWRITE written
     class MODEL,LEAVES derived
-%% source-hash: 96246cbfade0
+    class MAILOUT external
+    class STATE kept
+%% source-hash: ffafa6159ba7

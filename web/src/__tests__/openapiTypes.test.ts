@@ -65,12 +65,26 @@ const READS = {
   '/api/sla/sli': typed<Web.SlaSli[]>(),
   '/api/explain/problem': typed<Web.ProblemExplanation>(),
   '/api/explain/sla': typed<Web.SlaExplanation>(),
+  '/api/users': typed<Web.UsersResponse>(),
+  '/api/auth/request': typed<Web.RequestInfo>(),
+  '/api/users/requests': typed<Web.RequestsResponse>(),
 };
 
 /** Each POST path api/ reads with `post<T>`. */
 const WRITES = {
   '/api/problems/acknowledge': typed<Web.AcknowledgeResult>(),
   '/api/sli/email': typed<Web.EmailSent>(),
+  '/api/users': typed<Web.UserResult>(),
+  '/api/users/{name}/password': typed<Web.UserResult>(),
+  '/api/auth/password': typed<Web.PasswordChanged>(),
+  '/api/auth/request': typed<{ ok: boolean }>(),
+  '/api/users/requests/{id}/approve': typed<Web.UserResult>(),
+  '/api/users/requests/{id}/refuse': typed<{ ok: boolean }>(),
+};
+
+/** Each PATCH path api/ reads with `patch<T>`. */
+const PATCHES = {
+  '/api/users/{name}': typed<Web.UserResult>(),
 };
 
 /** Each PUT path api/ reads with `put<T>`. */
@@ -117,14 +131,18 @@ type Drift<S, W, D extends unknown[] = []> = [S] extends [W]
           : ''
         : '';
 
-/** The 200 body, as JSON, that the file documents for a method on a path. */
-type Body<P extends string, M extends 'get' | 'post' | 'put' | 'delete'> = P extends keyof paths
+/** The 200 body, as JSON, that the file documents for a method on a path; the 201 of a creation and the 202 of a request that is kept for later answer in its place. */
+type Body<P extends string, M extends 'get' | 'post' | 'put' | 'patch' | 'delete'> = P extends keyof paths
   ? paths[P] extends { [K in M]: { responses: { 200: { content: { 'application/json': infer B } } } } }
     ? B
-    : 'no JSON body for the 200 answer'
+    : paths[P] extends { [K in M]: { responses: { 201: { content: { 'application/json': infer B } } } } }
+      ? B
+      : paths[P] extends { [K in M]: { responses: { 202: { content: { 'application/json': infer B } } } } }
+        ? B
+        : 'no JSON body for the 200, 201 or 202 answer'
   : 'no such path';
 
-type Drifts<M extends 'get' | 'post' | 'put' | 'delete', R extends Record<string, unknown>> = {
+type Drifts<M extends 'get' | 'post' | 'put' | 'patch' | 'delete', R extends Record<string, unknown>> = {
   [P in keyof R & string]: Prefix<P, Drift<Body<P, M>, R[P]>>;
 }[keyof R & string];
 
@@ -132,7 +150,7 @@ type Drifts<M extends 'get' | 'post' | 'put' | 'delete', R extends Record<string
  * Every place an answer drifts, named by path. `{}` fits only when there are none: if this line fails to
  * compile, the error lists the first of them. Hover `Drifts` for the whole list.
  */
-export const noDrift: Record<Drifts<'get', typeof READS> | Drifts<'post', typeof WRITES> | Drifts<'put', typeof PUTS> | Drifts<'delete', typeof DELETES>, never> = {};
+export const noDrift: Record<Drifts<'get', typeof READS> | Drifts<'post', typeof WRITES> | Drifts<'put', typeof PUTS> | Drifts<'patch', typeof PATCHES> | Drifts<'delete', typeof DELETES>, never> = {};
 
 // The comparison has to be able to fail. Each `@ts-expect-error` below becomes an error of its own, as an unused
 // directive, if the comparison ever stops reporting what it should; the last three show what it lets through.
@@ -173,9 +191,9 @@ export const proofs: {
 /** Every file of api/ as one text: the calls are in a file for each part of the portal. */
 const apiSource = Object.values(import.meta.glob('../api/*.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>).join('\n');
 
-/** The paths a helper (`request`, `post` or `put`) is called with in api/, once each. */
-const callsIn = (source: string, helper: 'request' | 'post' | 'put' | 'del') =>
-  [...new Set([...source.matchAll(new RegExp(`\\b${helper}<[^(]*\\(\\s*[\`'](/api/[\\w/-]+)`, 'g'))].map((m) => m[1]))].sort();
+/** The paths a helper (`request`, `post`, `put` or `patch`) is called with in api/, once each. A path with a parameter is written in the file as the spec writes it, `/api/users/{name}`. */
+const callsIn = (source: string, helper: 'request' | 'post' | 'put' | 'patch' | 'del') =>
+  [...new Set([...source.matchAll(new RegExp(`\\b${helper}<[^(]*\\(\\s*[\`'](/api/[\\w/{}-]+)`, 'g'))].map((m) => m[1]))].sort();
 
 describe('the OpenAPI file and the web types (FR-16)', () => {
   it('has an entry above for every answer api/ reads as data, and for nothing else', () => {
@@ -183,6 +201,7 @@ describe('the OpenAPI file and the web types (FR-16)', () => {
     expect(callsIn(apiSource, 'request')).toEqual(Object.keys(READS).sort());
     expect(callsIn(apiSource, 'post')).toEqual(Object.keys(WRITES).sort());
     expect(callsIn(apiSource, 'put')).toEqual(Object.keys(PUTS).sort());
+    expect(callsIn(apiSource, 'patch')).toEqual(Object.keys(PATCHES).sort());
     expect(callsIn(apiSource, 'del')).toEqual(Object.keys(DELETES).sort());
   });
 

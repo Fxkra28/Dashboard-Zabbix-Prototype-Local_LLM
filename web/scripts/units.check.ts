@@ -73,8 +73,8 @@ eq(formatValue(0.5), '0.5');
 eq(formatValue(123456), '123,456');
 
 assert.ok(naturalCompare('Gi1/0/2', 'Gi1/0/10') < 0);
-assert.ok(naturalCompare('1.2.2. IDXSVFSW01', '1.2.10 IDX24C') < 0);
-assert.deepEqual(siteFromHostName('2.1. SUB11FW01'), { code: 2, name: 'Surabaya' });
+assert.ok(naturalCompare('1.2.2. BRAVOSW01', '1.2.10 IDX24C') < 0);
+assert.deepEqual(siteFromHostName('2.1. GOLF11FW01'), { code: 2, name: 'Surabaya' });
 assert.deepEqual(siteFromHostName('INET : TWSB LINI 2 WAN 1'), { code: 14, name: 'TWSB' });
 assert.equal(siteFromHostName('INTERNET'), null);
 assert.deepEqual(monthBounds('2026-08'), { from: 1785517200, to: 1788195600 });

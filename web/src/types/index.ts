@@ -82,6 +82,7 @@ export type {
   EmailInfo,
   EmailRequest,
   EmailSent,
+  ReportRange,
   ReportFileFormat,
   ReportStyle,
   SavedRecipients,
@@ -102,9 +103,12 @@ export type {
   SliPath,
   SliProfile,
   SliReport,
+  DailyHours,
   SliWeb,
 } from './sla';
 
 export type { ChatContext, ChatDone, ChatMessage, ProblemExplanation, SlaExplanation } from './assistant';
 
-export type { Health, Me, Role } from './auth';
+export type { Health, Language, Me, ModuleId, Role } from './auth';
+
+export type { AccountRequestRecord, ModuleInfo, NewRequest, NewUser, PasswordChanged, RequestInfo, RequestsResponse, UserPatch, UserRecord, UserResult, UsersResponse } from './users';

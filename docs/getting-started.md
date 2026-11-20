@@ -10,7 +10,7 @@ The shortest path from a clone to a working portal. The full environment referen
 * Docker Engine 20.10 or later (the compose files use `host-gateway`) with the Compose v2 plugin (`docker compose`; the scripts name the containers `...-1`), for the deployment route
 * A reachable Zabbix 7.0 and a read-only API token for it
 * A model endpoint, only if you want the plain-language layer: an Anthropic API key in
-  `hcml-portal`, a running Ollama with `qwen3:8b` in `hcml-portal-ollama`. Everything else works
+  `hcml-portal`, a running Ollama with `gemma4:12b` in `hcml-portal-ollama`. Everything else works
   without it.
 
 ## 1. A Zabbix token
@@ -22,15 +22,15 @@ Most first-run problems are the token, so smoke-test it before going further:
 
 ```bash
 read -rs ZBX_TOKEN   # paste the token and press Enter: nothing shows, and the shell keeps no copy in its history
-curl -s https://zabbix.hcml.co.id/zabbix/api_jsonrpc.php \
-  --resolve zabbix.hcml.co.id:443:<LAN address> \
+curl -s https://zabbix.example.com/zabbix/api_jsonrpc.php \
+  --resolve zabbix.example.com:443:<LAN address> \
   -H 'Content-Type: application/json-rpc' \
   -H "Authorization: Bearer $ZBX_TOKEN" \
   -d '{"jsonrpc":"2.0","method":"host.get","params":{"output":["hostid","name"],"limit":3},"id":1}'
 unset ZBX_TOKEN
 ```
 
-On HCML's office network the name leads to a Zero Trust gateway that refuses the portal, so `--resolve`
+On HCML's office network `--resolve`
 sends the request to Zabbix's LAN address, the one in `docker-compose.override.yml`, and the certificate
 is still checked against the name.
 
@@ -89,9 +89,8 @@ docker compose up -d --build         # hcml-portal → :8081 · hcml-portal-olla
 curl -s localhost:8081/bff/api/health   # :8082 in the ollama copy
 ```
 
-`ZBX_URL` is HCML's Zabbix, `https://zabbix.hcml.co.id/zabbix/api_jsonrpc.php`, and it must be
-reachable from inside the container. On HCML's office network the name leads to a Zero Trust gateway
-that refuses the portal, so a `docker-compose.override.yml` maps it to Zabbix's LAN address
+`ZBX_URL` is HCML's Zabbix, `https://zabbix.example.com/zabbix/api_jsonrpc.php`, and it must be
+reachable from inside the container. On HCML's office network a `docker-compose.override.yml` maps it to Zabbix's LAN address
 ([docs/operations/after-a-restart.md](operations/after-a-restart.md)).
 
 To make `/api/health` say which build is running, pass the commit and time when you build, and
@@ -134,10 +133,8 @@ freshly copied `.env` will not start until both are filled in, or, for local wor
 
 ## What you should see
 
-Signed in, the first page is the Dashboard. The names here are stand-ins; [`screenshots/`](screenshots/README.md)
-has the other main pages, the Dashboard's other views, the dark theme and the narrow-screen layout.
-
-![The Dashboard: counts for the estate, the live list of open problems and problems by host group](screenshots/dashboard.png)
+Signed in, the first page is the Dashboard: counts for the estate, the live list of open problems and the problems of each
+host group. [The pages](handover/0-everyone/the-pages.md) describes every page in plain words.
 
 ## Checks you can run
 
@@ -154,13 +151,13 @@ Or one at a time:
 
 ```bash
 cd server
-npm test                                  # 3412 tests, 140 files
+npm test                                  # 4624 tests, 206 files
 npm run lint                              # eslint
 npm run typecheck
 npx tsx scripts/validate-sli.ts           # the derived SLA against HCML's published reports
 
 cd ../web
-npm test                                  # 2045 tests, 141 files, in jsdom
+npm test                                  # 2424 tests, 167 files, in jsdom
 npm run lint                              # eslint
 npm run typecheck
 npm run gen:api                           # web/src/generated/openapi.ts, from docs/api/openapi.yaml

@@ -154,7 +154,7 @@ describe('POST /api/auth/logout and /api/auth/refresh body', () => {
       app.inject({ method: 'POST', url: '/api/auth/refresh', ...extra, headers: { ...headers, ...extra.headers } });
     const plain = await renew({});
     expect(plain.statusCode).toBe(200);
-    expect(plain.json()).toMatchObject({ user: { name: 'ana', role: 'viewer' } });
+    expect(plain.json()).toMatchObject({ user: { name: 'ana', role: 'guest' } });
     expect((await renew({ payload: {} })).statusCode).toBe(200);
     const bad = await renew(raw([1]));
     expect(bad.statusCode).toBe(400);

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { PageLink } from '../../shared/components/PageLink';
 import { api } from '../../api';
 import { useAsync } from '../../shared/hooks/useAsync';
 import { useReportTimeZone } from '../../shared/hooks/useReportTimeZone';
@@ -122,7 +122,7 @@ function Window({ data, method }: { data: AvailabilityReport; method: SliProfile
                   {hosts.map((h) => (
                     <tr key={h.hostid}>
                       <td style={{ fontWeight: 500 }}>
-                        <Link to={`/graphs?hostid=${h.hostid}`}>{h.host}</Link>
+                        <PageLink to={`/graphs?hostid=${h.hostid}`}>{h.host}</PageLink>
                       </td>
                       {hasSite && <td className="muted">{h.site ? `${h.site.code} · ${h.site.name}` : <NoData />}</td>}
                       {hasCategory && <td className="muted">{h.category ?? <NoData />}</td>}
@@ -186,7 +186,7 @@ export default function RollingSla({
         <MethodToggle value={method} onChange={setMethod} label="Tables use" />
       </div>
       <p className="muted" style={{ fontSize: 12 }}>
-        A rolling window is for watching. The report files, email, schedule and Explain need a calendar month, and so do the web
+        A rolling window is for watching. The report files and the email are for a calendar month or a range, the schedule and Explain for a calendar month, and so are the web
         checks and the WAN paths.
       </p>
 

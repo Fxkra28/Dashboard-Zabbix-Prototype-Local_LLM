@@ -15,7 +15,7 @@ Each entry names the file, says in one sentence what the function does, quotes t
 `server/src/core/cache.ts`. Every read of Zabbix goes through this function. It answers from memory when it can, makes callers that arrive together share one fetch, and can answer with an old copy while a new one is read, or when the read fails.
 
 <!-- gen:snippet server/src/core/cache.ts#cached sha=8aab40546a54 -->
-`server/src/core/cache.ts:208-273`
+`server/src/core/cache.ts:210-275`
 
 ```ts
 export async function cached<T>(
@@ -110,7 +110,7 @@ Used by nearly every service and by the domain reads and the health check. Pinne
 `server/src/core/cache.ts`. Drops cached entries by key prefix, so the next read fetches again. It is how a write shows up at once.
 
 <!-- gen:snippet server/src/core/cache.ts#invalidate sha=1611fe02bdeb -->
-`server/src/core/cache.ts:417-436`
+`server/src/core/cache.ts:419-438`
 
 ```ts
 export function invalidate(prefix: string, opts: InvalidateOptions = {}): number {
@@ -243,8 +243,8 @@ A job that throws gives its place back, which is what the `finally` guarantees. 
 
 `server/src/core/config.ts`. Run once at start. It refuses a configuration that is unsafe or unreadable, and warns about one that is merely odd, so that a portal that looks healthy and is not never starts.
 
-<!-- gen:snippet server/src/core/config.ts#assertConfig lines=1-48 sha=1be14b5e300d -->
-`server/src/core/config.ts:582-629` (lines 1 to 48 of assertConfig)
+<!-- gen:snippet server/src/core/config.ts#assertConfig lines=1-48 sha=ccb976efdf68 -->
+`server/src/core/config.ts:598-645` (lines 1 to 48 of assertConfig)
 
 ```ts
 export function assertConfig(warn: (msg: string) => void): void {
@@ -308,6 +308,7 @@ The first part of it, quoted above, throws. Each throw names the setting and say
 6. `SLA_TIMEZONE` must be a zone the runtime knows. A name such as `Asia/Jakata` would otherwise make every month view and the SLA report answer 500 while the health route stayed green.
 7. `ZABBIX_TIMEOUT_MS` and `AI_TIMEOUT_MS`, when set, must be a whole number of milliseconds from 1,000 to 2,147,483,647. A timeout of 0 fails every call at once, a word or a unit such as `30s` would fall back to the default without a word, and a timer longer than that last number is turned into 1 ms by Node.
 8. `SLO_TARGET` and `SLI_MIN_COVERAGE`, when set, must be numbers inside their range: a percentage from 0 to 100, and a share from 0 to 1. A target typed as `99,9` or a coverage of 5 would otherwise be read as something else, and change what every report says.
+9. A copy set to send nothing away (`AI_LOCAL_ONLY`) refuses to start when its model is outside the machine and its own network, and a model whose name ends `-cloud` counts as outside whatever address it is asked at, because Ollama forwards such a name to ollama.com (SC-70).
 
 The rest of the function warns and does not stop the start: an invalid `ZBX_URL`, the certificate exception half-written, set while the address is not https, or past its last day, one warning for each reason email is off when a `MAIL_` setting is present and cannot be used (the password is never in the text), one warning when email is refused because sign-in is off and `ALLOW_EMAIL_WITHOUT_AUTH` is not true, and, last of all, one warning while email is on and `MAIL_ALLOWED_DOMAINS` is empty, since a report may then go to any address an administrator types. `index.ts` runs it, and `assertUsers` after it, before any route is registered. Tests: `startup-guards.test.ts`, `config-tls-pin.test.ts`, `config-placeholder-key.test.ts`, `write-gate.test.ts`, `email-without-auth.test.ts` and `mail-config-wiring.test.ts`.
 
@@ -316,7 +317,7 @@ The rest of the function warns and does not stop the start: an invalid `ZBX_URL`
 `server/src/core/config.ts`. Reads the two settings of the certificate exception, `ZBX_TLS_PIN_SHA256` and `ZBX_TLS_PIN_UNTIL`, into one value, or into nothing.
 
 <!-- gen:snippet server/src/core/config.ts#parseTlsPin sha=f50b80f50ab5 -->
-`server/src/core/config.ts:144-152`
+`server/src/core/config.ts:148-156`
 
 ```ts
 export function parseTlsPin(rawFingerprint: string | undefined, rawUntil: string | undefined): TlsPin | undefined {
@@ -535,7 +536,7 @@ Used only by `zabbix.ts`. Tests: `pinned-tls.test.ts` and `zabbix-pinned.test.ts
 `server/src/clients/ai.ts`. Waits for the one local model, holds it, and gives back a function that releases it. A local model takes one request at a time, and a second request would wait inside Ollama with no word to the reader.
 
 <!-- gen:snippet server/src/clients/ai.ts#acquireModelSlot sha=33527b7ec1eb -->
-`server/src/clients/ai.ts:401-429`
+`server/src/clients/ai.ts:448-476`
 
 ```ts
 export function acquireModelSlot(signal?: AbortSignal, waitMs = SLOT_WAIT_MS): Promise<() => void> {

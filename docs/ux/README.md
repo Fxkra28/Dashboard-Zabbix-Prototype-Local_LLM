@@ -15,54 +15,58 @@
 
 | Fact | Source |
 |---|---|
-| Four roles, ranked: viewer, wall, operator, admin | `server/src/security/auth.ts` `ROUTE_RULES` |
-| An unmatched route needs `viewer`, so a new route is private by default | `security/auth.ts:48` |
-| Only `/api/reports/inventory`, `/api/sli/email` and `/api/sli/schedule` need admin | `security/auth.ts:39` and `:41` |
-| `/api/links` and `/api/net` (the Dashboard's internet traffic meters, `/api/net/meters`, among them) need wall, which an operator and an admin pass too | `security/auth.ts:42` |
-| Only the write route (acknowledge, with close as an option) needs operator, so a wall screen never writes | `security/auth.ts:44` |
-| 18 pages, 17 of them behind the shell | `web/src/App.tsx` |
+| Three roles, ranked: guest, operator, admin, and a list of pages for each person | `server/src/security/modules.ts` |
+| A route that has no row in the table of routes is for administrators only, so a new route is private by default | `security/modules.ts` `judge` |
+| Only `/api/users`, `/api/reports/inventory`, `/api/sli/email`, `/api/sli/schedule` and `/api/sli/recipients` need admin | `security/modules.ts` `ROUTES` |
+| `/api/links` and `/api/net` (the Dashboard's internet traffic meters, `/api/net/meters`, among them) belong to the Links and Network pages, so a person needs those pages | `security/modules.ts` `ROUTES` |
+| Only the write route (acknowledge, with close as an option) needs operator, so a screen signed in as a guest never writes | `security/modules.ts` `ROUTES` |
+| 20 pages, 19 of them behind the shell | `web/src/App.tsx` |
 | 139 monitored hosts across 14 sites | Zabbix, measured 15 September 2026 |
 | Exactly one write exists: acknowledge and close | `server/src/routes/actions.ts` |
 | That write is off unless `ZABBIX_WRITE_TOKEN` is set, and returns 503 otherwise | `routes/actions.ts:39-51` |
 | The Dashboard holds one long-lived SSE connection, exempt from the rate limiter and capped on its own (100 screens in all, 5 per user) | `server/src/http/rateLimit.ts:6,26`, `services/stream.ts` |
-| Nothing the portal derives is stored anywhere | ADR-0003, ADR-0004 |
+| The portal keeps almost nothing it derives: closed months and a few small state files, never a database | ADR-0003, ADR-0004, ADR-0016 |
 
 Everything after this point is inference from those facts.
 
-## Four roles, four different relationships with the screen
+## Three roles, and the pages each person has
 
-The roles are not seniority levels. They are four different reasons to open the portal, and the
-route rules draw the lines in a way that says what each one is for.
+The roles are not seniority levels. They are three different reasons to open the portal, and the
+table of routes draws the lines in a way that says what each one is for. Since 17 November 2026 each
+person also has a list of pages of their own, ticked by an administrator, and the role only says what
+they may do with them (ADR-0017).
 
-### Viewer
+### Guest
 
-Has: every page except Network, Links & WAN health, and the Inventory & ownership scorecard.
+Has: the pages an administrator gave them. A new guest starts with every page except Network, Links & WAN
+health, the Inventory & ownership scorecard and Users and access.
 
 Cannot: reach anything that writes, because the write route requires operator.
 
-What the permission set implies: a viewer is trusted with the whole estate's state and with none of
-its actions, including the read-only WAN topology. That is an unusual line to draw, and it is
+What the permission set implies: a guest is trusted with the whole estate's state and with none of
+its actions, and by default not with the read-only WAN topology. That is an unusual line to draw, and it is
 informative. Network and Links expose which physical links exist between sites, which is closer to
-infrastructure documentation than to monitoring. A viewer is someone who needs to know whether
+infrastructure documentation than to monitoring. A guest is someone who needs to know whether
 things are working, not how they are wired.
 
 The screens this implies matter most: Dashboard, Problems and SLA, with its Response tab. Two of the three
-answer a question someone else asked them.
+answer a question someone else asked them. Before 17 November 2026 this was the `viewer` role.
 
-### Wall
+### A NOC screen
 
-Has: everything a viewer has, plus Network, Links and WAN, and the Dashboard's internet traffic
-meters, to read only.
+Has: a guest who was also given Network and Links & WAN health, and with them the Dashboard's internet
+traffic meters, to read only.
 
 This is not a person. It is the account of a NOC screen that turns between the Overview and the
 meters (`/?wall=1`), and the meters are interface data. A screen anyone can walk up to must never be
-able to acknowledge or close, so the wall stops one rank below operator (tracker MT-06).
+able to acknowledge or close, so it is a guest and not an operator (tracker MT-06). Until 17 November
+2026 this was the `wall` role, a name that `.env` may still carry.
 
 ### Operator
 
-Has: everything a wall screen has, plus acknowledge and close.
+Has: a guest's pages and Network and Links by default, plus acknowledge and close.
 
-This is the only role that can change anything, and what it can change is one thing. The portal is
+This is the only role that can change anything in Zabbix, and what it can change is one thing. The portal is
 read-only except for a single write (ADR-0006), and that write is what an operator is for.
 
 The one job the software is shaped around: see a problem, understand it, acknowledge it. The
@@ -76,14 +80,15 @@ instant.
 
 ### Admin
 
-Has: everything, plus the Inventory and ownership scorecard.
+Has: every page, including the Inventory and ownership scorecard and Users and access.
 
-One page, and it is not about the estate's health. It is about whether the estate's *records* are
+The scorecard is not about the estate's health. It is about whether the estate's *records* are
 complete: which hosts are missing an owner, a site, an inventory field. That is a management view,
 not an operations one, and it is the only page whose subject is the monitoring system rather than
-the network.
+the network. Users and access is the other management page: it is where the portal's own people are
+added, given pages and disabled.
 
-## The NOC wall is a fourth context, not a fourth role
+## The NOC wall is a context, not a role
 
 `DESIGN.md` section 5 names it: the Dashboard doubles as a wall display, and `/api/stream` is exempt
 from the rate limiter specifically so a wall poller does not throttle itself
@@ -91,7 +96,7 @@ from the rate limiter specifically so a wall poller does not throttle itself
 user, so a wall of more than five screens on one shared login needs `STREAM_MAX_PER_USER` raised.
 
 This is a real, code-backed usage context with no user attached. Nobody is signed in as "the wall".
-It reads as a viewer, it never clicks, and it is looked at from several metres away by people doing
+It reads as a guest, it never clicks, and it is looked at from several metres away by people doing
 something else. Three consequences, all of which are now in the interface:
 
 - The sidebar starts collapsed on `/` only, because nav labels are not what anyone reads from across
@@ -101,11 +106,12 @@ something else. Three consequences, all of which are now in the interface:
   turns that off, so the highlight of a problem stays the only motion on the wall.
 - Severity is the only loud colour anywhere, which is what makes a red chip readable at distance
   when everything else is one blue.
-- A wall that is to turn to the internet meters has to be signed in as an operator or an admin: the
-  meters are interface data, which a viewer does not get (`viewerPolicy.ts`). A wall signed in as a viewer
-  turns between the Overview and the Hosts, which are not interface data, and asks for nothing more. An operator's session on a screen nobody watches is
-  an operator's session, so the wall's account should be one made for it, and the write token (which is
-  what lets an operator acknowledge) should stay off, as it is now.
+- A wall that is to turn to the internet meters has to be signed in with the Network page: a guest who
+  was given it, an operator or an admin. The meters are interface data, which an account without that page
+  does not get (`viewerPolicy.ts`). A wall signed in without it turns between the Overview and the
+  Hosts, which are not interface data, and asks for nothing more. An operator's session on a screen nobody
+  watches is an operator's session, so the wall's account should be a guest who was given the Network page,
+  and the write token (which is what lets an operator acknowledge) should stay off, as it is now.
 
 ## Journey: a problem gets acknowledged
 
@@ -134,7 +140,7 @@ Where the friction is, in order of how much it costs:
    acknowledged, waiting for Zabbix" from "the click did nothing". *Addressed 7 October 2026:* a row
    says "Sent, waiting for Zabbix" until the refreshed list shows the change, and the list is read
    every 3 s meanwhile. After a minute with no change the row offers Ack again; a close that the list still shows open keeps a note, "Close requested, not yet applied by Zabbix", until the problem shows resolved.
-3. **Write-back being off removes the control rather than explaining it.** Correct for a viewer, and
+3. **Write-back being off removes the control rather than explaining it.** Correct for a guest, and
    confusing for an operator who has acknowledged from this screen before. *Addressed 7 October 2026:*
    an operator sees "Acknowledge is off on this portal. Ask the portal admin to turn it on." once the
    server has said write-back is off.

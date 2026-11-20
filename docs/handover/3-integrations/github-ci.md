@@ -50,16 +50,16 @@ gitleaks scans the commits of the push or the pull request, not the whole histor
 
 | What | Notes |
 |---|---|
-| Public | The code is public. Anything committed is public. So no estate data, no credential, no real host name: the screenshots in the documents have every name replaced, and `pic/` and downloaded SLA reports are ignored |
-| `LICENSE` | All rights reserved, which grants nothing and is the safe default for public code. Choosing a licence is the owner's |
-| `SECURITY.md` | How to report a vulnerability. GitHub's private vulnerability reporting still has to be switched on by the owner |
+| Public | The code is public. Anything committed is public. So no estate data, no credential, no real host name: screenshots, `pic/` and downloaded SLA reports are ignored |
+| `LICENSE` | All rights reserved, which grants nothing and is the safe default for public code. Choosing a licence is ours |
+| `SECURITY.md` | How to report a vulnerability. GitHub's private vulnerability reporting still has to be switched on by us |
 | `.gitignore` | The settings files, installed packages, build output, logs, and the files above |
 | `.nvmrc` | Node 24, which the Dockerfiles and CI use |
 | Tags | `deploy/rebuild.sh` makes a local `live-<date>` tag on a clean build. It never pushes it |
 
 ## What is true now
 
-As of 30 October 2026, CI has never run on GitHub. The account has a billing lock, so no workflow has started on any push, and fifteen Dependabot pull requests are open. The checks themselves pass on the developer's machine, and each job's steps were run by hand. The secret scan was run with the same engine against the commits of history. The first real run on GitHub may find a difference between the machine and the runner.
+As of 30 October 2026, CI has never run on GitHub. The account has a billing lock, so no workflow has started on any push, and fifteen Dependabot pull requests are open. The checks themselves pass on our machine, and each job's steps were run by hand. The secret scan was run with the same engine against the commits of history. The first real run on GitHub may find a difference between the machine and the runner.
 
 ## How it fails
 

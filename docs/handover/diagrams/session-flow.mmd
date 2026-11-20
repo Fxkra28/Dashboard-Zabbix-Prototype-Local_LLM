@@ -13,7 +13,7 @@ sequenceDiagram
     B->>N: POST /bff/api/auth/login with name, password and the X-HCML-CSRF header
     N->>S: POST /api/auth/login, with a request id added
     S->>S: check the header and the Origin, then the per-account limit and any lock
-    S->>S: look the name up and check the scrypt hash, with a decoy check for an unknown name
+    S->>S: look the name up and check the hash, with a decoy check for an unknown name
     S-->>B: 200 and a session cookie (HttpOnly, SameSite Strict), plus the seconds it lasts
 
     Note over B,S: every later request carries the cookie
@@ -28,4 +28,4 @@ sequenceDiagram
 
     B->>S: POST /api/auth/logout
     S-->>B: cookie cleared, and the old token is refused from then on
-%% source-hash: 9e81ad2706ba
+%% source-hash: 3948e225f508

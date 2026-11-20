@@ -616,7 +616,7 @@ describe('service-centric routes', () => {
 
   it('GET /api/sites groups hosts by their site tag', async () => {
     zabbixReturns({
-      'host.get': [zHost(), zHost({ hostid: '10692', name: '11.1 FG-60F-MAC-MOPU-1', tags: [{ tag: 'site', value: 'MOPU' }] })],
+      'host.get': [zHost(), zHost({ hostid: '10692', name: '11.1 FG-60F-BRAVO-MOPU-1', tags: [{ tag: 'site', value: 'MOPU' }] })],
       'problem.get': [],
       'trigger.get': [],
     });
@@ -828,7 +828,7 @@ describe('problem counts', () => {
    * moment ago. The list keeps them (marked Resolved); every count must not.
    */
   it('count only open problems outside maintenance, while /api/problems still lists the others', async () => {
-    const onHost = [{ hostid: '10689', name: '1.2.1 IDX02CORESWITCH' }];
+    const onHost = [{ hostid: '10689', name: '1.2.1 TANGO02CORESWITCH' }];
     zabbixReturns({
       'host.get': [zHost()],
       'hostgroup.get': [{ groupid: '1', name: 'Core', hosts: [{ hostid: '10689' }] }],

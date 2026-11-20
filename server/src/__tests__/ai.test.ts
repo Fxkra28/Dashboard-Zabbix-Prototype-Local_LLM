@@ -334,7 +334,8 @@ describe('native Ollama requests', () => {
       return { model: body.model, think: body.think, keep_alive: body.keep_alive, options };
     };
     for (const b of bodies) expect(runner(b)).toEqual(runner(bodies[0]));
-    expect(runner(bodies[0]).options).toEqual({ num_ctx: 8192, temperature: 0.7, top_p: 0.8 });
+    // Qwen3's own card: 0.7, 0.8 and top-k 20 when it does not think (modelProfile).
+    expect(runner(bodies[0]).options).toEqual({ num_ctx: 8192, temperature: 0.7, top_p: 0.8, top_k: 20 });
 
     // Only the output limit differs: an answer, an explanation, a load, one token.
     expect(bodies.map((b) => (b.body.options as { num_predict: number }).num_predict)).toEqual([700, 2048, 1, 1]);

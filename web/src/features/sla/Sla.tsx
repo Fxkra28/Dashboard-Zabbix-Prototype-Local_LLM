@@ -1,10 +1,10 @@
 import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { PageLink } from '../../shared/components/PageLink';
 import { api } from '../../api';
 import { useAsync } from '../../shared/hooks/useAsync';
 import { useAiEnabled } from '../assistant/useAi';
 import { useUrlState } from '../../shared/hooks/useUrlState';
-import type { Sla, SlaSli, SlaSource, SliGroup, SliHost, SliPath, SliProfile, SliReport } from '../../types';
+import type { ReportRange, Sla, SlaSli, SlaSource, SliGroup, SliHost, SliPath, SliProfile, SliReport } from '../../types';
 import { Async, Empty, StaleCopy } from '../../shared/components/states';
 import { FieldSpacer } from '../../shared/components/Field';
 import { SlaExplainPanel, type DerivedSlaScope } from '../assistant/ExplainPanel';
@@ -21,6 +21,7 @@ import {
   MethodToggle,
   MonthSelect,
   NoDataPill,
+  RANGE_PERIOD,
   ROLLING_WINDOWS,
   SliPill,
   webNote,
@@ -30,11 +31,29 @@ import {
   rollingDays,
 } from './Sli';
 import ResponseTab from './Response';
+import RangeControls from './RangeControls';
 import RollingSla from './Rolling';
+import {
+  MIN_BUDGET_SECONDS,
+  RANGE_MODES,
+  addDays,
+  boundsOf,
+  hoursProblem,
+  hoursQuery,
+  hoursText,
+  measuredHoursText,
+  parseDays,
+  rangeWords,
+  windowProblem,
+  type HoursChoice,
+  type RangeChoice,
+  type RangeMode,
+} from './rangeWindow';
 import { sitesBelowCard } from './sitesBelow';
 import { momentWords, staleCopyOf, staleWhen } from '../../shared/lib/freshness';
 import { naturalCompare } from '../../shared/lib/sites';
-import { recentMonths } from '../../shared/lib/time';
+import { serverNow } from '../../shared/lib/clock';
+import { dayInZone, recentMonths } from '../../shared/lib/time';
 import { useReportTimeZone } from '../../shared/hooks/useReportTimeZone';
 import { PERCENT_DP, dur } from '../../shared/lib/units';
 import { count } from '../../shared/lib/plural';
@@ -385,7 +404,7 @@ function DeviceTable({ report }: { report: SliReport }) {
             {rows.map((h) => (
               <tr key={h.hostid}>
                 <td style={{ fontWeight: 500 }}>
-                  <Link to={`/graphs?hostid=${h.hostid}`}>{h.name}</Link>
+                  <PageLink to={`/graphs?hostid=${h.hostid}`}>{h.name}</PageLink>
                   {h.hostStatus === '1' && <span className="muted"> · disabled</span>}
                 </td>
                 <td className="muted">{h.site ? `${h.site.code} · ${h.site.name}` : <NoData />}</td>
@@ -564,7 +583,7 @@ function NeverMeasured({ hosts }: { hosts: SliHost[] }) {
             {list.map((h) => (
               <tr key={h.hostid}>
                 <td>
-                  <Link to={`/graphs?hostid=${h.hostid}`}>{h.name}</Link>
+                  <PageLink to={`/graphs?hostid=${h.hostid}`}>{h.name}</PageLink>
                 </td>
                 <td className="muted">{h.site ? `${h.site.code} · ${h.site.name}` : <NoData />}</td>
                 <td className="muted">{unmeasuredReason(h)}</td>
@@ -588,18 +607,22 @@ function DerivedKpis({
   strict,
   hcml,
   hcmlError,
+  measuredSeconds,
 }: {
   strict: SliReport;
   hcml: SliReport | null;
   /** Why the HCML read failed, so that its card does not stay at "calculating" (FR-52). */
   hcmlError: string | null;
+  /** For a window that is not a month: the seconds each device was measured over, since a budget over a few hours says little. */
+  measuredSeconds?: number;
 }) {
   const target = strict.target;
   const o = strict.overall;
+  const budgetShown = measuredSeconds === undefined || measuredSeconds >= MIN_BUDGET_SECONDS;
   // The strict method only, like the cards beside it and like the report files, whichever method the tables use (FR-50).
   const sitesCard = sitesBelowCard(strict.sites, target);
   const allowance = 100 - target;
-  const used = o.sli === null || allowance <= 0 ? null : ((100 - o.sli) / allowance) * 100;
+  const used = o.sli === null || allowance <= 0 || !budgetShown ? null : ((100 - o.sli) / allowance) * 100;
   const hcmlSli = hcml?.overall.sli ?? null;
   const allowanceText = `${allowance.toFixed(allowance % 1 ? 2 : 0)}% downtime allowance`;
 
@@ -638,9 +661,11 @@ function DerivedKpis({
         label="Error budget used"
         value={used === null ? '—' : budgetUsed(used)}
         sub={
-          used !== null && used > 100
-            ? `the budget, the ${allowanceText} (strict)`
-            : `of the ${allowanceText} (strict)`
+          !budgetShown
+            ? 'shown from 24 measured hours'
+            : used !== null && used > 100
+              ? `the budget, the ${allowanceText} (strict)`
+              : `of the ${allowanceText} (strict)`
         }
         accent={used === null ? 'var(--muted)' : used > 100 ? 'var(--danger)' : 'var(--good)'}
       />
@@ -793,21 +818,172 @@ function MonthlySla({
 }
 
 
-/** The period is a month, or the last 7 or 30 days; both ride in the one `month` value of the address, and the method with them. */
+/** What a range says about itself, for the line under the cards: which hours were counted and how long each device was measured. */
+function RangeNote({ report }: { report: SliReport }) {
+  const seconds = report.dailyHours?.seconds ?? report.end - report.from;
+  return (
+    <p className="sli-method-note">
+      {report.dailyHours ? `Counting ${hoursText(report.dailyHours)}. ` : ''}
+      Each device was measured over up to {measuredHoursText(seconds)}, less planned maintenance{report.profile === 'availability' ? ' and hours with no collected data' : ''}.
+      {!report.closed && <em> The range has not ended: figures so far.</em>}
+      {' '}Web checks are measured by calendar month: choose Calendar month in the Period list to see them.
+    </p>
+  );
+}
+
+/** What the spinner says while a range is measured: a long one reads several months from Zabbix, once each, and that can take minutes (FR-68). */
+function measuringLabel(seconds: number): string {
+  return seconds > 31 * 86_400
+    ? 'Measuring the range… Each month is read from Zabbix once, so the first view of a long range can take several minutes. If it times out, try again: the months already read are kept.'
+    : 'Measuring the range…';
+}
+
+/** The report for a window of whole hours, by both methods, with the tables a month has except the web checks, which are monthly, and Explain. The files and the email are in the controls above it. */
+function RangeResults({ from, to, query, method }: { from: number; to: number; query: { dayHours?: string; days?: string }; method: SliProfile }) {
+  const [explainNothing] = useState(() => () => undefined);
+  const running = to * 1000 > serverNow();
+  const refresh = running ? OPEN_MONTH_REFRESH_MS : undefined;
+  const deps = [from, to, query.dayHours, query.days];
+  const strictQ = useAsync<SliReport>(() => api.sliWindow({ from, to, profile: 'availability', ...query }), deps, refresh);
+  const hcmlQ = useAsync<SliReport>(() => api.sliWindow({ from, to, profile: 'hcml-report', ...query }), deps, refresh);
+  const shownQ = method === 'availability' ? strictQ : hcmlQ;
+
+  // The answer to an earlier choice must not sit under this one: the same window, and the same hours as were asked for.
+  const hoursKey = query.dayHours || query.days ? `${query.dayHours ?? '0-24'}:${query.days ?? ''}` : '';
+  const fresh = (r: SliReport | null) => {
+    const h = r?.dailyHours;
+    return r && r.from === from && r.to === to && (h ? `${h.start}-${h.end}:${(h.weekdays ?? []).join(',')}` : '') === hoursKey ? r : null;
+  };
+  const strict = fresh(strictQ.data);
+  const hcml = fresh(hcmlQ.data);
+  const shown = fresh(shownQ.data);
+
+  return (
+    <>
+      <Async
+        loading={strictQ.loading || !strict}
+        error={strictQ.error}
+        data={strict}
+        updatedAt={strictQ.updatedAt}
+        loadingLabel={measuringLabel(to - from)}
+        onRetry={strictQ.reload}
+        retryable={strictQ.retryable}
+      >
+        {(s) => (
+          <>
+            <HcmlStaleNote strict={s} hcml={hcml} />
+            <DerivedKpis strict={s} hcml={hcml} hcmlError={hcmlQ.error} measuredSeconds={s.dailyHours?.seconds ?? s.end - s.from} />
+            {/* HCML publishes its figures by calendar month; for a range the card is the portal's reading of HCML's rules (FR-68). */}
+            <p className="muted sli-hcml-range-note">HCML publishes its figures for a calendar month only. The HCML figure here is the portal’s own reading of HCML’s rules over this range, and not a figure HCML has published.</p>
+            <p className="sli-method-note">
+              <strong>Why two figures?</strong> {METHOD_NOTE}
+            </p>
+            <RangeNote report={s} />
+            <GapsNote gaps={s.gaps} windows={s.noDataWindows} profile={method} />
+            <NeverMeasured hosts={s.hosts} />
+          </>
+        )}
+      </Async>
+
+      {strict && (
+        <Async
+          loading={shownQ.loading || !shown}
+          error={shownQ.error}
+          data={shown}
+          updatedAt={shownQ.updatedAt}
+          loadingLabel={`Calculating with the ${METHOD_LABEL[method]}…`}
+          onRetry={shownQ.reload}
+        >
+          {(r) => (
+            <div className="grid sli-grid">
+              <GroupTable title={`By category · ${METHOD_LABEL[method]}`} first="Category" groups={r.categories} target={r.target} aiEnabled={false} onExplain={explainNothing} />
+              <GroupTable title={`By site · ${METHOD_LABEL[method]}`} first="Site" groups={r.sites} target={r.target} aiEnabled={false} onExplain={explainNothing} />
+              <DeviceTable report={r} />
+              <PathsTable report={r} />
+            </div>
+          )}
+        </Async>
+      )}
+    </>
+  );
+}
+
+/** Any range of whole hours, and the hours of the day and days of the week that count (ADR-0018). Every choice rides in the address, so that a link keeps it. */
+function RangeSla({ setPeriod, method, setMethod }: { setPeriod: (p: string) => void; method: SliProfile; setMethod: (m: SliProfile) => void }) {
+  const zone = useReportTimeZone();
+  const today = dayInZone(serverNow(), zone);
+  const [mode, setMode] = useUrlState<RangeMode>('rmode', 'month', { options: RANGE_MODES });
+  // A default that moves with the date is written into the address while it is the one in use, as the month's is (FR-53).
+  const [day, setDay] = useUrlState<string>('rday', addDays(today, -1), { keepDefault: mode === 'day' });
+  const [month, setMonth] = useUrlState<string>('rmonth', lastClosedMonth(), { keepDefault: mode === 'month' });
+  const [year, setYear] = useUrlState<number>('ryear', Number(today.slice(0, 4)), { keepDefault: mode === 'year' });
+  const [fromDate, setFromDate] = useUrlState<string>('rfrom', addDays(today, -7), { keepDefault: mode === 'custom' });
+  const [fromHour, setFromHour] = useUrlState<number>('rfh', 0);
+  const [toDate, setToDate] = useUrlState<string>('rto', today, { keepDefault: mode === 'custom' });
+  const [toHour, setToHour] = useUrlState<number>('rth', 0);
+  const [start, setStart] = useUrlState<number>('hstart', 0);
+  const [end, setEnd] = useUrlState<number>('hend', 24);
+  const [daysText, setDaysText] = useUrlState<string>('days', '');
+
+  const choice: RangeChoice = { mode, day, month, year, fromDate, fromHour, toDate, toHour };
+  const hours: HoursChoice = { start, end, days: parseDays(daysText) };
+  const onChoice = (c: Partial<RangeChoice>) => {
+    if (c.mode !== undefined) setMode(c.mode);
+    if (c.day !== undefined) setDay(c.day);
+    if (c.month !== undefined) setMonth(c.month);
+    if (c.year !== undefined) setYear(c.year);
+    if (c.fromDate !== undefined) setFromDate(c.fromDate);
+    if (c.fromHour !== undefined) setFromHour(c.fromHour);
+    if (c.toDate !== undefined) setToDate(c.toDate);
+    if (c.toHour !== undefined) setToHour(c.toHour);
+  };
+  const onHours = (c: Partial<HoursChoice>) => {
+    if (c.start !== undefined) setStart(c.start);
+    if (c.end !== undefined) setEnd(c.end);
+    if (c.days !== undefined) setDaysText(c.days.length === 0 || c.days.length === 7 ? '' : c.days.join(','));
+  };
+
+  const { from, to } = boundsOf(choice, zone);
+  const problem = windowProblem(from, to, Math.floor(serverNow() / 1000), zone) ?? hoursProblem(hours);
+  const query = hoursQuery(hours);
+  // The files and the email are for the range on screen, both methods; off while the choice is not one the server can be asked for.
+  const files: ReportRange = { from, to, ...query, words: problem ? 'the range chosen' : rangeWords(from, to, hours, zone) };
+
+  return (
+    <>
+      <div className="notice sli-banner">
+        <strong>{DERIVED_SLA_BANNER}.</strong> Computed in the portal from each device’s ICMP triggers, for the range and the hours you choose, in {zone} time; nothing is written to Zabbix.
+      </div>
+
+      <div className="controls">
+        <MonthSelect rolling value={RANGE_PERIOD} onChange={setPeriod} label="Period" />
+        <RangeControls choice={choice} onChoice={onChoice} hours={hours} onHours={onHours} zone={zone} />
+        <MethodToggle value={method} onChange={setMethod} label="Tables use" />
+        <ReportDownload range={files} disabled={problem !== null} />
+        <EmailReport range={files} disabled={problem !== null} />
+      </div>
+
+      {problem ? <div className="notice" role="alert">{problem}</div> : <RangeResults from={from} to={to} query={query} method={method} />}
+    </>
+  );
+}
+
+/** The period is a month, the last 7 or 30 days, or a range of hours; they ride in the one `month` value of the address, and the method with them. */
 function DerivedSla() {
   const zone = useReportTimeZone();
   const months = useMemo(() => recentMonths(12, zone), [zone]);
-  const periods = useMemo(() => [...ROLLING_WINDOWS.map((w) => w.key), ...months], [months]);
+  const periods = useMemo(() => [...ROLLING_WINDOWS.map((w) => w.key), ...months, RANGE_PERIOD], [months]);
   // Period and method live in the URL, so Back from a device graph returns to the same report.
   // The default is the last closed month, which moves on the 1st: it is written into the address so that a shared link keeps the month (FR-53).
   const [period, setPeriod] = useUrlState<string>('month', lastClosedMonth(), { options: periods, keepDefault: true });
   const [method, setMethod] = useUrlState<SliProfile>('method', 'availability', { options: PROFILES });
+  const kindOf = (p: string) => (p === RANGE_PERIOD ? 'range' : rollingDays(p) === null ? 'month' : 'window');
+  const kind = kindOf(period);
   const days = rollingDays(period);
-  const isMonth = days === null;
-  // A month and a window are drawn by different views, so the select the person is on is drawn again; focus goes back to the new one.
+  // A month, a window and a range are drawn by different views, so the select the person is on is drawn again; focus goes back to the new one.
   const refocus = useRef(false);
   const pick = (next: string) => {
-    const crossing = (rollingDays(next) === null) !== isMonth;
+    const crossing = kindOf(next) !== kind;
     refocus.current = crossing && document.activeElement?.hasAttribute('data-period') === true;
     setPeriod(next);
   };
@@ -815,7 +991,8 @@ function DerivedSla() {
     if (!refocus.current) return;
     refocus.current = false;
     document.querySelector<HTMLSelectElement>('select[data-period]')?.focus();
-  }, [isMonth]);
+  }, [kind]);
+  if (kind === 'range') return <RangeSla setPeriod={pick} method={method} setMethod={setMethod} />;
   return days === null ? (
     <MonthlySla month={period} setMonth={pick} method={method} setMethod={setMethod} />
   ) : (

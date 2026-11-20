@@ -116,7 +116,7 @@ describe('wiring in index.ts', () => {
     const index = await read();
     const hook = index.indexOf('registerNoStore(app)');
     expect(hook).toBeGreaterThan(-1);
-    expect(hook).toBeLessThan(index.indexOf('await setupAuth(app)'));
+    expect(hook).toBeLessThan(index.indexOf('await setupAuth(app, userDirectory())'));
     expect(hook).toBeLessThan(index.indexOf('await app.register(hostRoutes)'));
   });
 

@@ -1,6 +1,6 @@
 # 29. HCML's six optimisation goals, indexed
 
-[setup.md](../../setup.md) · previous: [§28](28-glossary.md) · next: [§30](30-what-changed-on-12-october-2026.md)
+[setup.md](../../setup.md) · previous: [§28](28-glossary.md)
 
 *Reconstructed 22 September 2026. `DOCUMENTATION.md` opened with this framing. The mapping itself was
 never lost (it is spread across `setup.md` §3 and the openers of §§14 to 21) but there was no single

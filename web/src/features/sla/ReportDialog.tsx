@@ -46,7 +46,7 @@ export default function ReportDialog({ title, sub, busy = false, onClose, onSubm
     // A click on the backdrop cancels, unless work is under way.
     // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions -- Esc and the close button do this from the keyboard
     <div
-      className="drawer-overlay"
+      className="drawer-overlay centered"
       onMouseDown={(e) => {
         pressedBackdrop.current = e.target === e.currentTarget;
         if (pressedBackdrop.current) e.preventDefault();

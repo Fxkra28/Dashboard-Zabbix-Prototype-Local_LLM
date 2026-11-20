@@ -47,6 +47,9 @@ export default function SavedList({
   const regionId = useId();
   const askId = useId();
   const toggle = useRef<HTMLButtonElement>(null);
+  const addInput = useRef<HTMLInputElement>(null);
+  /** Where the focus goes when the change is done: the box, for an address added (the next one is typed there), or the toggle, when the button that was pressed has gone with its address (UX-71). */
+  const focusAfter = useRef<'input' | 'toggle' | HTMLElement | null>(null);
   const keep = useRef<HTMLButtonElement>(null);
   const deleteButton = useRef<HTMLButtonElement>(null);
   // One change at a time, whatever is pressed meanwhile: the state of `busy` is only seen at the next render.
@@ -69,9 +72,21 @@ export default function SavedList({
 
   const off = busy || disabled;
 
-  async function change(go: () => Promise<{ list: string[]; removed?: number }>, said: (list: string[], removed?: number) => string) {
+  // The controls are off while a change is saved, which drops the focus to the page: it is put back once they are on again.
+  useEffect(() => {
+    if (busy || focusAfter.current === null) return;
+    const asked = focusAfter.current;
+    focusAfter.current = null;
+    // A button that is still there takes the focus back; one that has gone with the row sends it to the toggle.
+    const target = asked === 'input' ? addInput.current : asked === 'toggle' || !asked.isConnected ? toggle.current : asked;
+    target?.focus();
+  }, [busy]);
+
+  async function change(go: () => Promise<{ list: string[]; removed?: number }>, said: (list: string[], removed?: number) => string, focus: 'input' | 'toggle' = 'toggle') {
     if (working.current) return;
     working.current = true;
+    const pressed = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    let failed = false;
     setBusy(true);
     setNote('');
     setError('');
@@ -81,13 +96,14 @@ export default function SavedList({
       onChanged(list);
       if (alive.current) setNote(said(list, removed));
     } catch (err) {
+      failed = true;
       if (alive.current) setError(whyItFailed(err));
     } finally {
       working.current = false;
       if (alive.current) {
+        // Nothing changed when the save failed, so a Remove or Delete that was pressed is still there to take the focus back.
+        focusAfter.current = failed && focus === 'toggle' && pressed ? pressed : focus;
         setBusy(false);
-        // The button that was pressed may be gone with its address, which would drop the focus to the page.
-        toggle.current?.focus();
       }
     }
   }
@@ -120,6 +136,7 @@ export default function SavedList({
         return { list };
       },
       (list) => `Added ${next}. ${holds(list)}`,
+      'input',
     );
   };
 
@@ -149,6 +166,7 @@ export default function SavedList({
             )}
             <div className="saved-list-add">
               <input
+                ref={addInput}
                 type="text"
                 name="saved-list-address"
                 value={address}

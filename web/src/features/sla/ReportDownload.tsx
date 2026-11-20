@@ -1,14 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, HttpFailure, type ReportFormat } from '../../api';
+import type { ReportRange } from '../../types';
 import { REVOKE_AFTER_MS, saveFile } from '../../shared/lib/saveFile';
 import ReportStyleButton from './ReportStyleButton';
 import { readReportStyle } from './reportStyle';
 
 /**
- * Download a month's SLA report as a PDF, an Excel file or a zip of CSV files. The BFF builds the
+ * Download the SLA report, for a month or for a range of days (FR-60), as a PDF, an Excel file or a zip of CSV files. The BFF builds the
  * file from the same figures the page shows (GET /api/sli/export); this only
  * fetches it and hands it to the browser.
  */
+
+/** What a file is for: a calendar month, or a range of days and the hours of the day that count. */
+export type ReportPeriod = { month: string; range?: undefined } | { range: ReportRange; month?: undefined };
+
+/** The period as a person reads it: the name a screen reader gives a group, the title of a dialog, the line after a send. */
+export const periodWords = (p: ReportPeriod): string => (p.range ? p.range.words : monthInWords(p.month));
+
+/** Changes when the period does, so what one period left behind (an error, a busy button) is not kept for the next. */
+export const periodKey = (p: ReportPeriod): string => (p.range ? `${p.range.from}:${p.range.to}:${p.range.dayHours ?? ''}:${p.range.days ?? ''}` : p.month);
+
+/** The period of a component's props, which name a month or a range and never both. */
+export const periodOf = (p: { month?: string; range?: ReportRange }): ReportPeriod => (p.range ? { range: p.range } : { month: p.month ?? '' });
 
 /** The file always holds both methods, so the toggle beside the buttons does not change it. */
 const BOTH_METHODS = 'Both methods, strict and HCML’s report method, whichever one the page shows';
@@ -49,7 +62,10 @@ function whyItFailed(err: unknown, gaveUp: boolean): string {
   return said || 'Something went wrong. Try again.';
 }
 
-export default function ReportDownload({ month, disabled = false }: { month: string; disabled?: boolean }) {
+export default function ReportDownload(props: ReportPeriod & { disabled?: boolean }) {
+  const { disabled = false } = props;
+  const period = periodOf(props);
+  const key = periodKey(period);
   const [busy, setBusy] = useState<ReportFormat | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState('');
@@ -61,7 +77,7 @@ export default function ReportDownload({ month, disabled = false }: { month: str
   const running = useRef(false);
   const readyTimer = useRef<ReturnType<typeof setTimeout>>();
 
-  // A new month is a new report: forget the old one's error and free the buttons for it.
+  // A new month or range is a new report: forget the old one's error and free the buttons for it.
   useEffect(() => {
     setBusy(null);
     setError(null);
@@ -71,7 +87,7 @@ export default function ReportDownload({ month, disabled = false }: { month: str
       epoch.current += 1;
       clearTimeout(readyTimer.current);
     };
-  }, [month]);
+  }, [key]);
 
   async function download(format: ReportFormat, noun: string) {
     if (running.current) return;
@@ -90,7 +106,8 @@ export default function ReportDownload({ month, disabled = false }: { month: str
       stop.abort();
     }, GIVE_UP_AFTER_MS);
     try {
-      const { blob, fileName } = await api.sliExport(month, format, stop.signal, readReportStyle());
+      const style = readReportStyle();
+      const { blob, fileName } = period.range ? await api.sliRangeExport(period.range, format, stop.signal, style) : await api.sliExport(period.month, format, stop.signal, style);
       saveFile(blob, fileName);
       if (owns()) {
         setStatus(`${noun} report ready`);
@@ -118,7 +135,7 @@ export default function ReportDownload({ month, disabled = false }: { month: str
         <div
           className="report-actions"
           role="group"
-          aria-label={`Download the SLA report for ${monthInWords(month)}, both methods`}
+          aria-label={`Download the SLA report for ${periodWords(period)}, both methods`}
         >
           {FORMATS.map(({ format, label, noun, hint }) => (
             <button

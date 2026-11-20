@@ -4,7 +4,7 @@
 
 `AUTH_ENABLED=true` turns on a JWT flow: `POST /api/auth/login` sets a JWT (12 h unless `SESSION_HOURS` says otherwise) carrying the
 user's role in a session cookie; an `onRequest` guard then rejects unauthenticated `/api/*` calls
-(`/api/health`, `/api/auth/login`, `/api/auth/me` and `/api/auth/logout` excepted) and checks the role
+(`/api/health`, `/api/auth/login`, `/api/auth/me`, `/api/auth/logout` and `/api/auth/request` excepted) and checks the role
 against the route. The Zabbix token is never exposed regardless: portal auth gates the portal's
 own routes only.
 
@@ -17,15 +17,15 @@ renewal and `/api/auth/me` return, and redirects to `/login` on a 401, keeping t
 after sign-in.
 
 Every POST from the page carries `X-HCML-CSRF: 1`. The BFF refuses a POST that authenticates with the
-cookie, and any sign-in or sign-out, without that header or with an `Origin` from another host:
+cookie, and any sign-in, sign-out or request for an account, without that header or with an `Origin` from another host:
 403 `csrf`. A script can send `Authorization: Bearer <jwt>` instead; the header wins over the cookie
-and needs no CSRF header, except to sign in or out. `POST /api/auth/logout` clears the cookie, and the tabs tell each other
+and needs no CSRF header, except to sign in or out or to ask for an account. `POST /api/auth/logout` clears the cookie, and the tabs tell each other
 over a `BroadcastChannel`, so signing out in one sends the others to `/login`.
 [ADR-0010](../architecture/adr/0010-session-cookie.md) has the trade-off.
 
 An open page renews its token an hour before it runs out with `POST /api/auth/refresh`
 ([`useSessionRenewal.ts`](../../web/src/features/shell/useSessionRenewal.ts)), so a wall screen stays signed in while
-it is open. The BFF looks the user up again on each renewal: a user no longer in `PORTAL_USERS`, or a
+it is open. The BFF looks the user up again on each renewal: a user who is disabled or past their expiry on the Users page, a user kept in `.env` alone who is no longer in `PORTAL_USERS`, or a
 name listed there twice, is refused, and the new token carries the role configured now.
 [ADR-0009](../architecture/adr/0009-renew-an-open-portals-sign-in.md) has the trade-off.
 

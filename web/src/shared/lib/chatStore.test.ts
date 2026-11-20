@@ -82,3 +82,27 @@ describe('the saved Assistant conversation', () => {
     expect(() => clearConversation()).not.toThrow();
   });
 });
+
+describe('the marks a saved conversation carries (FR-72, UX-72, UX-73)', () => {
+  it('keeps the language, the cut mark and the memory mark of a message, and only those', () => {
+    sessionStorage.setItem(
+      CHAT_STORAGE_KEY,
+      JSON.stringify([
+        { role: 'user', content: 'Berapa host yang mati?', lang: 'id', forgotten: true, extra: 'x' },
+        { role: 'assistant', content: 'Dua host.', lang: 'id', cut: 'stopped' },
+      ]),
+    );
+    expect(loadConversation()).toEqual([
+      { role: 'user', content: 'Berapa host yang mati?', lang: 'id', forgotten: true },
+      { role: 'assistant', content: 'Dua host.', lang: 'id', cut: 'stopped' },
+    ]);
+  });
+
+  it('drops a mark that is not one the page writes, since it ends up in an attribute and a sentence', () => {
+    sessionStorage.setItem(
+      CHAT_STORAGE_KEY,
+      JSON.stringify([{ role: 'assistant', content: 'Dua host.', lang: '"><script>', cut: 'because', forgotten: 'yes' }]),
+    );
+    expect(loadConversation()).toEqual([{ role: 'assistant', content: 'Dua host.' }]);
+  });
+});

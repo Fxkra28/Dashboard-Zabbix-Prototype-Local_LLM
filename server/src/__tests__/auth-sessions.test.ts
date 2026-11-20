@@ -23,7 +23,7 @@ describe('tokens are bound to this portal', () => {
     for (const [env, name] of [[{}, 'hcml_session'], [{ SESSION_COOKIE: 'hcml_session_ollama' }, 'hcml_session_ollama']] as const) {
       const { app, signIn, cookieOf } = await buildAuthApp(env);
       const token = cookieOf(await signIn('ana', 'viewer-pass'), name)!;
-      expect(app.jwt.decode(token)).toMatchObject({ iss: `hcml-portal:${name}`, aud: `hcml-portal:${name}`, sub: 'ana', role: 'viewer' });
+      expect(app.jwt.decode(token)).toMatchObject({ iss: `hcml-portal:${name}`, aud: `hcml-portal:${name}`, sub: 'ana', role: 'guest' });
     }
   });
 
@@ -104,10 +104,10 @@ describe('the user is looked up on every request', () => {
     expect((await after.app.inject({ url: '/api/hosts', headers: bearer(token) })).statusCode).toBe(200);
     const links = await after.app.inject({ url: '/api/links', headers: page(token) });
     expect(links.statusCode).toBe(403);
-    expect(links.json().message).toContain('you are signed in as "viewer"');
-    expect((await after.app.inject({ url: ME, headers: bearer(token) })).json().user).toEqual({ name: 'ana', role: 'viewer' });
+    expect(links.json().message).toContain('does not have Links & WAN health');
+    expect((await after.app.inject({ url: ME, headers: bearer(token) })).json().user).toMatchObject({ name: 'ana', role: 'guest' });
     // Code that asks for the request's role (roleOf) sees the current one too.
-    expect((await after.app.inject({ url: '/api/whoami', headers: bearer(token) })).json()).toEqual({ role: 'viewer' });
+    expect((await after.app.inject({ url: '/api/stats', headers: bearer(token) })).json()).toEqual({ role: 'guest' });
   });
 
   it('uses the role configured now when the user has been promoted', async () => {

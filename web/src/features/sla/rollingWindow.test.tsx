@@ -127,12 +127,13 @@ describe('the SLA period', () => {
     open();
     const period = await screen.findByLabelText('Period');
     const groups = [...period.querySelectorAll('optgroup')];
-    expect(groups.map((g) => g.label)).toEqual(['Rolling window, not a month', 'Calendar month (Asia/Jakarta)']);
+    expect(groups.map((g) => g.label)).toEqual(['Rolling window, not a month', 'Calendar month (Asia/Jakarta)', 'Any range']);
     expect([...groups[0].querySelectorAll('option')].map((o) => [o.value, o.textContent])).toEqual([
       ['d7', 'Last 7 days'],
       ['d30', 'Last 30 days'],
     ]);
     expect(groups[1].querySelectorAll('option')).toHaveLength(12);
+    expect([...groups[2].querySelectorAll('option')].map((o) => [o.value, o.textContent])).toEqual([['range', 'Range and hours of the day']]);
     expect(period).toHaveValue(lastMonth);
     // The label is no longer "Month": the list holds more than months.
     expect(screen.queryByLabelText('Month')).toBeNull();
@@ -185,7 +186,9 @@ describe('a rolling window on the SLA page', () => {
   it('says what a window cannot do', async () => {
     open('?month=d7');
     await screen.findByText('Overall · Strict');
-    expect(screen.getByText(/The report files, email, schedule and Explain need a calendar month/)).toBeInTheDocument();
+    // Since FR-60 the Range view has the files and the email too; the schedule and Explain stay with a calendar month (DC-73).
+    expect(screen.getByText(/The report files and the email are for a calendar month or a range, the schedule and Explain for a calendar month/)).toBeInTheDocument();
+    expect(screen.queryByText(/The report files, email, schedule and Explain need a calendar month/)).toBeNull();
   });
 
   it('offers no report files, no email, no number style and no Explain, though a month offers all four to this administrator with AI on', async () => {

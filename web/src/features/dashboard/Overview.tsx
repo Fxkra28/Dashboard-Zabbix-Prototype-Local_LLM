@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useOutletContext } from 'react-router-dom';
+import { useLocation, useOutletContext } from 'react-router-dom';
+import { PageLink } from '../../shared/components/PageLink';
 import { api, streamUrl } from '../../api';
 import { useAsync } from '../../shared/hooks/useAsync';
 import { useNow } from '../../shared/hooks/useNow';
@@ -9,7 +10,7 @@ import { useMeters } from '../meters/useMeters';
 import { useHostsView } from './useHostsView';
 import { useFitHeight } from './useFitHeight';
 import { useWallRotation } from './useWallRotation';
-import { roleAllows, useAuth } from '../../shared/hooks/useAuth';
+import { useAuth } from '../../shared/hooks/useAuth';
 import { useChangeHighlight } from '../problems/useChangeHighlight';
 import { useReducedMotion } from '../../shared/hooks/useReducedMotion';
 import type { Problem, Stats, Freshness, GroupProblems } from '../../types';
@@ -31,13 +32,14 @@ import { formatClock, formatClockLabeled, formatWeekdayDate, zoneLabel } from '.
 import { useReportTimeZone } from '../../shared/hooks/useReportTimeZone';
 import { problemListGuard } from '../../guards';
 import { TableWrap } from '../../shared/components/TableWrap';
+import { isInMaintenance, isResolved } from '../problems/counts';
 
 /**
  * The problem list also holds problems Zabbix resolved a moment ago and ones
  * inside a planned maintenance window (the Problems page marks both). The
  * Dashboard counts and lists the rest, as every server-side count does.
  */
-const isOpen = (p: Problem) => (!p.r_eventid || p.r_eventid === '0') && p.suppressed !== '1';
+const isOpen = (p: Problem) => !isResolved(p) && !isInMaintenance(p);
 
 /** Past this the numbers on screen are old enough that a wall screen must say so. */
 const DATA_LATE_MS = 90_000;
@@ -111,7 +113,7 @@ function WallBar({
   );
 }
 
-/** The Dashboard's views, like the pages of a Zabbix dashboard: the problems, the hosts, and the internet traffic meters (wall screens, operators and admins). */
+/** The Dashboard's views, like the pages of a Zabbix dashboard: the problems, the hosts, and the internet traffic meters (for the accounts that have the Network page). */
 const VIEWS = ['overview', 'hosts', 'internet'] as const;
 const VIEW_TABS = [
   { key: 'overview', label: 'Overview' },
@@ -121,9 +123,9 @@ const VIEW_TABS = [
 
 export default function Overview() {
   const { wall, exitWall } = useOutletContext<LayoutContext>();
-  // The meters are interface data, which is for a wall screen, an operator and an admin; a viewer has the Overview and the Hosts.
-  const { role } = useAuth();
-  const canSeeMeters = role !== null && roleAllows(role, 'wall');
+  // The meters are interface data, which is for the accounts that have the Network page.
+  const { can } = useAuth();
+  const canSeeMeters = can('network');
   const [view, setView] = useUrlState<(typeof VIEWS)[number]>('view', 'overview', { options: VIEWS });
   const viewsId = useId();
 
@@ -300,7 +302,7 @@ export default function Overview() {
                       value={count(problems.filter((p) => p.acknowledged !== '1').length)}
                       accent={SEVERITIES[4].color}
                     />
-                    {/* Interface data is for a wall screen, an operator and an admin, so a viewer's row has no fifth card. */}
+                    {/* Interface data is for the accounts that have the Network page, so the row of any other account has no fifth card. */}
                     {canSeeMeters && (
                       <KpiCard
                         label="Internet links"
@@ -368,7 +370,7 @@ export default function Overview() {
                                   {!wall && (
                                     <>
                                       {' '}
-                                      <Link to="/problems">View all problems</Link>
+                                      <PageLink to="/problems" fallback={null}>View all problems</PageLink>
                                     </>
                                   )}
                                 </p>

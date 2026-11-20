@@ -195,7 +195,7 @@ const numericItem = (over: Params = {}) => ({
   value_type: '3',
   delay: '1m',
   hostid: '10668',
-  hosts: [{ hostid: '10668', name: '1.2.1 IDX02CORESWITCH' }],
+  hosts: [{ hostid: '10668', name: '1.2.1 TANGO02CORESWITCH' }],
   ...over,
 });
 
@@ -230,7 +230,7 @@ describe('/api/graph', () => {
     expect(h).toMatchObject({ output: ['itemid', 'clock', 'value'], history: 3, sortfield: 'clock', time_from: from });
     expect(callsOf('trend.get')).toHaveLength(0);
     const s = body.series[0];
-    expect(s).toMatchObject({ itemid: '69356', host: '1.2.1 IDX02CORESWITCH', units: 'bps', delaySeconds: 60, step: false });
+    expect(s).toMatchObject({ itemid: '69356', host: '1.2.1 TANGO02CORESWITCH', units: 'bps', delaySeconds: 60, step: false });
     expect(s.points.length).toBeLessThanOrEqual(1500);
     expect(s.stats).toMatchObject({ min: 0, max: 1439, last: 1439, lastClock: from + 1439 * 60 });
     expect(body.latestClock).toBe(from + 1439 * 60);
@@ -469,7 +469,7 @@ describe('/api/net/devices', () => {
     zabbix({
       'host.get': [
         zHost({ hostid: '1', name: '1.2.10 IDX24C' }),
-        zHost({ hostid: '2', name: '1.2.2. IDXSVFSW01' }),
+        zHost({ hostid: '2', name: '1.2.2. BRAVOSW01' }),
         zHost({ hostid: '3', name: 'INTERNET' }),
         zHost({ hostid: '4', name: '1.2.3 IDXSTALE' }),
         zHost({ hostid: '5', name: '1.2.4 IDXNOPING' }),
@@ -481,7 +481,7 @@ describe('/api/net/devices', () => {
     const app = await buildTestApp(netRoutes);
     const body = (await app.inject({ url: '/api/net/devices' })).json();
     expect(body.map((d: { name: string }) => d.name)).toEqual([
-      '1.2.2. IDXSVFSW01',
+      '1.2.2. BRAVOSW01',
       '1.2.3 IDXSTALE',
       '1.2.4 IDXNOPING',
       '1.2.10 IDX24C',
@@ -494,7 +494,8 @@ describe('/api/net/devices', () => {
     expect(stale.icmp).toEqual({ state: 'unknown' });
     expect(noPing.icmp).toBeNull();
     expect(sw2.site).toEqual({ code: 1, name: 'Jakarta' });
-    expect(inet.site).toBeNull();
+    // INTERNET names no site, but the host carries the tag `site=Jakarta`, which outranks the name as it does on the Sites page (BK-94).
+    expect(inet.site).toEqual({ code: 1, name: 'Jakarta' });
     // One read of every monitored host's ping items, shared with Sites and Hosts, then their values in bulk.
     const [params] = callsOf('item.get');
     expect(params.output).toEqual(expect.arrayContaining(['state', 'delay', 'value_type']));

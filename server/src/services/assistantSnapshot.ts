@@ -10,13 +10,71 @@ import { cachedProblems, openProblems, withOpdata, type ZbxProblem } from '../do
 import { sitesView, type Site } from './sites.js';
 import { slasView, sliView, type SlaSli, type ZbxSla } from './sla.js';
 import { serviceTreeView, type ServiceNode } from './services.js';
-import { siteFromHostName, naturalCompare } from '../domain/naming.js';
+import { naturalCompare } from '../domain/naming.js';
+import { siteByHostName, siteOfName } from '../domain/siteOf.js';
 import { derivedServiceLines, derivedSlaLines } from '../sli/summary.js';
+import type { ModuleId } from '../security/modules.js';
 import { percentText } from '../export/slaReport.js';
 import { availabilitySince, stateCounts, stateSince, wholeListLines } from './assistantFacts.js';
 import { downFor, HOST_NAME_MAX, PROBLEM_NAME_MAX, problemLine, promptText, section, severityCounts, severityList, sevName, worstFirst } from './assistantLines.js';
+import { internetSection, readInternet, siteOfMeter } from './assistantInternet.js';
+import { notGivenLine } from './assistantPrompt.js';
 
 /** What the model was shown, surfaced to the UI so the reader knows the scope. */
+/** The parts of the estate text, in the order the model reads them. */
+export type SectionKey = 'estate' | 'whole' | 'sites' | 'recent' | 'unreachable' | 'internet' | 'sla' | 'services' | 'problems';
+
+/**
+ * The modules whose pages show what each part says, so that a user is shown, and so the model can answer from, only what their own pages show them (ADR-0017). Holding any
+ * one of a part's modules is enough, and an administrator holds them all. A part's counts are part of it: the headline estate line is the Dashboard's.
+ */
+export const SECTION_MODULES: Readonly<Record<SectionKey, readonly ModuleId[]>> = {
+  estate: ['dashboard'],
+  whole: ['dashboard', 'problems'],
+  sites: ['sites'],
+  recent: ['dashboard', 'problems'],
+  unreachable: ['hosts', 'devices', 'sites'],
+  // The Internet view of the Dashboard, which a user sees with the network pages.
+  internet: ['network'],
+  sla: ['sla', 'services'],
+  services: ['services', 'sla'],
+  problems: ['dashboard', 'problems'],
+};
+
+const ORDER: readonly SectionKey[] = ['estate', 'whole', 'sites', 'recent', 'unreachable', 'internet', 'sla', 'services', 'problems'];
+export const ALL_SECTIONS: readonly SectionKey[] = ORDER;
+
+/** The parts a user who holds these modules may be shown, in reading order. */
+export const sectionsFor = (modules: ReadonlySet<string>): SectionKey[] => ORDER.filter((k) => SECTION_MODULES[k].some((m) => modules.has(m)));
+
+/** What each part says, in the words of a person asking, for the line that names the parts a user was not given (BK-84). */
+const SECTION_WORDS: Readonly<Record<SectionKey, string>> = {
+  estate: 'the estate totals',
+  whole: 'the counts of all open problems',
+  sites: 'the sites',
+  recent: 'what is new in the last 24 hours',
+  unreachable: 'which hosts are unreachable',
+  internet: 'the internet links',
+  sla: 'the SLA figures',
+  services: 'the services',
+  problems: 'the open problems',
+};
+
+/**
+ * The line that tells the model which parts of the estate this user's pages do not show, so that a question about one is answered with "this account does not show it" and never with none
+ * or no. Null when the user is shown every part (BK-84).
+ */
+export function withheldLine(shown: readonly SectionKey[]): string | null {
+  const missing = ORDER.filter((k) => !shown.includes(k));
+  return missing.length ? notGivenLine(missing.map((k) => SECTION_WORDS[k])) : null;
+}
+
+/** Whether the focus on a site or a host may be given: the pages that show hosts and sites. */
+export const mayFocus = (modules: ReadonlySet<string>): boolean => ['sites', 'hosts', 'devices'].some((m) => modules.has(m));
+
+/** Whether the internet links of a site may be given in its focus: the same pages as the part of the snapshot that holds them. */
+export const mayInternet = (modules: ReadonlySet<string>): boolean => SECTION_MODULES.internet.some((m) => modules.has(m));
+
 export interface SnapshotMeta {
   generatedAt: number;
   hosts: number;
@@ -27,6 +85,8 @@ export interface SnapshotMeta {
   degradedServices: number;
   /** Some list was cut to fit the model's context window. */
   truncated: boolean;
+  /** Present when the text was cut down to the pages of one user: the parts it holds. A count of a part that is not here is not given (0). */
+  shown?: SectionKey[];
 }
 
 export interface Snapshot {
@@ -50,7 +110,7 @@ export interface Snapshot {
  * spent, so the facts a question most often needs (estate, sites, what is new, what is down) cannot
  * be pushed out by a long problem list.
  */
-export const SNAPSHOT_CHAR_CAP = 5_500;
+export const SNAPSHOT_CHAR_CAP = 6_200;
 
 const BUDGET = {
   estate: 350,
@@ -58,6 +118,7 @@ const BUDGET = {
   sites: 900,
   recent: 550,
   unreachable: 850,
+  internet: 700,
   sla: 700,
   services: 400,
   problems: 1_850,
@@ -130,7 +191,7 @@ async function withinDeadline(fn: () => Promise<string[]>, ms = DERIVED_WAIT_MS)
 const DEFAULT_ZONE = 'Asia/Jakarta';
 
 /** The SLA zone the snapshot clock shows; a name Intl rejects must not take the Assistant down. */
-function snapshotZone(): string {
+export function snapshotZone(): string {
   try {
     new Intl.DateTimeFormat('en-GB', { timeZone: config.sla.timezone });
     return config.sla.timezone;
@@ -142,6 +203,11 @@ function snapshotZone(): string {
 /** "14 Jun 2024" in the SLA zone. */
 function snapshotDay(clock: number): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: snapshotZone(), day: 'numeric', month: 'short', year: 'numeric' }).format(clock * 1000);
+}
+
+/** "15:00" in the SLA zone. */
+export function snapshotTime(clock: number): string {
+  return new Intl.DateTimeFormat('en-GB', { timeZone: snapshotZone(), hour: '2-digit', minute: '2-digit', hour12: false }).format(clock * 1000);
 }
 
 /** "Wed, 7 Oct 2026, 15:00 WIB (Asia/Jakarta)": the Indonesian locale names WIB, WITA and WIT, other zones get e.g. "GMT+1". */
@@ -171,12 +237,15 @@ export function snapshotClock(at: Date): string {
  * Built fresh on every call; the assistant answers from `getSnapshot`, which
  * reuses one.
  */
-export async function buildSnapshot(): Promise<Snapshot> {
+export async function buildSnapshot(visible: readonly SectionKey[] = ALL_SECTIONS): Promise<Snapshot> {
   const now = Math.floor(Date.now() / 1000);
+  const shows = (k: SectionKey) => visible.includes(k);
 
   // Started first so their deadline runs alongside the core queries.
   const derivedSla = withinDeadline(derivedSlaLines);
   const derivedSvc = withinDeadline(derivedServiceLines);
+  // The gauges of the Internet view, for a user whose pages show it; the answer is not held for them either.
+  const internetRead = shows('internet') ? readInternet() : null;
 
   // Problems and sites are the core of any answer; SLA and services are
   // valuable but optional: a Zabbix without Services configured must not
@@ -278,6 +347,17 @@ export async function buildSnapshot(): Promise<Snapshot> {
   sections.sla = section('SLA:', slaOut, BUDGET.sla);
   sections.services = section('DEGRADED SERVICES:', svcOut, BUDGET.services);
 
+  /* 4b. the internet links; one still being read leaves the snapshot incomplete, so that it is not kept without them */
+  if (internetRead) {
+    const read = await internetRead;
+    if (read.status === 'pending') complete = false;
+    else if (read.status === 'ok') {
+      const siteByHost = siteByHostName(sitesRes.sites);
+      const links = internetSection(read.meters, { now, readAt: snapshotTime(read.generatedAt), siteOf: (m) => siteOfMeter(m, siteByHost), budget: BUDGET.internet });
+      if (links) sections.internet = links;
+    }
+  }
+
   // SLA and services are often a line or two; what they leave unused goes to
   // the site and unreachable lists, which are what most questions are about.
   let slack =
@@ -324,7 +404,7 @@ export async function buildSnapshot(): Promise<Snapshot> {
     recent.length,
   );
 
-  /* 4. unreachable hosts, grouped by the site their name says */
+  /* 4. unreachable hosts, grouped by the site the Sites view put them in */
   const bySite = new Map<string, string[]>();
   const silent: string[] = [];
   for (const s of sitesRes.sites) {
@@ -338,7 +418,7 @@ export async function buildSnapshot(): Promise<Snapshot> {
         silent.push(label);
         continue;
       }
-      const name = promptText(siteFromHostName(h.name)?.name ?? s.name, HOST_NAME_MAX);
+      const name = promptText(siteOfName(s.name)?.name ?? s.name, HOST_NAME_MAX);
       const list = bySite.get(name) ?? [];
       list.push(label);
       bySite.set(name, list);
@@ -385,30 +465,34 @@ export async function buildSnapshot(): Promise<Snapshot> {
   const fitted = (problemSection(listed, listed.length).text.match(/^- \[/gm) ?? []).length;
   sections.problems = problemSection(listed.slice(0, fitted), fitted);
 
-  const order = ['estate', 'whole', 'sites', 'recent', 'unreachable', 'sla', 'services', 'problems'];
+  const order = ORDER.filter((k) => shows(k) && sections[k] !== undefined);
   const text = order.map((k) => sections[k].text).join('\n\n');
-  const truncated = Object.values(sections).some((s) => s.truncated);
+  const truncated = order.some((k) => sections[k].truncated);
   const sizes = Object.fromEntries(order.map((k) => [k, sections[k].text.length]));
+  const whole = visible.length === ORDER.length;
+  // A count is given only with the part it belongs to: the page of a user who does not hold it would not show it.
+  const counts = {
+    hosts: shows('estate') || shows('sites') || shows('unreachable') ? hosts : 0,
+    sites: shows('estate') || shows('sites') ? sitesRes.sites.length : 0,
+    problems: shows('estate') || shows('whole') || shows('problems') ? problems.length : 0,
+    unacknowledged: shows('estate') ? unacknowledged : 0,
+    slas: shows('sla') ? slaCount : 0,
+    degradedServices: shows('services') ? degradedCount : 0,
+  };
 
   return {
     text,
     sizes: { ...sizes, total: text.length },
-    meta: {
-      generatedAt: now * 1000,
-      hosts,
-      sites: sitesRes.sites.length,
-      problems: problems.length,
-      unacknowledged,
-      slas: slaCount,
-      degradedServices: degradedCount,
-      truncated,
-    },
+    meta: { generatedAt: now * 1000, ...counts, truncated, ...(whole ? {} : { shown: [...order] }) },
     fingerprint: snapshotFingerprint(problems, sitesRes.sites),
     complete,
   };
 }
 
 export const SNAPSHOT_KEY = 'chat:snapshot';
+
+/** One key for the whole text, and one for each cut-down text, so that users with the same pages share a copy. */
+const keyFor = (visible: readonly SectionKey[]): string => (visible.length === ORDER.length ? SNAPSHOT_KEY : `${SNAPSHOT_KEY}:${visible.join('+') || 'none'}`);
 
 /** The longest one snapshot is reused while nothing it describes changes. */
 const SNAPSHOT_FREEZE_MS = 5 * 60_000;
@@ -455,7 +539,8 @@ class IncompleteSnapshot extends Error {
  * `HOST_STATE_SETTLE_MS`); one built while the derived SLA or services were still computing is
  * never kept; a write-back invalidates `chat:snapshot`.
  */
-export async function getSnapshot(): Promise<Snapshot & { frozen: boolean }> {
+export async function getSnapshot(visible: readonly SectionKey[] = ALL_SECTIONS): Promise<Snapshot & { frozen: boolean }> {
+  const key = keyFor(visible);
   const [problems, sitesRes] = await Promise.all([
     cachedProblems().then(openProblems),
     sitesView(),
@@ -464,18 +549,18 @@ export async function getSnapshot(): Promise<Snapshot & { frozen: boolean }> {
   let built = false;
   const build = async () => {
     built = true;
-    const snapshot = await buildSnapshot();
+    const snapshot = await buildSnapshot(visible);
     if (!snapshot.complete) throw new IncompleteSnapshot(snapshot);
     return snapshot;
   };
   try {
-    let snapshot = await cached(SNAPSHOT_KEY, SNAPSHOT_FREEZE_MS, build);
+    let snapshot = await cached(key, SNAPSHOT_FREEZE_MS, build);
     if (!built && snapshot.fingerprint !== fingerprint) {
       const problemsChanged = snapshot.fingerprint.split('.')[0] !== fingerprint.split('.')[0];
       const settled = Date.now() - snapshot.meta.generatedAt >= HOST_STATE_SETTLE_MS;
       if (problemsChanged || settled) {
-        invalidate(SNAPSHOT_KEY);
-        snapshot = await cached(SNAPSHOT_KEY, SNAPSHOT_FREEZE_MS, build);
+        invalidate(key);
+        snapshot = await cached(key, SNAPSHOT_FREEZE_MS, build);
       }
     }
     return { ...snapshot, frozen: !built };

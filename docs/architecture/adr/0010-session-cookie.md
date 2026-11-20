@@ -1,8 +1,9 @@
 # Keep the sign-in token in an httpOnly session cookie
 
 * Status: accepted
-* Deciders: HCML internship project (the owner decided audit item SC-11 in `tracker.md` on 25 September 2026)
+* Deciders: HCML internship project (the owner decided audit item SC-11 in the work log on 25 September 2026)
 * Date: 2026-09-25
+* Amended: 2026-11-19 (SC-67): a copy that is kept renewed ends when the person is disabled on the Users page, or, for a user of `.env` alone, when the entry is removed and the container recreated; the paragraph that said "removed" is corrected in place
 
 ## Context and Problem Statement
 
@@ -50,7 +51,7 @@ and out of the stream's URL while the token stays a stateless JWT.
   `{ user, expiresIn }` and never carries the token. `GET /api/auth/me` returns `expiresIn` too. A new
   public route, `POST /api/auth/logout`, clears the cookie, even when it has expired.
 * CSRF: a `POST`, `PUT`, `PATCH` or `DELETE` on `/api/*` that authenticates with the cookie, and every
-  sign-in and sign-out, must carry `X-HCML-CSRF: 1` and, when the browser sends an `Origin`, one
+  sign-in, sign-out and request for an account (FR-62), must carry `X-HCML-CSRF: 1` and, when the browser sends an `Origin`, one
   naming the request's own host and port. Anything else gets 403 `csrf`. A Bearer request is not
   checked, except on sign-in and sign-out, because a browser never adds that header on its own. A page on another site cannot add
   a custom header without a CORS preflight, and the BFF's CORS setting answers only for `WEB_ORIGIN`.
@@ -108,7 +109,7 @@ to `/login?next=%2Fhosts`.
 * **Revocation, since 3 November 2026.** Sign-out used to clear the cookie in that browser only, and a copied token
   kept working until it expired. Every token now carries a session id that renewals pass on, and sign-out puts it on a list in
   memory, so the whole chain is refused, and the live streams of the session are closed. What stays: a copy that someone
-  keeps renewing after the owner only closed the tab lives until the user is removed, `SESSION_EPOCH` is raised or
+  keeps renewing after the owner only closed the tab lives until the user is disabled on the Users page (or, for a user of `.env` alone, taken out of `PORTAL_USERS` and the container recreated), `SESSION_EPOCH` is raised or
   `JWT_SECRET` changes. The text below is the decision as it was written.
 * **Still no revocation (as written in October).** Sign-out clears the cookie in that browser, but a copied token keeps
   working until it expires, up to 12 hours (the `SESSION_HOURS` default). Taking the user out of

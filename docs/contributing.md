@@ -12,14 +12,14 @@ diff -rq -x node_modules -x dist -x .DS_Store -x '*.tsbuildinfo' -x .test-counts
   ../hcml-portal ../hcml-portal-ollama
 ```
 
-That must print exactly 22 differing files, all of them configuration or per-repo perspective,
+That must print exactly 21 differing files, all of them configuration or per-repo perspective,
 and one more line, `Only in ../hcml-portal-ollama/docs: README_copy.md`. That file is a snapshot of
 the ollama README from 23 September, kept for reference and not maintained. It sat in that folder's
 root until 7 October 2026, where it made the count 22. Any other line means you changed something
-in one folder and not the other. The full list of the 22 (18 files meant to differ and the four `.env*` files) is in both `README.md` files.
+in one folder and not the other. The full list of the 21 (17 files meant to differ and the four `.env*` files) is in both `README.md` files.
 
 `node tools/check/parity.check.mjs` makes the same comparison with the allowed files written down
-by name: 18 files, and the four `.env*` files, which it skips without opening. It prints one line
+by name: 17 files, and the four `.env*` files, which it skips without opening. It prints one line
 per difference outside that list and exits 1 if there is any. A file on the list that one copy
 lacks is a difference too, and so is `README_copy.md` anywhere but `docs/` in the ollama copy.
 No folder is on the list. `docs/flow/` and `docs/schema/` hold files that must match
@@ -45,7 +45,7 @@ writes it under `node_modules/.tmp`, and one that turns up beside the source sho
 documents kept as separate files. It was not done: on 7 October 2026 the owner accepted the
 default of keeping two folders, because merging them changes how both live portals are built and
 started. The parity script is the guard until then, and the price is unchanged: a fix is two
-edits, two builds and two deployments. To revisit it, start from the 18 files the script lists:
+edits, two builds and two deployments. To revisit it, start from the 17 files the script lists:
 they are what would become profile files.
 
 ---
@@ -62,8 +62,7 @@ are about the data, because the data is real:
   is set, so leave that unset in a dev `server/.env`.
 - **Never commit estate data.** No per-host output, no Availability Report spreadsheets, no database
   dump, no screenshots with real host names in them. A downloaded SLA report, PDF, Excel or CSV, is
-  per-host output: it names every device. The one exception is [`screenshots/`](screenshots/README.md),
-  where every name is replaced and every image is looked at before it is added.
+  per-host output: it names every device. Screenshots of the portal are kept outside the repository too.
 - **Never commit a credential.** `.env` and `server/.env` are gitignored and must stay that way.
   `.env.example` is committed and must never hold a real value, not a Zabbix token, not an API key,
   not a password, not a `JWT_SECRET`.
@@ -101,8 +100,8 @@ the typechecks, the lint, both test suites, both builds and every checker below 
 
 | Check | Run it | What it exists to prevent |
 |---|---|---|
-| Tests | `npm test` in `server/` | 3412 tests, 140 files. The status-code semantics are pinned here: a rejected token is 503, never 502 or 504. The SLA report files are pinned here too: the tests read each PDF and workbook back, and compare the theme colours, the logo and the wording copied from the web app with their originals. Files that are not code are read as text too, because nothing else would notice them breaking: `docker-compose.yml` against the BFF's settings and the Dockerfile's build arguments, `nginx.conf`, and the CI workflow |
-| Web tests | `npm test` in `web/` | 2045 tests in 141 files, in jsdom. They pin bugs that were found once: a slow answer for an old selection overwriting the new one, and, caught in review, sign-in returning to `/LOGIN` (the sign-in page again) and the wall bringing back a row marked "Cleared" after it had left the screen. Also the 401 handling and the CSRF header, and the report download buttons: one request however often they are pressed, and a month change dropping the request still in flight. Also the notices that say data is old (Zabbix stopped collecting, or a report is the last copy kept), the CSV formula guard, and the Assistant's conversation being cleared at sign-out |
+| Tests | `npm test` in `server/` | 4624 tests, 206 files. The status-code semantics are pinned here: a rejected token is 503, never 502 or 504. The SLA report files are pinned here too: the tests read each PDF and workbook back, and compare the theme colours, the logo and the wording copied from the web app with their originals. Files that are not code are read as text too, because nothing else would notice them breaking: `docker-compose.yml` against the BFF's settings and the Dockerfile's build arguments, `nginx.conf`, and the CI workflow |
+| Web tests | `npm test` in `web/` | 2424 tests in 167 files, in jsdom. They pin bugs that were found once: a slow answer for an old selection overwriting the new one, and, caught in review, sign-in returning to `/LOGIN` (the sign-in page again) and the wall bringing back a row marked "Cleared" after it had left the screen. Also the 401 handling and the CSRF header, and the report download buttons: one request however often they are pressed, and a month change dropping the request still in flight. Also the notices that say data is old (Zabbix stopped collecting, or a report is the last copy kept), the CSV formula guard, and the Assistant's conversation being cleared at sign-out |
 | Coverage | `npm run test:coverage` at the root, or in `server/` or `web/` | Nothing fails on it: there is no threshold. It prints, for each folder and file, how much of the code the tests run, so that files nobody tests are seen. On 15 November 2026 the server's tests ran 95.1 % of its statements, 90.0 % of its branches, 95.4 % of its functions and 96.0 % of its lines, and the web app's 92.1 %, 83.9 %, 89.0 % and 93.8 %. A line that runs is not a line that is checked: whether a test would notice a wrong answer there is what the deliberate breakages are for (IN-85) |
 | Lint | `npm run lint` in `server/` and in `web/` | The web: typescript-eslint, the two classic react-hooks rules and jsx-a11y. Three `eslint-disable` comments pointed at the hooks rule before anything ran it, and the first run found 14 form labels tied to no control. The server: the recommended rules of ESLint and typescript-eslint, no warning allowed. It had no linter until 19 October, when the first run found 22 findings; the eight `eslint-disable` lines left name their reason |
 | Types | `npm run typecheck` in `server/` and in `web/` | Both check their test config too |
@@ -115,7 +114,7 @@ the typechecks, the lint, both test suites, both builds and every checker below 
 | Facts | `node tools/check/facts.check.mjs` at the root | A count written once and never compared again: an endpoint table that said 35 while listing all of them, "13 read methods" in five documents when the code called 14, a glossary that said 11 ADRs beside 13 files, "18 route modules" beside 22, an endpoint table with no row for `/api/ready`, a table of Zabbix calls whose line numbers had moved, two card pages that said 104 and 167 cards beside 120 and 177. It reads the counts off the code and the sentences that state them off the documents, and leaves a line that tells of the past alone. It also reads the tracker as a table: ten cells in every row (a pipe inside a code span splits a cell, which went unseen for five days), a mark that fits its status, one row for each id, and totals that the rows bear out. It does not read what a sentence means, so a line citation that still exists but says something else is for a person |
 | Diagrams | `node tools/check/diagrams.check.mjs` at the root | Nine renders in one copy and eight in the other were older than their sources by file date, and a file date is no use in a git checkout. Each `.mmd` now ends with a stamp holding the hash of its source, and the check fails when the source changed after it. It cannot see whether the render was redone: `node tools/check/diagrams.stamp.mjs` is where that is said, run last |
 | Handbook | `node tools/check/handover.check.mjs` at the root | The handover handbook in `docs/handover/` falling behind the code: a generated block that no longer matches, a quoted snippet whose explanation was written against other code, a folder or a file with no description, and a page that breaks its writing rules. It was written to be true, and nothing else would keep it so |
-| Copies | `node tools/check/parity.check.mjs` at the root | The two folders drifting: it lists every file that differs between them, or exists in one only, outside the short list meant to differ, which names its 18 files one by one. Until it existed the recipe above was a number someone had to remember, and `README_copy.md` had already made that number wrong once |
+| Copies | `node tools/check/parity.check.mjs` at the root | The two folders drifting: it lists every file that differs between them, or exists in one only, outside the short list meant to differ, which names its 17 files one by one. Until it existed the recipe above was a number someone had to remember, and `README_copy.md` had already made that number wrong once |
 | Installed packages | `node tools/check/installed.check.mjs` at the root, the first step of `npm run verify` | The local-model copy ran its tests on fastify 5.12.7 and three other packages older than its lock file, the ones a security advisory had moved, because `rsync` leaves `node_modules/` alone and nobody ran `npm run install:all` there. It compares each package of both lock files with the one installed and names the ones that differ (IN-80). After a change to a `package.json` or a `package-lock.json`, run `npm run install:all` in the second copy as well |
 
 When a response in `docs/api/openapi.yaml` changes, run `npm run gen:api` in `web/` and commit
@@ -140,7 +139,7 @@ not run on GitHub yet, so the image builds, `nginx -t` and the secret scan below
 Since 12 October 2026 (tracker SC-17) the workflow's token is read-only, and every action in it is pinned
 to a full commit SHA, with the tag it came from in the comment after it: a tag can be moved to other code, a
 SHA cannot. The `secrets` job runs gitleaks over the commits of each push and pull request. It does not
-read the history already in the repository, so the token in `cb97069` does not fail it; revoking that token is
+read the history already in the repository, so an old token in the early commits does not fail it; revoking that token is
 the fix. It posts no comments and uploads no findings, because on a public repository either would repeat what
 it found, and manual runs skip it. `.github/dependabot.yml` opens a pull request a week for the actions, the
 npm packages of `server/` and `web/` (minor and patch releases together, a major alone) and the base image of
@@ -172,7 +171,7 @@ Follow the twelve that exist. The house pattern, in order of how often it has ma
 
 ## Zero new dependencies
 
-9 runtime + 10 dev on the server, 5 + 19 on the web: 43 in all, 14 of them shipped. Adding to either
+9 runtime + 11 dev on the server, 5 + 20 on the web: 45 in all, 14 of them shipped. Adding to either
 list needs a real argument, not a convenience one. Two were added on 19 October 2026, both dev only and never in
 an image: the server's four lint packages (`eslint`, `@eslint/js`, `typescript-eslint` and `globals`, ST-06), and the web's
 18th, `openapi-typescript` (FR-16),
@@ -237,7 +236,7 @@ parses is not a Mermaid diagram that is readable.
 ## Decisions
 
 A decision that shapes the system gets an [ADR](architecture/adr/): MADR format, the next number in
-sequence, from the template the existing sixteen follow. Record what was considered and rejected, and
+sequence, from the template the existing nineteen follow. Record what was considered and rejected, and
 record at least one negative consequence: an ADR with only upsides is a press release.
 
 Write one for: a technology choice, an architectural pattern, anything with a real trade-off,

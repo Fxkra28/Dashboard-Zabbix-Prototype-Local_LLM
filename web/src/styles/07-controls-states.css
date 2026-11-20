@@ -128,6 +128,13 @@ textarea:disabled {
 .state-action {
   margin-top: var(--s-4);
 }
+/* Two buttons of one message, side by side and wrapping on a narrow screen (NoAccess). */
+.state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0 var(--s-3);
+}
 .spinner {
   width: 22px;
   height: 22px;

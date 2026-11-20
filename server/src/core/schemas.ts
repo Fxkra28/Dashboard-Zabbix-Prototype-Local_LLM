@@ -18,10 +18,13 @@ import type { FastifyServerOptions } from 'fastify';
  * false, the number 5 becomes "5", a list of one name becomes the name. The
  * handlers refuse those, so pass this to `Fastify({ ajv })` or the schemas would
  * quietly accept what the handlers reject. index.ts and the test helpers both do.
+ *
+ * It also strips a field the schema does not name, where the schema says `additionalProperties: false`, and goes on with the rest: `{ "disable": true }` sent to a user was a
+ * 200 that did nothing (BK-97). With `removeAdditional` off such a body is a 400 that names the field.
  */
 export const AJV_OPTIONS: NonNullable<FastifyServerOptions['ajv']> = {
   // Union types such as ['string', 'array'] are plain JSON Schema; Ajv logs a warning at startup without this.
-  customOptions: { coerceTypes: false, allowUnionTypes: true },
+  customOptions: { coerceTypes: false, allowUnionTypes: true, removeAdditional: false },
 };
 
 /** The longest query value a route reads is a list of 50 item ids. */
@@ -38,6 +41,87 @@ export function singleValues(...names: string[]) {
   } as const;
 }
 
+/** The person's own change of password: the current one, and the new one. The policy is the portal's (passwords.ts), not this schema's. */
+export const changePasswordBody = {
+  type: 'object',
+  required: ['current', 'password'],
+  additionalProperties: false,
+  properties: {
+    current: { type: 'string', maxLength: 1024 },
+    password: { type: 'string', maxLength: 1024 },
+  },
+} as const;
+
+const ROLE_NAMES = ['guest', 'operator', 'admin'] as const;
+const LANGUAGE_NAMES = ['en', 'id'] as const;
+
+/** A new user. What the portal accepts of a name, a password and a module is the directory's to judge (security/accounts.ts), so that the words of a refusal are one set. */
+export const createUserBody = {
+  type: 'object',
+  required: ['name', 'role', 'password'],
+  additionalProperties: false,
+  properties: {
+    name: { type: 'string', maxLength: 128 },
+    displayName: { type: 'string', maxLength: 200 },
+    role: { type: 'string', enum: ROLE_NAMES },
+    modules: { type: 'array', maxItems: 64, items: { type: 'string', maxLength: 64 } },
+    language: { enum: [...LANGUAGE_NAMES, null] },
+    password: { type: 'string', maxLength: 1024 },
+    expires: { type: ['integer', 'null'], minimum: 0 },
+    mustChange: { type: 'boolean' },
+  },
+} as const;
+
+/** A change to a user: any of these, and at least one. */
+export const updateUserBody = {
+  type: 'object',
+  additionalProperties: false,
+  minProperties: 1,
+  properties: {
+    displayName: { type: 'string', maxLength: 200 },
+    role: { type: 'string', enum: ROLE_NAMES },
+    modules: { type: 'array', maxItems: 64, items: { type: 'string', maxLength: 64 } },
+    language: { enum: [...LANGUAGE_NAMES, null] },
+    disabled: { type: 'boolean' },
+    expires: { type: ['integer', 'null'], minimum: 0 },
+    mustChange: { type: 'boolean' },
+  },
+} as const;
+
+export const resetPasswordBody = {
+  type: 'object',
+  required: ['password'],
+  additionalProperties: false,
+  properties: {
+    password: { type: 'string', maxLength: 1024 },
+    mustChange: { type: 'boolean' },
+  },
+} as const;
+
+export const nameParams = {
+  type: 'object',
+  required: ['name'],
+  properties: { name: { type: 'string', minLength: 1, maxLength: 128 } },
+} as const;
+
+/** A request for an account, from a person who is not signed in (FR-62). The sentences about what is wrong are the service's. */
+export const accountRequestBody = {
+  type: 'object',
+  required: ['name', 'pages', 'reason'],
+  additionalProperties: false,
+  properties: {
+    name: { type: 'string', maxLength: 400 },
+    pages: { type: 'array', maxItems: 64, items: { type: 'string', maxLength: 64 } },
+    reason: { type: 'string', maxLength: 4000 },
+  },
+} as const;
+
+export const idParams = {
+  type: 'object',
+  required: ['id'],
+  properties: { id: { type: 'string', minLength: 1, maxLength: 64 } },
+} as const;
+
 /** Sign-in. An empty string is a valid body: it fails as a wrong password, with a 401, as before. */
 export const loginBody = {
   type: 'object',
@@ -49,15 +133,22 @@ export const loginBody = {
 } as const;
 
 /**
- * Emailing the SLA report: the month, the formats, who it goes to, whether to keep that list, and the style. The handler
+ * Emailing the SLA report: the month or a window of days and the hours of the day, the formats, who it goes to, whether to keep that list, and the style. The handler
  * refuses anything else, in the body and in the style. No `additionalProperties: false`: Fastify's validator would strip
  * a stray field and the request would go through.
  */
 export const emailReportBody = {
   type: 'object',
-  required: ['month', 'formats'],
+  required: ['formats'],
   properties: {
     month: { type: 'string', maxLength: 16 },
+    // A range of days (FR-60): two times in Unix seconds, in place of the month. `to` below is the list of people, so the window's own end sits inside it.
+    window: {
+      type: 'object',
+      properties: { from: { type: 'integer', minimum: 0, maximum: 999999999999 }, to: { type: 'integer', minimum: 0, maximum: 999999999999 } },
+    },
+    dayHours: { type: 'string', maxLength: 8 },
+    days: { type: 'string', maxLength: 16 },
     formats: { type: 'array', maxItems: 3, items: { type: 'string', maxLength: 8 } },
     to: { type: 'array', maxItems: 40, items: { type: 'string', maxLength: 320 } },
     remember: { type: 'boolean' },
@@ -198,6 +289,11 @@ export function validationProblem(err: unknown): string | null {
       const types = String(params.type).split(',');
       const named = types.length > 1 ? types.filter((t) => t !== 'null') : types;
       return `${name || subject} must be ${named.map((t) => TYPE_WORD[t] ?? t).join(' or ')}.`;
+    }
+    case 'additionalProperties': {
+      // The name of the field, not a value that was sent: cut short and stripped of control characters.
+      const field = String(params.additionalProperty ?? '').replace(/[^\x20-\x7e]/g, '?').slice(0, 40);
+      return `${name || subject} has a field the portal does not know: ${field}.`;
     }
     case 'enum': {
       const allowed = Array.isArray(params.allowedValues) ? params.allowedValues : [];

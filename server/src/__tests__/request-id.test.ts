@@ -10,7 +10,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 vi.hoisted(() => {
   process.env.AUTH_ENABLED = 'true';
   process.env.JWT_SECRET = 'test-only-secret-at-least-32-bytes-long';
-  process.env.PORTAL_USERS = 'ana:viewer-pass:viewer';
+  process.env.PORTAL_USERS = 'ana:admin-pass-123:admin';
 });
 
 const { genReqId, registerRequestId } = await import('../http/requestId.js');
@@ -52,7 +52,7 @@ beforeEach(async () => {
 });
 afterEach(() => app.close());
 
-const token = () => app.jwt.sign({ sub: 'ana', role: 'viewer', ...tokenClaims(config.auth.sessionCookie) }, { expiresIn: '1h' });
+const token = () => app.jwt.sign({ sub: 'ana', role: 'admin', ...tokenClaims(config.auth.sessionCookie) }, { expiresIn: '1h' });
 const signedIn = (headers: Record<string, string> = {}) => ({ authorization: `Bearer ${token()}`, ...headers });
 const idOf = (headers: Record<string, unknown>) => headers['x-request-id'] as string;
 
@@ -189,7 +189,7 @@ describe('wiring in index.ts', () => {
   it('registers the id before the Host check, the rate limit and every route, so their refusals carry it too', () => {
     const at = (needle: string) => code.indexOf(needle);
     expect(at('registerRequestId(app)')).toBeGreaterThan(-1);
-    for (const later of ['registerHostCheck(app)', 'registerRateLimit(app)', 'registerErrorHandler(app)', 'setupAuth(app)', 'app.register(hostRoutes)']) {
+    for (const later of ['registerHostCheck(app)', 'registerRateLimit(app)', 'registerErrorHandler(app)', 'setupAuth(app, userDirectory())', 'app.register(hostRoutes)']) {
       expect(at('registerRequestId(app)'), later).toBeLessThan(at(later));
     }
   });

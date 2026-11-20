@@ -4,7 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { BrowserRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { api } from '../../api';
 import { resetAuthProbe } from '../../shared/hooks/useAuth';
-import type { Me, Role } from '../../types';
+import type { Me } from '../../types';
+import { meFor, type Kind } from '../../__tests__/accounts';
 import { meter, other, response } from '../../__tests__/meters';
 import { devicesResponse, topHostsResponse, webMonitoringResponse } from '../../__tests__/hosts';
 
@@ -16,11 +17,11 @@ const { default: Overview } = await import('./Overview');
 
 const never = () => new Promise<never>(() => undefined);
 
-function signedInAs(role: Role | null) {
+function signedInAs(kind: Kind | null) {
   resetAuthProbe();
   vi.spyOn(api, 'me').mockImplementation(() =>
-    role
-      ? Promise.resolve({ authEnabled: true, user: { name: 'x', role }, expiresIn: 3600, pages: {} } as unknown as Me)
+    kind
+      ? Promise.resolve({ ...meFor(kind), pages: {} } as unknown as Me)
       : Promise.reject(new Error('The BFF did not answer')),
   );
 }

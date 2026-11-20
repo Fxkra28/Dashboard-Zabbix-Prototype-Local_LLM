@@ -2,7 +2,7 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Everyone | about 10 min | [Risks, limits and costs](risks-limits-costs.md) | [The desk card](one-page-ops-card.md) |
+| Everyone | about 10 min | [What HCML provides](what-hcml-provides.md) | [The desk card](one-page-ops-card.md) |
 
 > **Ringkasan**
 >
@@ -26,13 +26,13 @@
 
 **Why does a problem I just acknowledged still look open?** Zabbix takes a few seconds to apply the change. For up to about a minute the row says that it was sent and that the portal is waiting for Zabbix.
 
-**Why can I not see the Network page?** It needs the wall role or a higher one. Ask the operator. [Who can do what](who-can-do-what.md) lists the roles.
+**Why can I not see the Network page?** Your account was not given it. Ask an administrator. [Who can do what](who-can-do-what.md) lists the roles.
 
 **Why is there no Explain button?** Either the portal has no model to ask, or the model is not answering. A line at the top of the page says so when it is the second. The rest of the portal is not affected.
 
 **Where does a device's site come from?** The portal decides it from four signals, strongest first: an explicit site tag, the device's name, its inventory record and its host group. The Sites page shows which signal decided each device. The more devices carry an explicit tag, the fewer guesses the portal makes.
 
-**Can I download the monthly report?** Yes, as a PDF to print or send or as an Excel file to sort and total. Both buttons are on the SLA page, for the month it shows. A window of the last 7 or 30 days has no files. The files list every device by name, so treat them as estate data: they are never put in the repository.
+**Can I download the monthly report?** Yes, as a PDF to print or send, as an Excel file to sort and total, or as a zip of CSV files. The buttons are on the SLA page, for the month it shows, and for a range of days when the page is on "Range and hours of the day", where the file says which hours were counted. A window of the last 7 or 30 days has no files. The files list every device by name, so treat them as estate data: they are never put in the repository.
 
 **Can I use it on a phone or a tablet?** The pages adapt to a narrow screen, the menu shrinks to a strip, and controls are made large enough to touch where the pointer is a finger. The portal is designed for a desk and a wall.
 
@@ -42,7 +42,7 @@
 
 ### Accounts and sessions
 
-**How do I get an account, or a different role?** Ask the person who runs the portal. There is no page for it, because accounts are part of the server's settings.
+**How do I get an account, or a different role?** Ask an administrator. They add you on the Users page, choose your role and the pages you may open, and give you a first password, which you change the first time you sign in. The first administrator is written in the portal's settings by the person who runs the portal.
 
 **Why was I signed out?** A session lasts twelve hours by default. The operator can also end every session at once. Sign in again.
 
@@ -50,7 +50,7 @@
 
 ### The model
 
-**Is it safe to ask the Assistant about real devices?** In the copy that uses Claude, the question and a summary of the estate go to Anthropic, and the page says so under each answer. In the other copy nothing leaves the machine. [Data in and out](data-in-and-out.md) has the detail.
+**Is it safe to ask the Assistant about real devices?** In the copy that uses Claude, the question and a summary of the estate go to Anthropic, and the page says so under each answer. In the other copy neither goes outside the machine. [Data in and out](data-in-and-out.md) has the detail.
 
 **Can the Assistant change something?** No. It has no tools. It reads a summary and writes text. Acknowledging is done on the Problems page, by an operator.
 
@@ -62,9 +62,9 @@
 
 **How do I know it is up?** The Dashboard says Live. For the machine, a watcher script checks every minute and says when a portal stops answering. The operator knows where it runs.
 
-**What has to be backed up?** The settings file on the server: the accounts, the tokens and the secrets. It is not in the repository and nothing else holds a copy.
+**What has to be backed up?** Two things, together: the settings file on the server (the tokens, the secrets and the first administrator) and the portal's own small state volume, which holds every account made on the Users page, the saved addresses and the schedule. Neither is in the repository, and nothing else holds a copy. A copy that holds the account hashes is kept like a secret.
 
-**Who do I tell about a wrong figure?** The owner of the portal. Say which page, what time, what you saw and what you expected. If the page showed an old copy, say that too.
+**Who do I tell about a wrong figure?** Us. Say which page, what time, what you saw and what you expected. If the page showed an old copy, say that too.
 
 ## Terms
 
@@ -115,7 +115,7 @@
 | Incident | A problem paired with its recovery, trimmed to the period being reported on |
 | Alert noise | Alarms not worth sending. Flapping, unactioned and chronic are its three flags |
 | Scorecard | The page that measures how complete the records are: naming, site, owner and criticality |
-| Role | What an account may do: viewer, wall, operator or admin |
+| Role | What an account may do: guest, operator or admin. The pages it may see are a separate list for each person |
 | Session | The time you stay signed in. Twelve hours by default |
 
 ### Running it
@@ -124,8 +124,8 @@
 |---|---|
 | BFF | Backend for frontend. The server part of the portal. It sits between the browser and Zabbix, holds the tokens and keeps the copies |
 | Container, Docker | A packaged program, and the tool that runs it. The portal is two containers: one serves the pages, one is the server |
-| Volume | A folder that Docker keeps outside the containers, so that what is in it is still there after a rebuild. The portal uses one for its own copy of its log, and the hosted copy one more for the saved report addresses and the schedule |
-| Settings file | The file on the server that holds the accounts, the tokens and the secrets. It is the one thing to back up |
+| Volume | A folder that Docker keeps outside the containers, so that what is in it is still there after a rebuild. The portal uses one for its own copy of its log, and, in both copies, another for the users, the saved report addresses, the schedule and the web check figures of closed months |
+| Settings file | The file on the server that holds the first administrator, the tokens and the secrets. It is backed up together with the state volume, which holds the other accounts |
 | TLS | The secure connection behind the padlock in a browser. The portal does not provide it, and has to have it put in front of it |
 | The two copies | The portal in two folders: one asks Claude, one asks a model on the machine. The code is the same |
 | Rebuild | Making new containers from the current code. It is how a change goes live |

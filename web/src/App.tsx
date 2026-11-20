@@ -33,6 +33,8 @@ const Inventory = lazy(() => import('./features/reports/Inventory'));
 const TopTriggers = lazy(() => import('./features/reports/TopTriggers'));
 const Assistant = lazy(() => import('./features/assistant/Assistant'));
 const Login = lazy(() => import('./features/auth/Login'));
+const Account = lazy(() => import('./features/auth/Account'));
+const Users = lazy(() => import('./features/users/Users'));
 const NotFound = lazy(() => import('./features/shell/NotFound'));
 
 /** The route table on its own, so a test can mount it in a MemoryRouter. */
@@ -68,6 +70,8 @@ export function AppRoutes() {
         <Route path="/reports/top-triggers" element={<TopTriggers />} />
         <Route path="/reports/inventory" element={<Inventory />} />
         <Route path="/assistant" element={<Assistant />} />
+        <Route path="/users" element={<Users />} />
+        <Route path="/account" element={<Account />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

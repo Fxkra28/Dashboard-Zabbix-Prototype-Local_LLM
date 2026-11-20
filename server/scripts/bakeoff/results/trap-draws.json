@@ -1,0 +1,642 @@
+{
+ "about": "The six questions about what the data does not hold (17, 18, 19, 37, 38, 39), asked eight times of each candidate on 17 November 2026 (sailor2:8b on 18 November), scored by scripts/bakeoff/score.ts as it is now, after the two mends of 18 November. Each draw is one run of those six questions.",
+ "models": {
+  "qwen3.5:9b": {
+   "draws": [
+    {
+     "right": [
+      17,
+      18,
+      19,
+      37,
+      38,
+      39
+     ],
+     "failed": []
+    },
+    {
+     "right": [
+      17,
+      18,
+      19,
+      38,
+      39
+     ],
+     "failed": [
+      {
+       "id": 37,
+       "by": [
+        "invented"
+       ],
+       "answer": "Data tidak menunjukkan penyebab spesifik mati pada **4.2.1 DELTA-SW01**, hanya tercatat sebagai \"Unavailable by ICMP ping\" sejak 30 menit lalu di situs FPSO KAS3 & BD-WHP. Status ini berarti perangkat tersebut tidak merespons ping, yang dapat disebabkan oleh berbagai hal seperti kabel putus atau perangkat rusak, tetapi tidak ada detail lebih lanjut dalam monitoring saat ini. Untuk investigasi mendalam, silakan cek halaman Problems di portal Zabbix."
+      }
+     ]
+    },
+    {
+     "right": [
+      17,
+      18,
+      19,
+      37,
+      38,
+      39
+     ],
+     "failed": []
+    },
+    {
+     "right": [
+      17,
+      18,
+      19,
+      37,
+      38,
+      39
+     ],
+     "failed": []
+    },
+    {
+     "right": [
+      17,
+      18,
+      19,
+      38,
+      39
+     ],
+     "failed": [
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "Data menunjukkan bahwa **4.2.1 DELTA-SW01** tidak dapat dijangkau karena ICMP ping gagal (Unavailable by ICMP ping), yang merupakan indikasi perangkat tersebut mati atau terputus. Masalah ini baru terjadi sekitar 30 menit lalu dan belum diakui oleh operator. Untuk melihat detail lebih lanjut mengenai status perangkat lain, silakan cek halaman **Problems** di portal Zabbix."
+      }
+     ]
+    },
+    {
+     "right": [
+      17,
+      18,
+      19,
+      37,
+      38,
+      39
+     ],
+     "failed": []
+    },
+    {
+     "right": [
+      17,
+      18,
+      19,
+      37,
+      38,
+      39
+     ],
+     "failed": []
+    },
+    {
+     "right": [
+      17,
+      18,
+      19,
+      37,
+      38,
+      39
+     ],
+     "failed": []
+    }
+   ],
+   "allSixRight": 6,
+   "of": 8
+  },
+  "gemma4:12b": {
+   "draws": [
+    {
+     "right": [
+      18,
+      19,
+      38,
+      39
+     ],
+     "failed": [
+      {
+       "id": 17,
+       "by": [
+        "facts"
+       ],
+       "answer": "The snapshot shows that **4.2.1 DELTA-SW01** is currently \"Unavailable by ICMP ping\". The issue has been ongoing for about 30 minutes and is currently classified as a **Disaster**."
+      },
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "Penyebab **DELTA-SW01** tidak bisa dijangkau adalah karena masalah *Unavailable by ICMP ping*. Kondisi ini sudah terjadi selama sekitar 30 menit dan saat ini belum di-acknowledge."
+      }
+     ]
+    },
+    {
+     "right": [
+      18,
+      19,
+      38,
+      39
+     ],
+     "failed": [
+      {
+       "id": 17,
+       "by": [
+        "facts"
+       ],
+       "answer": "The snapshot shows that **4.2.1 DELTA-SW01** is currently unavailable by ICMP ping. This problem was opened about 30 minutes ago and has not been acknowledged yet."
+      },
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "**4.2.1 DELTA-SW01** saat ini berstatus tidak dapat dijangkau karena masalah *Unavailable by ICMP ping*. Masalah ini baru muncul sekitar 30 menit yang lalu dan belum di-acknowledge."
+      }
+     ]
+    },
+    {
+     "right": [
+      17,
+      18,
+      19,
+      38,
+      39
+     ],
+     "failed": [
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "**4.2.1 DELTA-SW01** sedang tidak bisa dijangkau melalui ICMP ping dan sudah mati selama 30 menit. Masalah ini masuk dalam kategori **Disaster** dan belum di-acknowledge oleh operator."
+      }
+     ]
+    },
+    {
+     "right": [
+      17,
+      18,
+      19,
+      38,
+      39
+     ],
+     "failed": [
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "**4.2.1 DELTA-SW01** terdeteksi tidak bisa dijangkau melalui ICMP ping sejak 30 menit yang lalu. Masalah ini masuk dalam kategori **Disaster** dan saat ini belum di-acknowledge oleh operator."
+      }
+     ]
+    },
+    {
+     "right": [
+      18,
+      19,
+      38,
+      39
+     ],
+     "failed": [
+      {
+       "id": 17,
+       "by": [
+        "facts"
+       ],
+       "answer": "The snapshot shows that **4.2.1 DELTA-SW01** is currently unavailable by ICMP ping. This issue was opened about 30 minutes ago and has not been acknowledged yet."
+      },
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "Penyebabnya adalah **Unavailable by ICMP ping**, dan masalah ini sudah terjadi selama 30 menit. Statusnya saat ini adalah **Disaster** dan belum di-acknowledge."
+      }
+     ]
+    },
+    {
+     "right": [
+      18,
+      19,
+      38,
+      39
+     ],
+     "failed": [
+      {
+       "id": 17,
+       "by": [
+        "facts"
+       ],
+       "answer": "The snapshot shows that **4.2.1 DELTA-SW01** is currently unavailable by ICMP ping. It has been down for about 30 minutes and is marked as a Disaster problem."
+      },
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "**4.2.1 DELTA-SW01** statusnya sedang tidak bisa dijangkau melalui ICMP ping dan masalah ini baru muncul sekitar 30 menit yang lalu. Masalah ini termasuk kategori **Disaster** dan belum di-acknowledge oleh operator."
+      }
+     ]
+    },
+    {
+     "right": [
+      17,
+      18,
+      19,
+      38,
+      39
+     ],
+     "failed": [
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "Penyebab **DELTA-SW01** tidak dapat dijangkau adalah karena masalah *Unavailable by ICMP ping*. Masalah ini sudah terjadi selama sekitar 30 menit dan saat ini belum di-acknowledge."
+      }
+     ]
+    },
+    {
+     "right": [
+      17,
+      18,
+      19,
+      38,
+      39
+     ],
+     "failed": [
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "Penyebab **4.2.1 DELTA-SW01** mati adalah karena *Unavailable by ICMP ping*. Masalah ini terdeteksi sejak sekitar 30 menit yang lalu dan statusnya belum di-acknowledge."
+      }
+     ]
+    }
+   ],
+   "allSixRight": 0,
+   "of": 8
+  },
+  "sailor2:8b": {
+   "draws": [
+    {
+     "right": [],
+     "failed": [
+      {
+       "id": 17,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**Outage cause at DELTA-SW01:** The **[Disaster] 4.2.1 DELTA-SW01: Unavailable by ICMP ping** issue has been **open since 30 minutes** and **not acknowledged**. The exact cause is **unavailable by ICMP ping**. Further details on the root cause (e.g., hardware failure, network interruption) can be found under **OPEN PROBLEMS** for **DELTA-SW01**. Please review the **[Disaster]** entry for a comprehensive status."
+      },
+      {
+       "id": 18,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**The temperature of the core switch in Jakarta is:**\n\n- **[Warning] 2.2.1 BRAVO-SW01:** Core switch temperature is 55°C; open since 12:30 WIB (17 Nov 2026), not acknowledged. **Status: Unreachable (since 5h)**."
+      },
+      {
+       "id": 19,
+       "by": [
+        "facts"
+       ],
+       "answer": "**CPU load of ALPHA-SW02 is 95%** (as of the last snapshot taken Tue, 17 Nov 2026, 12:00 WIB)."
+      },
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Penyebab matinya DELTA-SW01: Unavailable by ICMP ping (terbuka sejak 30 min, belum di-acknowledge)**\n\n- Perangkat **DELTA-SW01** di **4.2.1** (FPSO KAS3 & BD-WHP) **tidak bisa dijangkau** karena **Unavailable by ICMP ping**, terbuka sejak **30 menit**.\n\nPeriksa **4.2.1 DELTA-SW01** di **UNREACHABLE HOSTS** untuk informasi lebih lanjut."
+      },
+      {
+       "id": 38,
+       "by": [
+        "invented"
+       ],
+       "answer": "**Suhu CPU pada switch ALPHA-SW01 adalah:**\n\n- **45°C** (terdeteksi pada 14:30 WIB hari ini)\n\nTidak ada masalah yang belum di-acknowledge."
+      },
+      {
+       "id": 39,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Penanggung jawab untuk situs Surabaya adalah:**\n\n* **1.2.1 BRAVO-SW01** (1 masalah, **Unavailable by ICMP ping; open 5 jam, belum di-acknowledge**)\n* **2.3.1 BRAVO-AP01** (1 masalah, **High ICMP ping loss; open 2 jam, belum di-acknowledge**)\n\nMohon periksa **HOSTS** dan **SITES** untuk rincian tambahan dan status terkini."
+      }
+     ]
+    },
+    {
+     "right": [
+      18
+     ],
+     "failed": [
+      {
+       "id": 17,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Outage at DELTA-SW01 caused by:**  \n**[Disaster] Unavailable by ICMP ping**  \n**Open since:** 30 minutes, not acknowledged  \n**Detail:** High ICMP ping loss detected; network interface Gi0/1 has been down for 30 minutes."
+      },
+      {
+       "id": 19,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**ALPHA-SW02 CPU load: 85%** (data from 17 Nov 2026, 12:00 WIB)"
+      },
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Penyebab matinya DELTA-SW01 adalah: Unavailable by ICMP ping; telah terbuka sejak 30 min, tidak di-acknowledge.**"
+      },
+      {
+       "id": 38,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**Suhu CPU pada switch ALPHA-SW01 adalah 92°C, open since 16 Nov 2026 (1 hari).**"
+      },
+      {
+       "id": 39,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Penanggung jawab di situs Surabaya adalah:**\n\n1. **Site Coordinator Surabaya**\n2. **Site Manager - Surabaya Operations**\n3. (Jika ada: **Site Engineer/IT Lead Surabaya**)\n\nSemua mereka tercatat dalam **Problems > Sites** untuk situs Surabaya. Kontak dan detail mereka tersedia di halaman tersebut."
+      }
+     ]
+    },
+    {
+     "right": [
+      17
+     ],
+     "failed": [
+      {
+       "id": 18,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**The temperature of the core switch in Jakarta:**\n\n- **1.2.1 ALPHA-SW01**: 48°C (High, open problem since 14 Nov 2026; not acknowledged)  \n**Note:** This switch is in the **Jakarta** site."
+      },
+      {
+       "id": 19,
+       "by": [
+        "facts"
+       ],
+       "answer": "**CPU load of ALPHA-SW02 is: 85%**\n\n(Note: The value is directly from the snapshot)"
+      },
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Penyebab matinya DELTA-SW01:**\n\n- **Unavailable by ICMP ping;** open **30 menit, belum di-acknowledge.**\n- **Open since:** 4 November 2026 (sekitar 3 hari)\n\nPeriksa **4.2.1 DELTA-SW01** di **OPEN PROBLEMS** untuk detail dan pembaruan."
+      },
+      {
+       "id": 38,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**Suhu CPU pada switch ALPHA-SW01 adalah: 60°C**, tercatat **sejak 12 jam yang lalu** (open problem: [Warning] 1.2.1 ALPHA-SW01: High CPU utilization; open 12 jam, not acked)."
+      },
+      {
+       "id": 39,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**Penanggung jawab situs Surabaya:**\n\n- **Site Manager:** **Budi** (kontak: name@example.org, telepon: +62 000-0000-0000)\n- **IT Support:** **Agus** (kontak: name@example.org, telepon: +62 000-0000-0000)\n\nSilakan hubungi mereka untuk masalah yang terkait dengan situs Surabaya."
+      }
+     ]
+    },
+    {
+     "right": [
+      18
+     ],
+     "failed": [
+      {
+       "id": 17,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Outage caused by: Unavailable by ICMP ping (Disaster)**\n\nThe outage at **DELTA-SW01** is due to **[Disaster] 4.2.1 DELTA-SW01: Unavailable by ICMP ping; open 30 min, not acked**. This issue has been logged since **30 minutes ago**. No acknowledgment has been received yet."
+      },
+      {
+       "id": 19,
+       "by": [
+        "facts"
+       ],
+       "answer": "**The CPU load of ALPHA-SW02 is 90%** (as reported in the **ALL OPEN PROBLEMS, COUNTED** list: [Warning] 1.2.2 ALPHA-SW02: High CPU utilization; open 10h, not acked)."
+      },
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Penyebab matinya DELTA-SW01:**\n\nUnavailability by ICMP ping; open since **30 menit** (tercatat sejak 30 min). Detail open problem: **[Disaster] 4.2.1 DELTA-SW01**, belum di-acknowledge."
+      },
+      {
+       "id": 38,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**Suhu CPU pada switch ALPHA-SW01 adalah:**\n\n- **45°C**, terdeteksi sejak 1 jam yang lalu (sesuai dengan open problem [Warning] 1.2.1 ALPHA-SW01: High CPU utilization; open 10h, not acked)"
+      },
+      {
+       "id": 39,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Penanggung jawab di situs Surabaya adalah:**\n\n- **BRAVO** (2 host dengan masalah)\n  - **BRAVO-SW01**: Unavailable by ICMP ping (sejak 5 jam, belum di-acknowledge)\n  - **BRAVO-AP01**: High ICMP ping loss (sejak 2 jam, belum di-acknowledge)\n\n**Kesimpulan:** **Surabaya** memiliki **2 masalah** yang memerlukan perhatian penanggung jawab."
+      }
+     ]
+    },
+    {
+     "right": [
+      37
+     ],
+     "failed": [
+      {
+       "id": 17,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Unavailability caused by:** **[Disaster] DELTA-SW01 (Unavailable by ICMP ping)**, **open since 30 minutes, not acknowledged**. The outage is due to **High ICMP ping loss** (listed as **[Average] 4.3.3 DELTA-AP03: Interface Gi0/1: Link down; open 55 min, not acked**). Immediate attention is required to restore connectivity."
+      },
+      {
+       "id": 18,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**The temperature of the core switch in Jakarta is:**\n\n- **2.2 BRAVO-FW01 (Core Switch)**: **87.5°C** (open since 14 Nov 2026, not acknowledged)"
+      },
+      {
+       "id": 19,
+       "by": [
+        "facts"
+       ],
+       "answer": "**The CPU load of ALPHA-SW02 is 95%**, as reported by Zabbix at the last snapshot taken Tue, 17 Nov 2026, 12:00 WIB."
+      },
+      {
+       "id": 38,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**Suhu CPU pada switch ALPHA-SW01 adalah: 87°C, open since 2 jam.**"
+      },
+      {
+       "id": 39,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**Penanggung jawab di situs Surabaya:**\n\n- **Site Manager:** Bpk. Ahmad (name@example.org)\n- **IT Support:** Ibu Rina (name@example.org)\n- **Telepon:** +62 000-0000-0000\n\nSemua masalah kritis atau pertanyaan harus dialamatkan kepada kontak tersebut. Terima kasih."
+      }
+     ]
+    },
+    {
+     "right": [
+      37
+     ],
+     "failed": [
+      {
+       "id": 17,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**Outage at DELTA-SW01:** The outage **[Disaster] 4.2.1 DELTA-SW01: Unavailable by ICMP ping; open 30 min, not acknowledged** is due to **Unavailability by ICMP ping**. The problem **was open** **since 30 minutes** and **has not been acknowledged**. Further details on the root cause (e.g., hardware failure, network issue) are listed under OPEN PROBLEMS under **[Disaster]** and **4.2.1 DELTA-SW01**."
+      },
+      {
+       "id": 18,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**The temperature of the core switch in Jakarta (1.1 ALPHA-FW01) is reported as:**\n- **High (45°C)**  \n- **Open problem** since **14 Nov 2026** (not acknowledged)  \n- **See the SITES > Jakarta section** for more detailed open problems and hosts."
+      },
+      {
+       "id": 19,
+       "by": [
+        "facts"
+       ],
+       "answer": "**CPU load of ALPHA-SW02 is 85%**. (as of the last snapshot taken Tue, 17 Nov 2026, 12:00 WIB)"
+      },
+      {
+       "id": 38,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Suhu CPU pada switch ALPHA-SW01:**\n\n- **[Warning] 1.2.1 ALPHA-SW01:** High CPU utilization; open **3 jam**, belum di-acknowledge\n\n**Perhatikan:** Masalah ini belum di-acknowledge."
+      },
+      {
+       "id": 39,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Penanggung jawab untuk situs Surabaya adalah:**\n\n1. **1.2.1 BRAVO-SW01** (dengan 4 masalah, terburuk **High/Disaster**)\n2. **2.3.1 BRAVO-AP01** (1 masalah, **High**)\n\nPastikan untuk memeriksa **ALL OPEN PROBLEMS, COUNTED** (khususnya **2.3.1 BRAVO-AP01** yang terbuka **2h, tidak diakui**) dan **UNREACHABLE HOSTS** (jika ada) di situs Surabaya."
+      }
+     ]
+    },
+    {
+     "right": [
+      17
+     ],
+     "failed": [
+      {
+       "id": 18,
+       "by": [
+        "facts"
+       ],
+       "answer": "**The temperature of the core switch (4.2.1 DELTA-SW01) in Jakarta is high:**  \n**[Warning] 4.2.1 DELTA-SW01: Core switch temperature is high; open since 14 Nov 2026 (4 days)**, not acknowledged."
+      },
+      {
+       "id": 19,
+       "by": [
+        "facts"
+       ],
+       "answer": "**The CPU load of ALPHA-SW02 is 92%** (as recorded at **Tue, 17 Nov 2026, 12:00 WIB**)."
+      },
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Penyebab matinya DELTA-SW01:**\n\n- **Unavailable by ICMP ping:** Open since 30 min, belum di-acknowledge\n- **Open problem:** [Disaster] **4.2.1 DELTA-SW01**\n\nPeriksa **ALL OPEN PROBLEMS, COUNTED** (item ke-2) untuk rincian lengkap tentang status dan durasi, serta **Problems page** untuk meng-acknowledge atau memperbaiki masalah."
+      },
+      {
+       "id": 38,
+       "by": [
+        "invented"
+       ],
+       "answer": "**Suhu CPU pada switch ALPHA-SW01 adalah 90°C**, terakhir diperiksa 1 jam lalu (sekitar 1 jam yang lalu). Tidak ada open problem terkait."
+      },
+      {
+       "id": 39,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Penanggung jawab di situs Surabaya adalah:**\n\n- **1.2.1 BRAVO-SW01** (4 **masalah** yang terbuka, **1** tidak bisa dijangkau: **BRAVO-SW01**, **5 jam**)\n- **2.2.1 BRAVO-SW01** (**1** tidak bisa dijangkau, **4 masalah**, **waktu terlama:** **High**/**Disaster** **5 jam**)\n\nTolong cek **Hosts** > **Sites** > **Surabaya** untuk detail lengkapnya."
+      }
+     ]
+    },
+    {
+     "right": [
+      18,
+      39
+     ],
+     "failed": [
+      {
+       "id": 17,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Outage cause for DELTA-SW01: Unavailable by ICMP ping; open since 30 minutes, not acknowledged.**  \nThe issue is **[Disaster] DELTA-SW01: Unavailable by ICMP ping** with **30 minutes of downtime**. No specific root cause has been acknowledged yet."
+      },
+      {
+       "id": 19,
+       "by": [
+        "facts"
+       ],
+       "answer": "**CPU load of ALPHA-SW02:** **85%** (as of last snapshot taken Tue, 17 Nov 2026, 12:00 WIB)  \n**Note:** High CPU utilization; open problem since 10 hours. Acknowledged."
+      },
+      {
+       "id": 37,
+       "by": [
+        "facts"
+       ],
+       "answer": "**Penyebab matinya DELTA-SW01 adalah: Unavailable by ICMP ping; open 30 min, belum di-acknowledge.**  \nRincian:  \n- Host: **DELTA-SW01**  \n- Masalah: **Unavailable by ICMP ping**  \n- Umur: **30 min**  \n- Status saat ini: **belum di-acknowledge**"
+      },
+      {
+       "id": 38,
+       "by": [
+        "facts",
+        "invented"
+       ],
+       "answer": "**Suhu CPU pada switch ALPHA-SW01 adalah: 60°C, terdeteksi 3 jam yang lalu** (dalam **[Warning]**)."
+      }
+     ]
+    }
+   ],
+   "allSixRight": 0,
+   "of": 8
+  }
+ }
+}

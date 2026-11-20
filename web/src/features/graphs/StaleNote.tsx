@@ -1,4 +1,5 @@
 import type { GraphSeries } from '../../types';
+import { serverNow } from '../../shared/lib/clock';
 import { ago, fmtTime } from '../../shared/lib/severity';
 
 const hoursText = (s: number) => {
@@ -24,7 +25,7 @@ export default function StaleNote({
   series: GraphSeries[];
   latestClock: number | null;
 }) {
-  const now = Date.now() / 1000;
+  const now = serverNow() / 1000;
   const window = to - from;
   const notes: string[] = [];
 

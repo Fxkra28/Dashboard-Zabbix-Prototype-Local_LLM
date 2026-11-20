@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawn, spawnSync } from 'node:child_process';
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
  * deploy/watch.sh (tracker IN-31), run with stand-ins for curl and docker, its state in a scratch folder,
  * and its notifications written to a file instead of the desktop.
  */
+// Each case runs watch.sh several times: the slowest takes 3.7 s on an idle machine, so the default 5 s fails whenever the whole suite runs at once.
+vi.setConfig({ testTimeout: 30_000 });
 // WATCH_SCRIPT names a copy to try: the LaunchAgent runs deploy/watch.sh itself, so a change is live as soon as it is saved.
 const script = process.env.WATCH_SCRIPT ?? fileURLToPath(new URL('../../../deploy/watch.sh', import.meta.url));
 const scratch = mkdtempSync(join(tmpdir(), 'watch-script-test-'));
@@ -810,7 +812,8 @@ describe('deploy/watch.sh and where Docker lives on a Mac (IN-68)', () => {
   });
 
   it('puts ~/.docker/bin in the path of the LaunchAgent it installs', () => {
-    expect(readFileSync(script, 'utf8')).toMatch(/<key>PATH<\/key><string>[^<]*\$HOME\/\.docker\/bin[^<]*<\/string>/);
+    // The home folder goes through the XML escape (IN-106), so the line reads $(xml "$HOME")/.docker/bin.
+    expect(readFileSync(script, 'utf8')).toMatch(/<key>PATH<\/key><string>[^<]*\$\(xml "\$HOME"\)\/\.docker\/bin[^<]*<\/string>/);
   });
 });
 
@@ -859,6 +862,86 @@ describe('deploy/watch.sh and a portal that cannot read Zabbix (IN-47)', () => {
     expect(readFileSync(join(dir, 'attempts'), 'utf8').trim().split('\n')).toHaveLength(2);
     expect(watch({ FAKE_NOT_READY: ':8081' }).status).toBe(0);
     expect(notes()).toEqual([`${portal} is up but cannot read Zabbix (checked twice, a minute apart).`]);
+  });
+});
+
+// IN-106: --install and --uninstall had no test. launchctl and uname are stand-ins; HOME is a scratch folder, so the real LaunchAgents folder is never touched.
+describe('deploy/watch.sh --install and --uninstall', () => {
+  const plutil = spawnSync('sh', ['-c', 'command -v plutil'], { encoding: 'utf8' }).stdout.trim();
+  const darwinBin = join(scratch, 'darwin-bin');
+  mkdirSync(darwinBin, { recursive: true });
+  writeFileSync(join(darwinBin, 'uname'), `#!/usr/bin/env bash\necho Darwin\n`);
+  writeFileSync(join(darwinBin, 'launchctl'), `#!/usr/bin/env bash\nprintf '%s\\n' "$*" >> "$LAUNCHCTL_LOG"\n`);
+  chmodSync(join(darwinBin, 'uname'), 0o755);
+  chmodSync(join(darwinBin, 'launchctl'), 0o755);
+
+  /** The script copied into <home>/<folder>/deploy, so that its own path is the one the plist names. */
+  function agent(folder: string, arg: string) {
+    const home = join(dir, 'home');
+    const placed = join(home, folder, 'deploy');
+    mkdirSync(placed, { recursive: true });
+    copyFileSync(script, join(placed, 'watch.sh'));
+    const log = join(dir, 'launchctl.log');
+    const r = spawnSync('bash', [join(placed, 'watch.sh'), arg], {
+      encoding: 'utf8',
+      env: { ...process.env, PATH: `${darwinBin}:${bin}:${process.env.PATH ?? ''}`, HOME: home, WATCH_STATE_DIR: join(home, 'state'), LAUNCHCTL_LOG: log },
+    });
+    return { r, home, log, plist: join(home, 'Library', 'LaunchAgents', 'id.hcml.portal-watch.plist'), launched: existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : [] };
+  }
+
+  it('writes a plist that runs --once every minute from the script\'s own path, and loads it', () => {
+    const { r, plist, launched, home } = agent('hcml-portal', '--install');
+    expect(r.status, r.stderr).toBe(0);
+    const text = readFileSync(plist, 'utf8');
+    expect(text).toContain('<key>StartInterval</key><integer>60</integer>');
+    expect(text).toContain(`${home}/.docker/bin`);
+    expect(text).toContain(`<string>${join(home, 'hcml-portal', 'deploy', 'watch.sh')}</string><string>--once</string>`);
+    expect(text).toContain(`<string>${join(home, 'state')}/launchd.err</string>`);
+    expect(launched[0]).toMatch(/^bootout gui\/\d+\/id\.hcml\.portal-watch$/);
+    expect(launched[1]).toMatch(/^bootstrap gui\/\d+ .*id\.hcml\.portal-watch\.plist$/);
+    expect(r.stdout).toContain('Installed:');
+    expect(r.stdout).toContain('--uninstall');
+  });
+
+  it('writes a plist that is valid XML for a folder with an & or a < in its name, which a plain copy of the path would not', () => {
+    const { r, plist } = agent('R&D <ops>', '--install');
+    expect(r.status, r.stderr).toBe(0);
+    const text = readFileSync(plist, 'utf8');
+    expect(text).toContain('R&amp;D &lt;ops&gt;');
+    expect(text).not.toMatch(/&(?!amp;|lt;|gt;)/);
+    if (plutil) expect(spawnSync(plutil, ['-lint', plist], { encoding: 'utf8' }).status).toBe(0);
+  });
+
+  it('is refused off a Mac, with the way to run it from a timer, and writes nothing', () => {
+    const home = join(dir, 'home');
+    mkdirSync(join(home, 'x', 'deploy'), { recursive: true });
+    copyFileSync(script, join(home, 'x', 'deploy', 'watch.sh'));
+    writeFileSync(join(bin, 'uname-linux'), '');
+    const linux = join(scratch, 'linux-bin');
+    mkdirSync(linux, { recursive: true });
+    writeFileSync(join(linux, 'uname'), `#!/usr/bin/env bash\necho Linux\n`);
+    chmodSync(join(linux, 'uname'), 0o755);
+    const r = spawnSync('bash', [join(home, 'x', 'deploy', 'watch.sh'), '--install'], { encoding: 'utf8', env: { ...process.env, PATH: `${linux}:${bin}:${process.env.PATH ?? ''}`, HOME: home, WATCH_STATE_DIR: join(home, 'state') } });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('systemd timer or cron');
+    expect(existsSync(join(home, 'Library'))).toBe(false);
+  });
+
+  it('removes the plist and unloads the agent, and leaves the state and the log', () => {
+    const installed = agent('hcml-portal', '--install');
+    mkdirSync(join(installed.home, 'state'), { recursive: true });
+    writeFileSync(join(installed.home, 'state', 'watch.log'), 'a line\n');
+    const { r, plist, launched } = agent('hcml-portal', '--uninstall');
+    expect(r.status, r.stderr).toBe(0);
+    expect(existsSync(plist)).toBe(false);
+    expect(launched.at(-1)).toMatch(/^bootout gui\/\d+\/id\.hcml\.portal-watch$/);
+    expect(r.stdout).toContain('The state and the log stay in');
+    expect(readFileSync(join(installed.home, 'state', 'watch.log'), 'utf8')).toBe('a line\n');
+  });
+
+  it('removes nothing and fails nowhere when it was never installed', () => {
+    const { r } = agent('hcml-portal', '--uninstall');
+    expect(r.status, r.stderr).toBe(0);
   });
 });
 

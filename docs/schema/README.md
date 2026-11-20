@@ -17,7 +17,7 @@ PDM's *Hosts & inventory* frame.
 
 ## What this copy's perspective is
 
-This is `hcml-portal-ollama`: the plain-language layer is written by `qwen3:8b` running on this
+This is `hcml-portal-ollama`: the plain-language layer is written by a local model (the one `AI_MODEL` names in `.env`) running on this
 host. The estate data a problem carries (its host name, trigger name and tags) reaches
 `localhost:11434` and stops there. That is why `AI EXPLANATION` is drawn green, like every other
 thing the portal derives for itself, and why **there is no red anywhere in these three models**.
@@ -62,7 +62,7 @@ writes to.
 |---|---|
 | Blue | Zabbix stores it; the portal reads it over JSON-RPC |
 | Green | The portal derives it. No table exists: built per request, cached briefly, gone on restart |
-| Amber | Local to the portal (the sign-in user, from an environment variable) |
+| Amber | Local to the portal (the sign-in user: from `PORTAL_USERS` in the environment and from the portal's own users file) |
 | Red | It leaves this machine |
 | Grey | An association diamond (CDM), or a table Zabbix reads internally and never returns (PDM) |
 

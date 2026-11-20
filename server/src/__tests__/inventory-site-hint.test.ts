@@ -26,7 +26,7 @@ const host = (hostid: string, name: string, over: Record<string, unknown> = {}) 
 beforeEach(() => {
   invalidate('');
   hostsMock.mockReset().mockResolvedValue([
-    host('1', '1.2.1 IDX02CORESWITCH'),
+    host('1', '1.2.1 TANGO02CORESWITCH'),
     host('2', 'WEB : PORTAL'),
     host('3', 'plain-name', { tags: [{ tag: 'site', value: 'Jakarta' }] }),
     host('4', 'other-name', { inventory: { site_city: 'Surabaya' } }),

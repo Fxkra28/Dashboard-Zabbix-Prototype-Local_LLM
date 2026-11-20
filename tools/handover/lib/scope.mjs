@@ -10,8 +10,8 @@ import { join } from 'node:path';
 /** Never entered or listed: dependencies, build output, version control, and each copy's own screenshots. */
 export const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.git', '.vite', '__pycache__']);
 
-/** Files that exist in one working copy and not in the other, or hold an address or a secret: never listed. */
-export const NEVER_LISTED = new Set(['.DS_Store', 'docker-compose.override.yml', 'api-timing.json', '.test-counts.json']);
+/** Files that exist in one working copy and not in the other, or hold an address or a secret, or are kept outside the repository (the work log and the audit report): never listed. */
+export const NEVER_LISTED = new Set(['.DS_Store', 'docker-compose.override.yml', 'api-timing.json', '.test-counts.json', 'tracker.md', 'AUDIT_REPORT.md']);
 export const isNeverListed = (name) => NEVER_LISTED.has(name) || name.startsWith('.env') && name !== '.env.example' || name.endsWith('.tsbuildinfo') || name.startsWith('HCML_SLA_Report_');
 
 /** The folder at the root that holds each copy's own screenshots. It differs by design and is not committed. */
@@ -111,7 +111,7 @@ export function testFiles(root) {
  */
 export function folderCards(root) {
   const fixed = [
-    'server', 'server/scripts', 'web', 'web/scripts', 'web/public', 'web/brand', 'tools', 'tools/check', 'tools/live',
+    'server', 'server/scripts', 'server/scripts/bakeoff', 'web', 'web/scripts', 'web/public', 'web/brand', 'tools', 'tools/check', 'tools/live',
     'tools/handover', 'tools/handover/lib', 'deploy', 'docs', '.github', '.github/workflows',
   ];
   const set = new Set(fixed.filter((rel) => existsSync(join(root, rel))));

@@ -3,6 +3,7 @@ import { render, screen, within, configure } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { api } from '../../api';
 import { resetAuthProbe } from '../../shared/hooks/useAuth';
+import { meFor, type Kind } from '../../__tests__/accounts';
 import Capacity from './Capacity';
 import type { CapacityReport, CapacityRow } from '../../types';
 
@@ -102,8 +103,8 @@ describe('the Capacity page', () => {
 
 // FR-55: the server keeps interface items from a viewer, so the Graph button on an interface row sent a viewer to a refusal that the Graphs page then misread.
 describe('the Graph button on a Capacity row', () => {
-  const asRole = async (role: 'viewer' | 'wall' | 'operator' | 'admin') => {
-    vi.spyOn(api, 'me').mockResolvedValue({ authEnabled: true, user: { name: 'x', role }, expiresIn: 3600 });
+  const asRole = async (role: Kind) => {
+    vi.spyOn(api, 'me').mockResolvedValue(meFor(role));
     vi.spyOn(api, 'capacity').mockResolvedValue({
       days: 7,
       metrics: [
@@ -135,3 +136,40 @@ describe('the Graph button on a Capacity row', () => {
     expect(within(rowOf('cpu1')).getByRole('link', { name: 'Graph' })).toBeInTheDocument();
   });
 });
+
+// BK-92: the busiest interfaces are those of the moment the report was built, which the page now says.
+describe('the words under Busiest interfaces', () => {
+  const ifrow = row('p1', 'trend', 80, 95);
+  const withIfutil = (over: Partial<CapacityReport> = {}) => {
+    vi.spyOn(api, 'capacity').mockResolvedValue({ days: 7, metrics: [{ key: 'ifutil', label: 'Interfaces', rows: [ifrow] }], ...over });
+    render(<Capacity />, { wrapper: BrowserRouter });
+  };
+
+  it('say that the list is chosen when the report is built, from the ports busiest then, and that a quiet port may be missing', async () => {
+    withIfutil({ generatedAt: Date.parse('2026-11-19T04:00:00Z') / 1000 });
+    const note = await screen.findByText(/The list is chosen when the report is built/);
+    expect(note).toHaveTextContent('from the ports that are busiest at that moment');
+    expect(note).toHaveTextContent('ranked by their average over the last 7 days');
+    expect(note).toHaveTextContent('A port that was quiet then can be missing here, however busy it was on other days.');
+  });
+
+  it('give the time the report was built, in the report zone, when the portal says it', async () => {
+    withIfutil({ generatedAt: Date.parse('2026-11-19T04:00:00Z') / 1000 });
+    expect(await screen.findByText(/which was .*11:00 WIB/)).toBeInTheDocument();
+  });
+
+  it('leave the time out for a portal that does not say it, and say 24 hours for a day', async () => {
+    withIfutil({ days: 1 });
+    const note = await screen.findByText(/The list is chosen when the report is built/);
+    expect(note).not.toHaveTextContent('which was');
+    expect(note).toHaveTextContent('over the last 24 hours');
+  });
+
+  it('are under the interfaces only, and not under the CPU or the memory, which are ranked over every host', async () => {
+    vi.spyOn(api, 'capacity').mockResolvedValue({ days: 7, generatedAt: 1_790_000_000, metrics: [{ key: 'cpu', label: 'Busiest CPUs', rows: [row('a', 'trend', 40)] }] });
+    render(<Capacity />, { wrapper: BrowserRouter });
+    await screen.findByText('Busiest CPUs');
+    expect(screen.queryByText(/The list is chosen when the report is built/)).toBeNull();
+  });
+});
+

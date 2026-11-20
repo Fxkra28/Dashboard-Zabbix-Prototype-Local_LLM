@@ -358,8 +358,13 @@ export function ownerOf(req: FastifyRequest): string {
   return typeof sub === 'string' && sub ? `user:${sub}` : `ip:${req.ip}`;
 }
 
-/** Milliseconds until the token this request came in with expires, or null with auth off. */
+/**
+ * Milliseconds until the token this request came in with expires, or until the person's account does, whichever is first; null with auth off. A person who expires in a minute
+ * must not keep a screen for the twelve hours of their token (SC-57).
+ */
 export function msUntilExpiry(req: FastifyRequest): number | null {
-  const exp = (req.user as { exp?: unknown } | undefined)?.exp;
-  return typeof exp === 'number' ? Math.min(Math.max(exp * 1000 - Date.now(), 0), MAX_TIMER_MS) : null;
+  const user = req.user as { exp?: unknown; expires?: unknown } | undefined;
+  if (typeof user?.exp !== 'number') return null;
+  const ends = typeof user.expires === 'number' ? Math.min(user.exp, user.expires) : user.exp;
+  return Math.min(Math.max(ends * 1000 - Date.now(), 0), MAX_TIMER_MS);
 }

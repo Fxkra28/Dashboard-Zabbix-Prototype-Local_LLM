@@ -24,8 +24,8 @@ export default defineConfig([
   },
   {
     rules: {
-      // A scrolling region needs a Tab stop to scroll by keyboard (ExplainPanel's body).
-      'jsx-a11y/no-noninteractive-tabindex': ['error', { roles: ['tabpanel', 'region'] }],
+      // A scrolling region needs a Tab stop to scroll by keyboard (ExplainPanel's body, the Assistant's conversation).
+      'jsx-a11y/no-noninteractive-tabindex': ['error', { roles: ['tabpanel', 'region', 'log'] }],
     },
   },
   { languageOptions: { globals: globals.browser } },

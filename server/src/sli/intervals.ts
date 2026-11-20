@@ -50,6 +50,21 @@ export function intersectIntervals(a: Interval[], b: Interval[]): Interval[] {
   return out;
 }
 
+/**
+ * Whether `[s, e)` shares time with `spans`, which must be merged and sorted: a binary search for the first span that ends after `s`. Counting the outages of a year inside the daily hours
+ * with `intersectIntervals([iv], spans)` for each one merged and sorted every span again each time, and stalled the whole BFF for seconds (BK-79).
+ */
+export function touchesAny(spans: readonly Interval[], s: number, e: number): boolean {
+  let lo = 0;
+  let hi = spans.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (spans[mid][1] <= s) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo < spans.length && spans[lo][0] < e;
+}
+
 /** Every interval clipped to `[from, to)`. */
 export function clipIntervals(intervals: Interval[], from: number, to: number): Interval[] {
   return intervals

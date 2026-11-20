@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { api, AUTH_CHANGED } from '../../api';
-import { resetAuthProbe, roleAllows, useAuth } from './useAuth';
+import { hasModule, recheckAccess, resetAuthProbe, roleAllows, useAuth } from './useAuth';
 import type { Me } from '../../types';
 
 /** Who is signed in. A BFF that does not answer is asked again, backing off, and the answer is not kept for the tab (FR-02). */
 
-const operator: Me = { authEnabled: true, user: { name: 'ana', role: 'operator' }, expiresIn: 3600, pages: { '/': 'viewer' } };
+const operator: Me = { authEnabled: true, user: { name: 'ana', role: 'operator' }, expiresIn: 3600, pages: { '/': 'guest' }, modules: ['dashboard', 'problems'] };
 
 beforeEach(() => resetAuthProbe());
 afterEach(() => {
@@ -20,7 +20,7 @@ describe('useAuth', () => {
     const { result } = renderHook(() => useAuth());
     expect(result.current).toMatchObject({ role: null, loading: true });
     await act(async () => undefined);
-    expect(result.current).toMatchObject({ role: 'operator', loading: false, pages: { '/': 'viewer' } });
+    expect(result.current).toMatchObject({ role: 'operator', loading: false, pages: { '/': 'guest' } });
   });
 
   it('asks again after 5, then 10, then 20 seconds while the BFF does not answer, and stops once it does', async () => {
@@ -103,10 +103,160 @@ describe('useAuth when the page is gone before the answer', () => {
 });
 
 describe('roleAllows', () => {
-  it('ranks viewer under operator under admin, and allows nothing to nobody', () => {
-    expect(roleAllows('operator', 'viewer')).toBe(true);
-    expect(roleAllows('viewer', 'operator')).toBe(false);
+  it('ranks guest under operator under admin, and allows nothing to nobody', () => {
+    expect(roleAllows('operator', 'guest')).toBe(true);
+    expect(roleAllows('guest', 'operator')).toBe(false);
     expect(roleAllows('admin', 'admin')).toBe(true);
-    expect(roleAllows(null, 'viewer')).toBe(false);
+    expect(roleAllows('operator', 'admin')).toBe(false);
+    expect(roleAllows(null, 'guest')).toBe(false);
+  });
+});
+
+describe('hasModule and can', () => {
+  it('holds the modules the BFF says the user holds, and every one for an administrator', () => {
+    expect(hasModule({ modules: ['sla'], role: 'guest' }, 'sla')).toBe(true);
+    expect(hasModule({ modules: ['sla'], role: 'guest' }, 'network')).toBe(false);
+    expect(hasModule({ modules: [], role: 'admin' }, 'users')).toBe(true);
+  });
+
+  it('takes a BFF that does not say as allowing every module, since it still refuses what a user may not read', () => {
+    expect(hasModule({ modules: undefined, role: 'guest' }, 'network')).toBe(true);
+  });
+
+  it('is false until the user is known, and then follows the modules', async () => {
+    vi.spyOn(api, 'me').mockResolvedValue(operator);
+    const { result } = renderHook(() => useAuth());
+    expect(result.current.can('dashboard')).toBe(false);
+    await act(async () => undefined);
+    expect(result.current.can('dashboard')).toBe(true);
+    expect(result.current.can('network')).toBe(false);
+    expect(result.current.modules).toEqual(['dashboard', 'problems']);
+  });
+});
+
+// FR-70: the server judges each request by the pages of now, so a page that kept the list it fetched at load must ask again.
+describe('recheckAccess', () => {
+  const widened: Me = { ...operator, pages: { '/': 'guest', '/network': 'guest' }, modules: ['dashboard', 'problems', 'network'] };
+
+  it('hands the new pages to a hook that is already on screen, when an administrator changed them', async () => {
+    vi.spyOn(api, 'me').mockResolvedValueOnce(operator).mockResolvedValue(widened);
+    const { result } = renderHook(() => useAuth());
+    await act(async () => undefined);
+    expect(result.current.can('network')).toBe(false);
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await recheckAccess();
+    });
+    expect(outcome).toBe('changed');
+    expect(result.current.pages).toEqual({ '/': 'guest', '/network': 'guest' });
+    expect(result.current.can('network')).toBe(true);
+  });
+
+  it('follows a page that was taken away as well', async () => {
+    vi.spyOn(api, 'me').mockResolvedValueOnce(widened).mockResolvedValue(operator);
+    const { result } = renderHook(() => useAuth());
+    await act(async () => undefined);
+    expect(result.current.can('network')).toBe(true);
+    await act(async () => void (await recheckAccess()));
+    expect(result.current.can('network')).toBe(false);
+  });
+
+  it('says nothing and changes nothing when the answer is the same', async () => {
+    const me = vi.spyOn(api, 'me').mockResolvedValue(operator);
+    const { result } = renderHook(() => useAuth());
+    await act(async () => undefined);
+    const heard = vi.fn();
+    window.addEventListener('hcml:access-changed', heard);
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await recheckAccess();
+    });
+    window.removeEventListener('hcml:access-changed', heard);
+    expect(outcome).toBe('same');
+    expect(heard).not.toHaveBeenCalled();
+    expect(me).toHaveBeenCalledTimes(2);
+    expect(result.current.role).toBe('operator');
+  });
+
+  it('keeps what the page held when the BFF does not answer, and says it failed', async () => {
+    vi.spyOn(api, 'me').mockResolvedValueOnce(operator).mockRejectedValue(new Error('502'));
+    const { result } = renderHook(() => useAuth());
+    await act(async () => undefined);
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await recheckAccess();
+    });
+    expect(outcome).toBe('failed');
+    expect(result.current.role).toBe('operator');
+  });
+
+  it('lets a page that opens later read the new answer, and not the one fetched at load', async () => {
+    const me = vi.spyOn(api, 'me').mockResolvedValueOnce(operator).mockResolvedValue(widened);
+    const first = renderHook(() => useAuth());
+    await act(async () => undefined);
+    await act(async () => void (await recheckAccess()));
+    const later = renderHook(() => useAuth());
+    await act(async () => undefined);
+    expect(later.result.current.can('network')).toBe(true);
+    // One for the page, one for the re-read: opening another page asks nothing more.
+    expect(me).toHaveBeenCalledTimes(2);
+    first.unmount();
+  });
+
+  it('counts a change of role, or of a temporary password, as a change too', async () => {
+    const asGuest = { ...operator, user: { name: 'ana', role: 'guest' } } as Me;
+    vi.spyOn(api, 'me')
+      .mockResolvedValueOnce(operator) // the hook, at mount
+      .mockResolvedValueOnce(asGuest) // the first re-read: the role changed
+      .mockResolvedValueOnce(asGuest) // the hook, which asks again when the role of the person changed
+      .mockResolvedValue({ ...asGuest, mustChange: true }); // the second re-read: a temporary password
+    renderHook(() => useAuth());
+    await act(async () => undefined);
+    let outcome: string | undefined;
+    await act(async () => {
+      outcome = await recheckAccess();
+    });
+    expect(outcome).toBe('changed');
+    await act(async () => {
+      outcome = await recheckAccess();
+    });
+    expect(outcome).toBe('changed');
+  });
+
+  it('treats another person behind the cookie as a new session: what the pages keep for one person goes too', async () => {
+    const session = await import('../../api/session');
+    const heard = vi.fn();
+    const off = session.onSessionChange(heard);
+    vi.spyOn(api, 'me').mockResolvedValueOnce(operator).mockResolvedValue({ ...operator, user: { name: 'budi', role: 'operator' } });
+    renderHook(() => useAuth());
+    await act(async () => undefined);
+    await act(async () => void (await recheckAccess()));
+    off();
+    expect(heard).toHaveBeenCalledTimes(1);
+  });
+
+  // What a page keeps for one person is cut by the role too (the lists of items an operator may pick from): a role that changed under the same name makes it wrong.
+  it('clears what the pages keep for one person when the role of the same person changed', async () => {
+    const session = await import('../../api/session');
+    const heard = vi.fn();
+    const off = session.onSessionChange(heard);
+    vi.spyOn(api, 'me').mockResolvedValueOnce(operator).mockResolvedValue({ ...operator, user: { name: operator.user!.name, role: 'admin' } });
+    renderHook(() => useAuth());
+    await act(async () => undefined);
+    await act(async () => void (await recheckAccess()));
+    off();
+    expect(heard).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not clear what the pages keep when only the pages of the same person changed', async () => {
+    const session = await import('../../api/session');
+    const heard = vi.fn();
+    const off = session.onSessionChange(heard);
+    vi.spyOn(api, 'me').mockResolvedValueOnce(operator).mockResolvedValue(widened);
+    renderHook(() => useAuth());
+    await act(async () => undefined);
+    await act(async () => void (await recheckAccess()));
+    off();
+    expect(heard).not.toHaveBeenCalled();
   });
 });

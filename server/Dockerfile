@@ -28,9 +28,9 @@ COPY --from=build /app/dist ./dist
 ARG BUILD_COMMIT=unknown
 ARG BUILD_TIME=unknown
 ENV BUILD_COMMIT=$BUILD_COMMIT BUILD_TIME=$BUILD_TIME
-# The two places this process may write, a volume each in the compose file: /data holds the saved
-# recipients, the monthly schedule and a record of what was sent (core/state.ts, hosted copy only) and the web check
-# figures of closed months (services/closedWebStore.ts, both copies), /var/log/portal its own copy of the log (core/logFile.ts).
+# The two places this process may write, a volume each in the compose file, in both copies: /data holds the users file (security/userStore.ts), the saved
+# recipients, the monthly schedule and a record of what was sent (core/state.ts), the web check figures of closed months (services/closedWebStore.ts)
+# and the requests for an account (security/requestStore.ts), /var/log/portal its own copy of the log (core/logFile.ts).
 RUN mkdir -p /data /var/log/portal && chown node:node /data /var/log/portal
 # The image's own unprivileged user, not root: this process holds both Zabbix tokens
 # and the AI key. The root-owned app needs no chown, and it writes nothing but those two folders.

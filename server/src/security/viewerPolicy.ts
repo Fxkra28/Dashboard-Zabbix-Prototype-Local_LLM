@@ -1,16 +1,14 @@
 import type { FastifyRequest } from 'fastify';
-import { roleAllows, roleOf } from './auth.js';
+import { hasModule, roleOf } from './auth.js';
 import { cached } from '../core/cache.js';
 import { zbx } from '../clients/zabbix.js';
 
 /**
- * What a viewer may not read through the generic routes.
+ * What an account without the Network page may not read through the generic routes.
  *
- * The Network and Links pages start at the wall role, but /api/items, /api/latest and /api/maps/detail
- * are viewer routes that return the same interface data. So network interface data stays with the
- * wall role and above: for a viewer these routes leave out the items whose key starts with `net.if` and
- * the network hosts on a map. A wall account, an operator and an admin see everything. A request with
- * no valid token never gets here.
+ * The Network and Links pages need the Network and Links modules, but /api/items, /api/latest and /api/maps/detail are routes of other pages that return the same interface data.
+ * So network interface data stays with the Network module: for an account without it these routes leave out the items whose key starts with `net.if` and
+ * the network hosts on a map. An account with the module, and an admin, see everything. A request with no valid token never gets here.
  *
  * Leaving items out of a list is not enough on its own: /api/graph reads an item by id, and ids can
  * be guessed. `networkItemsDenied` closes that for it.
@@ -19,8 +17,8 @@ import { zbx } from '../clients/zabbix.js';
 /** Interface item keys: net.if.in[...], net.if.out[...], net.if.speed[...], net.if.status[...]. */
 export const isNetworkKey = (key: unknown): boolean => typeof key === 'string' && key.startsWith('net.if');
 
-/** Whether this caller is kept away from network interface data. Unknown or missing roles count as viewer. */
-export const hidesNetwork = (req: FastifyRequest): boolean => !roleAllows(roleOf(req), 'wall');
+/** Whether this caller is kept away from network interface data: they do not have the Network module. */
+export const hidesNetwork = (req: FastifyRequest): boolean => !hasModule(req, 'network');
 
 /** The items without the interface ones: a new array, so a cached list is never changed. */
 export const withoutNetworkItems = <T extends { key_?: unknown }>(items: T[]): T[] =>
@@ -49,5 +47,5 @@ async function hasNetworkItem(itemids: readonly string[]): Promise<boolean> {
  */
 export async function networkItemsDenied(req: FastifyRequest, itemids: readonly string[]): Promise<string | null> {
   if (!hidesNetwork(req) || !(await hasNetworkItem(itemids))) return null;
-  return `Network interface data needs the "wall" role; you are signed in as "${roleOf(req)}".`;
+  return `Network interface data is for accounts that have the Network page; you are signed in as "${roleOf(req)}".`;
 }

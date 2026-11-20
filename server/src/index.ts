@@ -39,10 +39,14 @@ import { chatRoutes } from './routes/chat.js';
 import { warmModel } from './clients/ai.js';
 import { warmUp } from './services/warmUp.js';
 import { sliRoutes } from './routes/sli.js';
+import { usersRoutes } from './routes/users.js';
+import { accountRequestRoutes } from './routes/accountRequests.js';
 import { sliExportRoutes } from './routes/sliExport.js';
 import { sliMailRoutes } from './routes/sliMail.js';
 import { sliScheduleRoutes } from './routes/sliSchedule.js';
 import { initPortalState, portalState } from './services/portalState.js';
+import { initUsers, userDirectory } from './services/userDirectory.js';
+import { initRequests } from './services/accountRequests.js';
 import { createReportSchedule } from './services/reportSchedule.js';
 import { createClosedMonthCapture, setClosedWebLogger } from './services/closedWeb.js';
 import { closedWeb, initClosedWeb } from './services/closedWebStore.js';
@@ -105,6 +109,10 @@ const closedMonthCapture = createClosedMonthCapture({
 });
 closeWith(app, closedMonthCapture);
 
+// The users: the file beside the state, and the users of .env that it does not hold yet (ADR-0017). It never fails: with no folder the users stay in .env, and it says so.
+await initUsers((m) => app.log.warn(m));
+await initRequests((m) => app.log.warn(m));
+
 // X-Request-Id on every reply and `requestId` in every error body. First, so the refusals below
 // carry it too (requestId.ts).
 registerRequestId(app);
@@ -144,7 +152,7 @@ const readiness = registerHealth(app);
 registerErrorHandler(app);
 
 // Auth first so its onRequest guard covers the routes registered after it.
-await setupAuth(app);
+await setupAuth(app, userDirectory());
 
 await app.register(hostRoutes);
 await app.register(deviceRoutes);
@@ -170,6 +178,8 @@ await app.register(sliRoutes);
 await app.register(sliExportRoutes);
 await app.register(sliMailRoutes);
 await app.register(sliScheduleRoutes, { schedule: reportSchedule });
+await app.register(usersRoutes);
+await app.register(accountRequestRoutes);
 
 try {
   await app.listen({ port: config.port, host: config.host });

@@ -26,26 +26,26 @@ The browser never talks to Zabbix and never holds a token. It talks to nginx, wh
 <!-- gen:tree . depth=1 files -->
 ```text
 ./
-├── .github/            1 file
-├── deploy/             3 files
-├── docs/               3 files
-├── server/             9 files
-├── tools/              1 file
-├── web/                13 files
+├── .github/                   1 file
+├── deploy/                    8 files
+├── docs/                      3 files
+├── server/                    9 files
+├── tools/                     1 file
+├── web/                       13 files
 ├── .env.example
 ├── .gitignore
 ├── .gitleaks.toml
 ├── .nvmrc
-├── AUDIT_REPORT.md
 ├── CHANGELOG.md
 ├── DESIGN.md
 ├── LICENSE
 ├── README.md
 ├── SECURITY.md
+├── docker-compose.vm-gpu.yml
+├── docker-compose.vm.yml
 ├── docker-compose.yml
 ├── package.json
-├── setup.md
-└── tracker.md
+└── setup.md
 ```
 <!-- /gen -->
 
@@ -55,16 +55,16 @@ The browser never talks to Zabbix and never holds a token. It talks to nginx, wh
 | `web/` | The front end: a React app built with Vite, served by nginx, with its own packages, lockfile, Dockerfile and tests. [The web app](web.md) goes through it. |
 | `tools/` | Scripts that check the repository against itself (`check/`), read a running portal (`live/`) and build this handbook (`handover/`). Plain Node, no packages of their own. |
 | `deploy/` | The rebuild script, the watcher that tells you when a portal stops answering, and a list of every setting with its default. |
-| `docs/` | Everything documentary: the guide in 40 parts, the decisions, the diagrams, the API description, the design system and this handbook. |
+| `docs/` | Everything documentary: the guide in 29 parts, the decisions, the diagrams, the API description, the design system and this handbook. |
 | `.github/` | The CI workflow and the Dependabot settings. |
 | `docker-compose.yml` | The two containers, `portal-bff` and `portal-web`, their limits, and every setting the server reads. Differs between the copies. |
+| `docker-compose.vm.yml` | Added on top of it on the server that hosts the portal: Ollama as one more service on the portal's own network, with its port published on the machine's loopback only (so the speed test run on the machine reaches it and nothing off the machine does), so the local model runs on the same machine. |
+| `docker-compose.vm-gpu.yml` | Added on top of both where the machine has an NVIDIA card: hands one card to the model. |
 | `.env.example` | Every setting with a safe example value. The real `.env` beside it is not in git. |
 | `package.json` | No dependencies. Its scripts run the checks of both packages: `npm run verify` runs them all. |
 | `README.md` | How to install, configure and run, and the layout. Differs between the copies. |
 | `setup.md` | The index of the guide in `docs/setup/`, one part per subsystem. |
-| `tracker.md` | Every row of work, what it was, and what state it is in. |
 | `CHANGELOG.md` | What changed in each build, newest first. |
-| `AUDIT_REPORT.md` | What two audits found and what is still open. Differs between the copies. |
 | `DESIGN.md` | The design direction: identity, palette, type, mood, and the wall screen. |
 | `SECURITY.md`, `LICENSE` | How to report a vulnerability, and the terms the code is shared on. |
 | `.gitignore`, `.nvmrc` | What git leaves out, and the Node version for local installs and CI. |
@@ -77,7 +77,7 @@ Some files sit in the folder and are not in the repository, on purpose.
 |---|---|---|
 | `.env` and `server/.env` | The real settings: users and roles, the Zabbix and model tokens, the signing secret | They are secrets. They are the one thing to back up by hand: [backup and restore](../../operations/backup-and-restore.md) |
 | `docker-compose.override.yml` | Settings that belong to one machine, such as the name the server uses for Zabbix | It names an internal address. `.gitignore` names the file, so a clone never commits it. |
-| `pic/` | Screenshots of each copy's running portal, used to make the documents | They show real host and site names. The documents hold ten renamed images in `docs/screenshots/`. |
+| `pic/` | Screenshots of each copy's running portal, used to make the documents | They show real host and site names. Neither they nor the pictures made from them are kept in the repository. |
 | `node_modules/`, `dist/`, `*.tsbuildinfo` | Installed packages, build output, build cache | They are made from the lockfiles and the source. |
 | `HCML_SLA_Report_*` | A downloaded monthly SLA report | It names every device in the estate. |
 

@@ -320,6 +320,97 @@ describe('reportFileName', () => {
 
 const INFO = { enabled: true, from: 'portal@example.com', recipients: ['ana@example.org'], max: 10, allowedDomains: [] as string[], kept: true };
 
+describe('api.sliRangeExport (FR-60)', () => {
+  const range = { from: 1785517200, to: 1786122000, dayHours: '8-17', days: '1,2,3,4,5', words: '3 Aug 2026, 00:00 to 10 Aug 2026, 00:00, 08:00 to 17:00, Monday to Friday' };
+  const queryOf = (call: unknown[]) => Object.fromEntries(new URL(String(call[0]), 'http://localhost:3000').searchParams);
+
+  it('asks for the two times, the hours and the format, with no month, and returns the file under the name the BFF gave it', async () => {
+    const { api } = await load();
+    fetchMock.mockResolvedValue(pdf({ 'Content-Disposition': 'attachment; filename="HCML_SLA_Report_2026-08-03_to_2026-08-09_0800-1700_d12345.pdf"' }));
+    const { blob, fileName } = await api.sliRangeExport(range, 'pdf');
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url.startsWith('/bff/api/sli/export?')).toBe(true);
+    expect(queryOf(fetchMock.mock.calls[0]!)).toEqual({ from: '1785517200', to: '1786122000', dayHours: '8-17', days: '1,2,3,4,5', format: 'pdf' });
+    expect(init.method).toBeUndefined();
+    expect(fileName).toBe('HCML_SLA_Report_2026-08-03_to_2026-08-09_0800-1700_d12345.pdf');
+    expect(blob.type).toBe('application/pdf');
+  });
+
+  it('sends no hours when none were chosen, and leaves out the words, which are for people', async () => {
+    const { api } = await load();
+    fetchMock.mockResolvedValue(xlsx());
+    await api.sliRangeExport({ from: 1785517200, to: 1786122000, words: 'any' }, 'xlsx');
+    expect(queryOf(fetchMock.mock.calls[0]!)).toEqual({ from: '1785517200', to: '1786122000', format: 'xlsx' });
+  });
+
+  it('puts the style in the query as a month’s file does, the separator for a CSV only', async () => {
+    const { api } = await load();
+    fetchMock.mockImplementation(async (url: string) => (url.includes('format=csv') ? zip() : pdf()));
+    const style = { decimal: 'comma', date: 'iso', separator: 'semicolon' } as const;
+    await api.sliRangeExport(range, 'csv', undefined, style);
+    await api.sliRangeExport(range, 'pdf', undefined, style);
+    expect(queryOf(fetchMock.mock.calls[0]!)).toMatchObject({ format: 'csv', decimal: 'comma', date: 'iso', separator: 'semicolon' });
+    expect(queryOf(fetchMock.mock.calls[1]!)).toEqual(expect.not.objectContaining({ separator: expect.anything() }));
+  });
+
+  it('names the file itself when the BFF sent no name, from the two times', async () => {
+    const { api } = await load();
+    fetchMock.mockImplementation(async (url: string) => (url.includes('format=csv') ? zip() : pdf()));
+    expect((await api.sliRangeExport(range, 'pdf')).fileName).toBe('HCML_SLA_Report_1785517200_to_1786122000.pdf');
+    expect((await api.sliRangeExport(range, 'csv')).fileName).toBe('HCML_SLA_Report_1785517200_to_1786122000_csv.zip');
+  });
+
+  it('refuses a 200 that is not the file asked for, as a month’s download does', async () => {
+    const { api } = await load();
+    fetchMock.mockResolvedValue(json(200, { sign: 'in' }));
+    await expect(api.sliRangeExport(range, 'pdf')).rejects.toThrow('not a PDF file');
+  });
+
+  it('hands the abort signal to fetch', async () => {
+    const { api } = await load();
+    fetchMock.mockResolvedValue(pdf());
+    const stop = new AbortController();
+    await api.sliRangeExport(range, 'pdf', stop.signal);
+    expect((fetchMock.mock.calls[0][1] as RequestInit).signal).toBe(stop.signal);
+  });
+});
+
+describe('api.sliRangeEmail (FR-60)', () => {
+  const answer = { sent: 2, refused: 0, month: null, from: 1785517200, to: 1786122000, files: [{ format: 'pdf', fileName: 'HCML_SLA_Report_2026-08-03_to_2026-08-09.pdf', bytes: 1234 }], remembered: false };
+  const range = { from: 1785517200, to: 1786122000, dayHours: '8-17', days: '1,2,3,4,5', words: 'for people' };
+
+  it('posts the window as an object, since `to` is the list of people, with the hours and what was asked for, and the CSRF header', async () => {
+    const { api } = await load();
+    fetchMock.mockResolvedValue(json(200, answer));
+    expect(await api.sliRangeEmail(range, { formats: ['pdf'], to: ['ana@example.org'], remember: true })).toEqual(answer);
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/bff/api/sli/email');
+    expect(init.method).toBe('POST');
+    expect(init.headers).toEqual({ 'Content-Type': 'application/json', 'X-HCML-CSRF': '1' });
+    expect(JSON.parse(String(init.body))).toEqual({ window: { from: 1785517200, to: 1786122000 }, dayHours: '8-17', days: '1,2,3,4,5', formats: ['pdf'], to: ['ana@example.org'], remember: true });
+  });
+
+  it('leaves out the hours when none were chosen, and the words, which are for people', async () => {
+    const { api } = await load();
+    fetchMock.mockResolvedValue(json(200, answer));
+    await api.sliRangeEmail({ from: 1785517200, to: 1786122000, words: 'for people' }, { formats: ['csv'] });
+    expect(JSON.parse(String((fetchMock.mock.calls[0] as [string, RequestInit])[1].body))).toEqual({ window: { from: 1785517200, to: 1786122000 }, formats: ['csv'] });
+  });
+
+  it('reads an answer that has no month, as a range gets, and one that has', async () => {
+    const { api } = await load();
+    fetchMock.mockResolvedValueOnce(json(200, answer)).mockResolvedValueOnce(json(200, { ...answer, month: '2026-08', from: undefined, to: undefined }));
+    expect((await api.sliRangeEmail(range, { formats: ['pdf'] })).month).toBeNull();
+    expect((await api.sliRangeEmail(range, { formats: ['pdf'] })).month).toBe('2026-08');
+  });
+
+  it('throws the BFF’s own sentence on a refusal', async () => {
+    const { api } = await load();
+    fetchMock.mockResolvedValue(json(400, { error: 'bad_request', message: 'That range ended a moment ago, and Zabbix is still adding its last values. Send it in about 7 minutes.' }));
+    await expect(api.sliRangeEmail(range, { formats: ['pdf'] })).rejects.toThrow('That range ended a moment ago');
+  });
+});
+
 describe('api.sliEmailInfo', () => {
   it('asks the BFF whether the report can be emailed, and returns what it says', async () => {
     const { api } = await load();

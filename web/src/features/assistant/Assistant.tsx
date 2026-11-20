@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { chatStream, chatWarm } from '../../api';
 import { useCapabilities } from './useAi';
 import { loadConversation, saveConversation } from '../../shared/lib/chatStore';
 import { useAuth, roleAllows } from '../../shared/hooks/useAuth';
-import type { ChatContext, ChatMessage } from '../../types';
+import type { ChatContext, ChatDone, ChatMessage } from '../../types';
 import { Empty, Loading } from '../../shared/components/states';
 import Markdown from './Markdown';
 import AiDataNotice from './AiDataNotice';
@@ -13,7 +13,7 @@ import { useNow } from '../../shared/hooks/useNow';
 
 /**
  * The Assistant page: free-form questions about the estate, answered from a
- * read-only snapshot the BFF takes for every message (see server services/assistant.ts).
+ * read-only snapshot the BFF takes for every message and from what the question asks for beyond it (see server services/assistant.ts).
  *
  * Nothing is stored server-side, so the whole history is sent back with each
  * turn. The conversation is kept in this tab's sessionStorage, so looking at
@@ -23,6 +23,7 @@ import { useNow } from '../../shared/hooks/useNow';
 
 const SUGGESTIONS = [
   'What needs attention right now?',
+  'What happened last night?',
   'Which site is in the worst shape?',
   'Are we meeting the SLA this period?',
   'Which hosts are unreachable?',
@@ -30,6 +31,17 @@ const SUGGESTIONS = [
 
 /** How many turns travel with each message; the BFF then keeps the newest ~3,000 characters. */
 const HISTORY = 12;
+
+/** The most of one message the BFF reads (server services/chat.ts MAX_TURN_CHARS): the box stops there, and the counter shows from a little before it (FR-72). */
+const QUESTION_MAX = 2_000;
+const COUNTER_FROM = 1_800;
+
+/** What an answer that did not end by itself says of itself, so that a partial answer does not read as a whole one (UX-72). */
+const CUT_WORDS = {
+  stopped: 'Stopped: this answer is partial.',
+  failed: 'Cut off: the answer ended before it was finished.',
+  limit: 'Cut off: the model reached its length limit, so the answer is partial.',
+} as const;
 
 /** Within this many pixels of the end counts as "reading the latest". */
 const NEAR_BOTTOM_PX = 80;
@@ -46,26 +58,36 @@ export function ContextStrip({ context }: { context: ChatContext | null }) {
     return (
       <div className="chat-context">
         <span>
-          Ask about what is happening right now. Every answer is based on a fresh snapshot of
-          Zabbix: the same data as the Problems, Sites and SLA pages.
+          Ask about what is happening now or what happened before: last night, a device’s CPU, a host’s details, another month’s SLA. Each answer uses a snapshot of Zabbix that is up to five
+          minutes old, the same data as the Problems, Sites and SLA pages, and reads what the question asks for beyond it from Zabbix at that moment.
         </span>
       </div>
     );
   }
+  // A user whose pages show only some of the estate is shown, and the model with them, only those parts: a count of a part they do not have is left out.
+  const has = (...parts: string[]) => !context.shown || parts.some((p) => context.shown?.includes(p));
+  const anything = !context.shown || context.shown.length > 0;
   return (
     <div className="chat-context">
       <span className="muted">The assistant can see:</span>
-      <span className="pill">
-        {context.problems} open problem{context.problems === 1 ? '' : 's'}
-        {context.unacknowledged ? ` · ${context.unacknowledged} unacknowledged` : ''}
-      </span>
-      <span className="pill">
-        {count(context.hosts, 'host')} · {count(context.sites, 'site')}
-      </span>
-      <span className="pill">
-        {context.slas} SLA{context.slas === 1 ? '' : 's'} · {context.degradedServices} degraded service
-        {context.degradedServices === 1 ? '' : 's'}
-      </span>
+      {has('estate', 'whole', 'problems') && (
+        <span className="pill">
+          {context.problems} open problem{context.problems === 1 ? '' : 's'}
+          {context.unacknowledged ? ` · ${context.unacknowledged} unacknowledged` : ''}
+        </span>
+      )}
+      {has('estate', 'sites', 'unreachable') && (
+        <span className="pill">
+          {count(context.hosts, 'host')} · {count(context.sites, 'site')}
+        </span>
+      )}
+      {has('sla', 'services') && (
+        <span className="pill">
+          {context.slas} SLA{context.slas === 1 ? '' : 's'} · {context.degradedServices} degraded service
+          {context.degradedServices === 1 ? '' : 's'}
+        </span>
+      )}
+      {!anything && <span className="muted">nothing: your account has none of the pages it answers from</span>}
       <span className="muted">snapshot {ago(context.generatedAt, now)}</span>
       {context.truncated && (
         <span className="muted" title="The estate was too large to show the model in full">
@@ -74,6 +96,21 @@ export function ContextStrip({ context }: { context: ChatContext | null }) {
       )}
     </div>
   );
+}
+
+/**
+ * The conversation with an answer added. The BFF says how many turns the model was given (`remembered`): the ones before them are marked, and stay marked, since a message that has fallen out
+ * of the model's memory does not come back (FR-72). It also says the language the answer was asked in, which marks the question and the answer for a screen reader (UX-73).
+ */
+function withAnswer(messages: ChatMessage[], asked: number, answer: string, done: ChatDone | null): ChatMessage[] {
+  const lang = done?.language ?? undefined;
+  const before = typeof done?.remembered === 'number' ? Math.max(0, asked - done.remembered) : 0;
+  const marked = messages.map((m, i) => {
+    const forgotten = i < before && !m.forgotten;
+    const spoken = i === asked - 1 && lang !== undefined && !m.lang;
+    return forgotten || spoken ? { ...m, ...(forgotten ? { forgotten: true } : {}), ...(spoken ? { lang } : {}) } : m;
+  });
+  return [...marked, { role: 'assistant', content: answer, ...(lang ? { lang } : {}), ...(done?.truncated ? { cut: 'limit' as const } : {}) }];
 }
 
 export default function Assistant() {
@@ -141,6 +178,7 @@ export default function Assistant() {
     const ac = new AbortController();
     abortRef.current = ac;
     let answer = '';
+    let finished: ChatDone | null = null;
     try {
       await chatStream(
         next.slice(-HISTORY),
@@ -152,15 +190,17 @@ export default function Assistant() {
           },
           // The BFF's cleaned-up text (no think block, no sign-off) replaces the stream.
           onDone: (d) => {
+            finished = d;
             if (typeof d.text === 'string' && d.text) answer = d.text;
           },
         },
         ac.signal,
       );
-      setMessages((m) => [...m, { role: 'assistant', content: answer }]);
+      if (answer) setMessages((m) => withAnswer(m, next.length, answer, finished));
+      else setError('The assistant sent no answer. Ask again.');
     } catch (err) {
-      // Stopped by the reader: keep what arrived. Failed: keep it too, and say so.
-      if (answer) setMessages((m) => [...m, { role: 'assistant', content: answer }]);
+      // Stopped by the reader: keep what arrived, marked as partial. Failed: keep it too, marked, and say so.
+      if (answer) setMessages((m) => [...m, { role: 'assistant', content: answer, cut: ac.signal.aborted ? 'stopped' : 'failed' }]);
       if (!ac.signal.aborted) setError(err instanceof Error ? err.message : String(err));
     } finally {
       setPending(null);
@@ -232,6 +272,8 @@ export default function Assistant() {
         className="chat-log"
         ref={logRef}
         onScroll={onScroll}
+        // A scroller with nothing focusable inside is out of the keyboard's reach in some browsers (UX-75).
+        tabIndex={0}
         role="log"
         aria-live="polite"
         aria-busy={busy}
@@ -246,20 +288,41 @@ export default function Assistant() {
             ))}
           </div>
         )}
-        {messages.map((m, i) =>
-          m.role === 'assistant' ? (
-            <div key={i} className="chat-msg assistant">
-              <Markdown text={m.content} />
-            </div>
-          ) : (
-            <div key={i} className="chat-msg user">
-              {m.content}
-            </div>
-          ),
-        )}
+        {messages.map((m, i) => (
+          <Fragment key={i}>
+            {/* Where the model's memory of the conversation ends: it was not shown what is above (FR-72). */}
+            {i > 0 && messages[i - 1].forgotten && !m.forgotten && (
+              <div className="chat-memory" role="note">
+                Above this line the assistant does not remember. Clear starts a new conversation.
+              </div>
+            )}
+            {m.role === 'assistant' ? (
+              <div className="chat-msg assistant" lang={m.lang}>
+                {/* The words of the page are English whatever the language of the message they sit in (WCAG 3.1.2). */}
+                <span className="sr-only" lang="en">
+                  Assistant:{' '}
+                </span>
+                <Markdown text={m.content} />
+                {m.cut && (
+                  <div className="chat-cut" lang="en">
+                    {CUT_WORDS[m.cut]}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="chat-msg user" lang={m.lang}>
+                <span className="sr-only" lang="en">
+                  You:{' '}
+                </span>
+                {m.content}
+              </div>
+            )}
+          </Fragment>
+        ))}
         {pending !== null &&
           (pending ? (
             <div className="chat-msg assistant streaming">
+              <span className="sr-only">Assistant: </span>
               <Markdown text={pending} />
             </div>
           ) : (
@@ -279,6 +342,8 @@ export default function Assistant() {
           onKeyDown={onKey}
           placeholder="Ask about problems, sites, hosts or SLAs… (Enter to send, Shift+Enter for a new line)"
           aria-label="Question for the assistant"
+          aria-describedby={draft.length >= COUNTER_FROM ? 'chat-count' : undefined}
+          maxLength={QUESTION_MAX}
           rows={2}
         />
         {busy ? (
@@ -306,8 +371,17 @@ export default function Assistant() {
         )}
       </div>
 
+      {draft.length >= COUNTER_FROM && (
+        <div className="chat-count muted" id="chat-count">
+          {draft.length.toLocaleString('en-US')} of {QUESTION_MAX.toLocaleString('en-US')} characters
+          {draft.length >= QUESTION_MAX && (
+            <span role="status">: the most the assistant reads. If you pasted more, the rest was cut off.</span>
+          )}
+        </div>
+      )}
+
       <div className="chat-foot">
-        Answers are written by an AI model from a read-only snapshot of the Zabbix data. It can be
+        Answers are written by an AI model from a read-only snapshot of the Zabbix data and from what the question asks for beyond it, read on the spot. It can be
         wrong, and it cannot change anything. Confirm on the relevant page before acting.
         <AiDataNotice kind="assistant" />
       </div>

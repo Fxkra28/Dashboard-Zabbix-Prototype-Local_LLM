@@ -22,7 +22,7 @@ From `hcml-portal`, run `deploy/rebuild.sh --dry-run` and read it. It names the 
 
 ### 4. How many ways back are there?
 
-`docker images` lists the images of each portal. Those tagged `rollback-<day><month>` are the ways back. The rule keeps the two newest of each image, and an older one is deleted only when the owner says so.
+`docker images` lists the images of each portal. Those tagged `rollback-<day><month>` are the ways back. The rule keeps the two newest of each image, and an older one is deleted only when we say so.
 
 ### 5. What does the Dashboard say when Zabbix stops collecting, and where does the wording come from?
 
@@ -36,7 +36,7 @@ The banner reads "Zabbix has collected nothing since" and a time. It comes from 
 
 ### 7. Who may call `/api/links`, and how would you prove it?
 
-The `wall` role and above. The rule is in `ROUTE_RULES` in `server/src/security/auth.ts`: `/api/(links|net)` needs `wall`. It is proved by `surface.test.ts`, which pins every route and its role, and `auth-rules.test.ts`. The sidebar needs no change, because `pageRoles` runs `requiredRole` over the route that fills each page, so the menu follows the rule. A viewer who types the address gets the page that says it is for wall screens, and the call is a 403.
+Any account that has the Links page. The rule is a row of `ROUTES` in `server/src/security/modules.ts`: `/api/links` is owned by the `links` module, at the `guest` role. It is proved by `surface.test.ts`, which pins every route and its role, and `auth-rules.test.ts`. The sidebar needs no change, because `pagesOf` reads the same table, so the menu follows the rule. A person who has not been given the page and types the address gets the page that says so, and the call is a 403.
 
 ### 8. Make the "flapping" flag need ten firings and not five.
 
@@ -56,4 +56,4 @@ A closed month changes rarely, yet a restart computes it again. It can still cha
 
 ### 12. Make a new page that only admins may open.
 
-Give its route a rule in `ROUTE_RULES` with the role `admin`, and update `surface.test.ts`. Add the page to `PAGE_API` in `server/src/security/pageAccess.ts`. Describe the route in `docs/api/openapi.yaml`. Add the page's `Route` in `App.tsx`, its link in `Sidebar.tsx`, and its name in the page lists of the live audit tools. The sidebar hides the link from a lower role because `/api/auth/me` sends the role each page needs. The server remains the authority. `/api/reports/inventory` is the existing example of an admin page.
+Give its route a row in `ROUTES` with the role `admin` and a module of its own in `MODULES` in `server/src/security/modules.ts`, and update `surface.test.ts`. Describe the route in `docs/api/openapi.yaml`. Add the page's `Route` in `App.tsx`, its link in `Sidebar.tsx`, and its name in the page lists of the live audit tools. The sidebar hides the link from everyone else because `/api/auth/me` sends only the pages the account has. The server remains the authority. `/api/reports/inventory` is the existing example of an admin page.

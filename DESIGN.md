@@ -322,13 +322,13 @@ trademark, so it is not done without a decision. A vector original would make th
 
 ## 9. Batch 4 decisions, 25 September 2026
 
-The owner's answers to the design questions left open by the inspection (`tracker.md`, UX items). They are
+The owner's answers to the design questions left open by the inspection (the UX items of the work log). They are
 direction, recorded as given; how each is built is checked against sections 1 to 8.
 
 | Item | Decision |
 |---|---|
 | UX-12, the Dashboard's live list | Worst first: severity, then newest. The panel says "12 of N" and links to the full Problems list |
-| UX-15, the wall screen | A wall mode with all four parts: a fullscreen toggle that hides the chrome and enlarges the Dashboard; a short highlight on problems that appear or clear, off under reduced motion; a live clock and a large "data as of" stamp; and no sign-in timeout. It also turns by itself between the Overview, the Hosts and, for operators and admins, the internet meters (30 seconds each, a Pause button, or a view named in the address, stops it), and the whole wall is drawn at the scale that fits the screen, smaller or larger than 1080p, as nobody scrolls a wall |
+| UX-15, the wall screen | A wall mode with all four parts: a fullscreen toggle that hides the chrome and enlarges the Dashboard; a short highlight on problems that appear or clear, off under reduced motion; a live clock and a large "data as of" stamp; and no sign-in timeout. It also turns by itself between the Overview, the Hosts and, for accounts that have the Network page, the internet meters (30 seconds each, a Pause button, or a view named in the address, stops it), and the whole wall is drawn at the scale that fits the screen, smaller or larger than 1080p, as nobody scrolls a wall |
 | Wall sign-in | Any open portal renews its own sign-in before it expires, for every user. Accepted trade-off: an unattended, open portal also stays signed in |
 | UX-14, narrow screens | Not needed. The portal is used on desktops and the wall; section 6 stands as written |
 | UX-24, the sidebar | Keep the current groups. Each menu label matches the title of the page it opens |

@@ -38,7 +38,7 @@ const trig = (triggerid: string, hostid: string, name: string, description = 'Hi
 /** A small estate: a Jakarta switch, a paired WAN path at Sampang, a web host. */
 function estate(over: Record<string, (p: Params) => unknown> = {}) {
   const triggers = [
-    trig('1', '101', '1.2.1 IDX02CORESWITCH'),
+    trig('1', '101', '1.2.1 TANGO02CORESWITCH'),
     trig('2', '102', 'INET : SAMPANG WAN 1'),
     trig('3', '103', 'INET : SAMPANG WAN 2'),
     trig('4', '104', 'WEB : PORTAL'),

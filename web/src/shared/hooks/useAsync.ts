@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { withSignal } from '../../api';
+import { HttpFailure, withSignal } from '../../api';
+import { serverNow } from '../lib/clock';
 
 interface Snapshot<T> {
   data: T | null;
@@ -10,7 +11,12 @@ interface Snapshot<T> {
   stale: boolean;
   /** When `data` last arrived (ms since epoch). */
   updatedAt: number | null;
+  /** Asking again can change the answer. False for a refusal of the request itself (a 400 to 499 that is not a timeout): the same request is refused again, so a page offers no Try again for it (FR-67). */
+  retryable: boolean;
 }
+
+/** A refusal that asking again cannot change: the server said no to what was asked. 408, 429 and 499 are about the moment, not the request. */
+const refusedOutright = (err: unknown): boolean => err instanceof HttpFailure && err.status >= 400 && err.status < 500 && ![408, 429, 499].includes(err.status);
 
 interface Run {
   id: number;
@@ -50,6 +56,7 @@ export function useAsync<T>(
     loading: true,
     stale: false,
     updatedAt: null,
+    retryable: true,
   });
 
   // The latest render's fetcher, dependencies and interval, for runs the
@@ -98,13 +105,13 @@ export function useAsync<T>(
         .then(
           (data) => {
             if (current !== run) return;
-            setSnap({ data, error: null, loading: false, stale: false, updatedAt: Date.now() });
+            setSnap({ data, error: null, loading: false, stale: false, updatedAt: serverNow(), retryable: true });
           },
           (err: unknown) => {
             // An aborted run was replaced or dropped on purpose, not a failure to show.
             if (current !== run || run.controller.signal.aborted) return;
             const message = String((err as { message?: unknown } | null)?.message ?? err);
-            setSnap((s) => ({ ...s, error: message, loading: false }));
+            setSnap((s) => ({ ...s, error: message, loading: false, retryable: !refusedOutright(err) }));
           },
         )
         .finally(() => {

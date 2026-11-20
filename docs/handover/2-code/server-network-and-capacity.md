@@ -4,7 +4,7 @@
 |---|---|---|---|
 | Developers | about 40 min | [Server: domain and hosts](server-domain-and-hosts.md) | [Server: SLA and reports](server-sla-and-reports.md) |
 
-These services read the network side of HCML's estate: the interfaces of a switch, the ping links, the Internet traffic gauges, and the Capacity report over days of history. The first three are for the `wall` role and above, because `/api/net` and `/api/links` start there in the route rules. Everything is read from Zabbix, and nothing is stored. The code is plain functions in `server/src/services/`: `net.ts`, `links.ts`, `meters.ts` and `capacity.ts`, with `reportPolicy.ts` for the slow reports.
+These services read the network side of HCML's estate: the interfaces of a switch, the ping links, the Internet traffic gauges, and the Capacity report over days of history. The first three are for the accounts that have the Network page or the Links page, because `/api/net` and `/api/links` belong to those pages in the table of routes. Everything is read from Zabbix, and nothing is stored. The code is plain functions in `server/src/services/`: `net.ts`, `links.ts`, `meters.ts` and `capacity.ts`, with `reportPolicy.ts` for the slow reports.
 
 ## Interfaces and devices
 
@@ -13,7 +13,7 @@ These services read the network side of HCML's estate: the interfaces of a switc
 `server/src/services/net.ts`. Read an interface's number and its name out of Zabbix's item keys and item names.
 
 <!-- gen:snippet server/src/services/net.ts#parseIfKey sha=20d671d50823 -->
-`server/src/services/net.ts:57-63`
+`server/src/services/net.ts:61-67`
 
 ```ts
 export function parseIfKey(key: string): { kind: string; index: number } | null {
@@ -27,7 +27,7 @@ export function parseIfKey(key: string): { kind: string; index: number } | null 
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/net.ts#parseIfName sha=0e3f38d9b775 -->
-`server/src/services/net.ts:66-71`
+`server/src/services/net.ts:70-75`
 
 ```ts
 export function parseIfName(itemName: string): { name: string; alias: string } | null {
@@ -48,7 +48,7 @@ export function parseIfName(itemName: string): { name: string; alias: string } |
 `server/src/services/net.ts`. Folds the items of one host into one row for each interface. It is a pure function, so a test gives it items and a time.
 
 <!-- gen:snippet server/src/services/net.ts#groupInterfaces lines=26-34 sha=f9e57e0743cf -->
-`server/src/services/net.ts:102-110` (lines 26 to 34 of groupInterfaces)
+`server/src/services/net.ts:106-114` (lines 26 to 34 of groupInterfaces)
 
 ```ts
 const label = parseIfName(it.name);
@@ -64,7 +64,7 @@ if (fresh) row.lastclock = Math.max(row.lastclock ?? 0, Number(it.lastclock));
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/net.ts#groupInterfaces lines=36-67 sha=f9e57e0743cf -->
-`server/src/services/net.ts:112-143` (lines 36 to 67 of groupInterfaces)
+`server/src/services/net.ts:116-147` (lines 36 to 67 of groupInterfaces)
 
 ```ts
 switch (k.kind) {
@@ -103,7 +103,7 @@ switch (k.kind) {
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/net.ts#groupInterfaces lines=69-76 sha=f9e57e0743cf -->
-`server/src/services/net.ts:145-152` (lines 69 to 76 of groupInterfaces)
+`server/src/services/net.ts:149-156` (lines 69 to 76 of groupInterfaces)
 
 ```ts
   const out = [...rows.values()];
@@ -126,8 +126,8 @@ switch (k.kind) {
 
 `server/src/services/net.ts`. The Network page's device list, and one page of a device's interfaces.
 
-<!-- gen:snippet server/src/services/net.ts#getNetDevices sha=e37cf0033197 -->
-`server/src/services/net.ts:158-189`
+<!-- gen:snippet server/src/services/net.ts#getNetDevices sha=a8147145b740 -->
+`server/src/services/net.ts:162-190`
 
 ```ts
 export function getNetDevices() {
@@ -135,6 +135,7 @@ export function getNetDevices() {
     const hostParams: Record<string, unknown> = {
       output: ['hostid', 'name', 'status'],
       selectInterfaces: ['ip', 'type'],
+      ...SITE_SIGNALS,
       sortfield: 'name',
     };
     if (config.netGroupIds.length) hostParams.groupids = config.netGroupIds;
@@ -143,19 +144,15 @@ export function getNetDevices() {
     // every monitored host and shared with Sites and Hosts. A value is only believed while fresh:
     // collected, supported and recent. `lastclock '0'` (never polled / no recent data) is
     // `unknown`, not `lastvalue ''` read as "down", and so is a value hours old.
-    const [hosts, icmp] = await Promise.all([
-      zbx<{ hostid: string; name: string; status: string }[]>('host.get', hostParams),
-      getIcmpByHost(),
-    ]);
+    const [hosts, icmp] = await Promise.all([zbx<ZHostMeta[]>('host.get', hostParams), getIcmpByHost()]);
 
     return hosts
       .map((h) => {
         const r = icmp.get(h.hostid);
-        // Loss and latency stay on this route, which starts at the wall role; the viewer
-        // routes (Sites, Hosts) carry only the derived state.
+        // Loss and latency stay on this route, which needs the Network page; the routes of
+        // Sites and Hosts carry only the derived state.
         return {
-          ...h,
-          site: siteFromHostName(h.name),
+          ...withSite(h),
           icmp: r ? { up: r.up, loss: r.loss, latency: r.latency, state: r.state } : null,
         };
       })
@@ -165,8 +162,8 @@ export function getNetDevices() {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/net.ts#getInterfacePage sha=0d52a22536cc -->
-`server/src/services/net.ts:204-238`
+<!-- gen:snippet server/src/services/net.ts#getInterfacePage sha=42faf6c260f6 -->
+`server/src/services/net.ts:205-239`
 
 ```ts
 export async function getInterfacePage({ hostid, search, status: wanted, page, pageSize }: InterfaceQuery) {
@@ -179,7 +176,7 @@ export async function getInterfacePage({ hostid, search, status: wanted, page, p
           hostids: [hostid],
           search: { key_: 'net.if.' },
           startSearch: true,
-          output: ['itemid', 'name', 'key_', 'lastvalue', 'lastclock', 'units', 'value_type', 'state', 'status'],
+          output: ['itemid', 'name', 'key_', 'lastvalue', 'lastclock', 'units', 'value_type', 'state', 'status', 'delay'],
         }),
       ),
     { ...SLOW_VIEW, typed: true },
@@ -207,8 +204,8 @@ export async function getInterfacePage({ hostid, search, status: wanted, page, p
 ```
 <!-- /gen -->
 
-1. `getNetDevices` asks `host.get` for the hosts and reads the ping readings once, at the same time. When `NET_GROUP_IDS` is set, only the hosts in those groups are asked for. An empty setting means every host. Each device leaves with its site, from its name, and its ping: `up`, `loss`, `latency` and `state`. Loss and latency stay on this route because it starts at the wall role, and the viewer routes carry the state alone. The list is kept 30 seconds under the `SLOW_VIEW` rule.
-2. `getInterfacePage` reads every `net.if.` item of one host with `item.get`, folds them with `groupInterfaces`, and keeps the rows 15 seconds for each host, also under `SLOW_VIEW`. The host is chosen by the caller, so the key is also marked `typed`: at most 150 such entries are kept, and they go first, so asking for many hosts cannot push the problem list and the host list out of the cache.
+1. `getNetDevices` asks `host.get` for the hosts and reads the ping readings once, at the same time. When `NET_GROUP_IDS` is set, only the hosts in those groups are asked for. An empty setting means every host. Each device leaves with its site, resolved by the four signals of the Sites page (BK-94), and its ping: `up`, `loss`, `latency` and `state`. Loss and latency stay on this route because it needs the Network page, and the routes of Sites and Hosts carry the state alone. The list is kept 30 seconds under the `SLOW_VIEW` rule.
+2. `getInterfacePage` reads every `net.if.` item of one host with `item.get`, asking for each item's own update interval (`delay`) so that a reading is judged against it (`pollSeconds`, BK-95), folds them with `groupInterfaces`, and keeps the rows 15 seconds for each host, also under `SLOW_VIEW`. The host is chosen by the caller, so the key is also marked `typed`: at most 150 such entries are kept, and they go first, so asking for many hosts cannot push the problem list and the host list out of the cache.
 3. The search is applied to the name and the alias. The summary counts the searched rows by `statusBucket` (up, down, other, where `lowerLayerDown` counts as down), so the tabs show the counts for the search. Only then is the status filter applied, the total counted and the page cut. A page past the last is the last page, and `page` in the answer says which one it is, so an old address or a list that shrank never reads as empty.
 
 Tests: `routes.test.ts`, `graphs.test.ts` and `viewer-network.test.ts` call these through the routes. Nothing tests `groupInterfaces` on its own.
@@ -629,31 +626,31 @@ HCML's estate is nearly all SNMP devices, whose templates put an OID in the key.
 
 ### getCapacity
 
-<!-- gen:snippet server/src/services/capacity.ts#getCapacity lines=29-44 sha=463bc5573e3c -->
-`server/src/services/capacity.ts:134-149` (lines 29 to 44 of getCapacity)
+<!-- gen:snippet server/src/services/capacity.ts#getCapacity lines=29-44 sha=b89da48ab774 -->
+`server/src/services/capacity.ts:137-152` (lines 29 to 44 of getCapacity)
 
 ```ts
 // Every metric's trends in one sliced read, so a long window stays within
 // what Zabbix's PHP can answer (a year in one request was an HTTP 500) and
 // at most `maxParallel` requests run at once, whatever the metric count.
 const trendAgg: Aggregates = new Map();
-await fetchTrendsSliced<{ itemid: string; value_avg: string; value_max: string }>(
+await fetchTrendsSliced<{ itemid: string; value_avg: string; value_max: string; value_min: string }>(
   [...new Set(matched.flat().map((i) => i.itemid))],
   from,
   to,
-  ['itemid', 'value_avg', 'value_max'],
+  ['itemid', 'value_avg', 'value_max', 'value_min'],
   {
     parallel: config.sla.maxParallel,
     onRows: (rows) => {
-      for (const r of rows) addSample(trendAgg, r.itemid, Number(r.value_avg), Number(r.value_max));
+      for (const r of rows) addSample(trendAgg, r.itemid, Number(r.value_avg), Number(r.value_max), Number(r.value_min));
     },
   },
 );
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/capacity.ts#getCapacity lines=51-75 sha=463bc5573e3c -->
-`server/src/services/capacity.ts:156-180` (lines 51 to 75 of getCapacity)
+<!-- gen:snippet server/src/services/capacity.ts#getCapacity lines=51-75 sha=b89da48ab774 -->
+`server/src/services/capacity.ts:159-183` (lines 51 to 75 of getCapacity)
 
 ```ts
 // Trends are hourly and only exist once an hour has passed; a young
@@ -679,52 +676,52 @@ if (source === 'history') {
   });
   if (!hist.length) source = 'none';
   agg = new Map();
-  for (const h of hist) addSample(agg, h.itemid, Number(h.value), Number(h.value));
+  for (const h of hist) addSample(agg, h.itemid, Number(h.value), Number(h.value), Number(h.value));
 }
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/capacity.ts#getCapacity lines=104-127 sha=463bc5573e3c -->
-`server/src/services/capacity.ts:209-232` (lines 104 to 127 of getCapacity)
+<!-- gen:snippet server/src/services/capacity.ts#getCapacity lines=104-127 sha=b89da48ab774 -->
+`server/src/services/capacity.ts:212-235` (lines 104 to 127 of getCapacity)
 
 ```ts
-  // One row per host per metric: a switch with two CPU modules or a
-  // "reserve Processor" memory pool is one device, shown by its busiest item.
-  const byMetric = new Map<string, { label: string; rows: CapacityRow[] }>();
-  for (const { key, label, rows } of perMatcher) {
-    const entry = byMetric.get(key) ?? { label, rows: [] };
-    entry.rows.push(...rows);
-    byMetric.set(key, entry);
-  }
-  const metrics = [...byMetric.entries()].map(([key, { label, rows }]) => {
-    const best = new Map<string, CapacityRow>();
-    for (const r of rows) {
-      const prev = best.get(r.hostid || r.itemid);
-      if (!prev || r.avg > prev.avg) best.set(r.hostid || r.itemid, r);
-    }
-    return {
-      key,
-      label,
-      rows: [...best.values()].sort((a, b) => b.avg - a.avg).slice(0, top),
-    };
-  });
-
-  metrics.push(await interfaceUtilisation(from, to, top));
-  return { days, metrics };
+// One row per host per metric: a switch with two CPU modules or a
+// "reserve Processor" memory pool is one device, shown by its busiest item.
+const byMetric = new Map<string, { label: string; rows: CapacityRow[] }>();
+for (const { key, label, rows } of perMatcher) {
+  const entry = byMetric.get(key) ?? { label, rows: [] };
+  entry.rows.push(...rows);
+  byMetric.set(key, entry);
 }
+const metrics = [...byMetric.entries()].map(([key, { label, rows }]) => {
+  const best = new Map<string, CapacityRow>();
+  for (const r of rows) {
+    const prev = best.get(r.hostid || r.itemid);
+    if (!prev || r.avg > prev.avg) best.set(r.hostid || r.itemid, r);
+  }
+  return {
+    key,
+    label,
+    rows: [...best.values()].sort((a, b) => b.avg - a.avg).slice(0, top),
+  };
+});
+
+metrics.push(await interfaceUtilisation(from, to, top));
+// When the report was built: the busiest interfaces are those of that moment (below), and the page says so (BK-92).
+return { days, metrics, generatedAt: Math.floor(Date.now() / 1000) };
 ```
 <!-- /gen -->
 
 1. For each metric, one `item.get` finds the monitored items by key prefix (a substring search would scan every item) and keeps those whose key the matcher accepts.
-2. The trends of all those items are read in one sliced read, `fetchTrendsSliced` from `sli/events.ts`. A year of trends in one request once gave an HTTP 500 from Zabbix's PHP, so the window is split and at most `SLI_ZBX_PARALLEL` (default 4) requests run at once. Each row is folded into a running sum and maximum as it arrives (`addSample`), so a year of trends is never held in memory.
+2. The trends of all those items are read in one sliced read, `fetchTrendsSliced` from `sli/events.ts`. A year of trends in one request once gave an HTTP 500 from Zabbix's PHP, so the window is split and at most `SLI_ZBX_PARALLEL` (default 4) requests run at once. Each row is folded into a running sum, maximum and minimum as it arrives (`addSample`; the minimum is for the disks that report free space, BK-93), so a year of trends is never held in memory.
 3. Trends are hourly and exist only after an hour has passed. A young instance has history and no trends, so the code falls back on the raw history of the last day only, capped at `HISTORY_FALLBACK_LIMIT` (10,000 rows). Pulling tens of thousands of raw rows into the server to average what Zabbix could have averaged is the thing to avoid. Each row says where it came from in `source`: `trend`, `history` or `none`.
-4. A switch with two CPU modules, or a "reserve Processor" memory pool, is one device. The last step keeps one row for each host and metric, the item with the highest average, sorts by average and cuts to `top`. The FortiGate disk rows are turned from free into used, and as the largest free value is the smallest used one, their `max` is kept at least equal to the average.
-5. The interface panel is added at the end by `interfaceUtilisation`.
+4. A switch with two CPU modules, or a "reserve Processor" memory pool, is one device. The last step keeps one row for each host and metric, the item with the highest average, sorts by average and cuts to `top`. The FortiGate disk rows report free space and are turned into used: the peak use is 100 less the lowest free value the disk had, which is the minimum of the free item (BK-93), and the average is 100 less the average free value.
+5. The interface panel is added at the end by `interfaceUtilisation`, and the report carries `generatedAt`, the time it was built (BK-92).
 
 ### interfaceUtilisation
 
-<!-- gen:snippet server/src/services/capacity.ts#interfaceUtilisation lines=16-38 sha=1a1525e89873 -->
-`server/src/services/capacity.ts:254-276` (lines 16 to 38 of interfaceUtilisation)
+<!-- gen:snippet server/src/services/capacity.ts#interfaceUtilisation lines=16-38 sha=87dc5f892011 -->
+`server/src/services/capacity.ts:258-280` (lines 16 to 38 of interfaceUtilisation)
 
 ```ts
 // A port's speed changes only when the port does, and its 3,048 values cost minutes a run on HCML's Zabbix.
@@ -753,8 +750,8 @@ if (!candidates.length) return { key: 'ifutil', label, rows: [] };
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/capacity.ts#interfaceUtilisation lines=63-89 sha=1a1525e89873 -->
-`server/src/services/capacity.ts:301-327` (lines 63 to 89 of interfaceUtilisation)
+<!-- gen:snippet server/src/services/capacity.ts#interfaceUtilisation lines=63-89 sha=87dc5f892011 -->
+`server/src/services/capacity.ts:305-331` (lines 63 to 89 of interfaceUtilisation)
 
 ```ts
 const pct = (itemid: string | undefined, speed: number, pick: 'avg' | 'max') => {
@@ -788,16 +785,16 @@ return { key: 'ifutil', label, rows };
 <!-- /gen -->
 
 1. The estate has thousands of interfaces, so the function preselects. It reads the newest rate of every `net.if.in[` and `net.if.out[` item, and the speeds. A port's speed changes only when the port does, and reading its 3,048 values cost minutes on HCML's Zabbix, so the speeds are kept a day and pinned (`SPEEDS_TTL_MS`).
-2. Only octet counters are traffic, because errors and discards share the prefix. For each interface the latest rate of the busier direction is divided by its speed, and the top candidates are kept: `top` times four, and at least 40.
+2. Only octet counters are traffic, because errors and discards share the prefix. For each interface the latest rate of the busier direction is divided by its speed, and the top candidates are kept: `top` times four, and at least 40. A port with no speed item, or a speed of 0, is never considered. The shortlist is chosen from the latest rate at the moment the report is built, so the panel lists the ports busiest then, ranked afterwards by their average over the days: a link that was busy on working days and quiet at that moment is not in it, and the page and the contract say so (BK-92).
 3. Only those candidates' trends are then read, at most about 400 items, sliced as before. A row's average is the average of its busier direction as a share of the speed. The maximum is the busier direction's peak, held to 100. The port name comes from the item name.
 4. A row without trend data is dropped, and the rest are sorted and cut to `top`.
 
-One thing to know: `/api/reports/capacity` is a viewer route, and the last panel names the busiest ports of each host. The viewer policy keeps interface items from `/api/items`, `/api/latest`, `/api/maps/detail` and `/api/graph`, and this route does not apply it. The owner decided on 11 November 2026 that every role may see it (SC-45), and part 5 and the setup guide say so. The page leaves the Graph button off an interface row for a viewer, since `/api/graph` would refuse those items (FR-55).
+One thing to know: `/api/reports/capacity` belongs to the Capacity page, and the last panel names the busiest ports of each host. The viewer policy keeps interface items from an account without the Network page out of `/api/items`, `/api/latest`, `/api/maps/detail` and `/api/graph`, and this route does not apply it. We decided on 11 November 2026 that every account may see it (SC-45), and part 5 and the setup guide say so. The page leaves the Graph button off an interface row for an account without the Network page, since `/api/graph` would refuse those items (FR-55).
 
 ### getCapacityReport and the slow-report policy
 
 <!-- gen:snippet server/src/services/capacity.ts#getCapacityReport sha=bd6d066af793 -->
-`server/src/services/capacity.ts:340-349`
+`server/src/services/capacity.ts:344-353`
 
 ```ts
 export function getCapacityReport(days: number, top: number, signal?: AbortSignal) {
@@ -829,7 +826,7 @@ export const heavy = createGate(HEAVY_REPORTS_AT_ONCE);
 ```
 <!-- /gen -->
 
-1. A run of the report took HCML's Zabbix 256 seconds. So the answer is kept for `CAPACITY_TTL`, an hour, under a key made of the days and the top. Past the hour the previous run is served at once, with its age, for up to `CAPACITY_STALE_MS` (23 hours) while one refresh runs. A failed refresh answers with the previous run too. The entry of a period the page offers (`CAPACITY_PERIODS`: 1, 7, 30 and 90 days, with the usual `top` of 10) is pinned, so the cache's size limit does not evict it. Any other days or top is a number a viewer chose, so its entry is typed instead: at most 150 such entries are kept and they go first, so a run of different numbers cannot push out the pinned reports or the problem list (BK-70).
+1. A run of the report took HCML's Zabbix 256 seconds. So the answer is kept for `CAPACITY_TTL`, an hour, under a key made of the days and the top. Past the hour the previous run is served at once, with its age, for up to `CAPACITY_STALE_MS` (23 hours) while one refresh runs. A failed refresh answers with the previous run too. The entry of a period the page offers (`CAPACITY_PERIODS`: 1, 7, 30 and 90 days, with the usual `top` of 10) is pinned, so the cache's size limit does not evict it. Any other days or top is a number the reader chose, so its entry is typed instead: at most 150 such entries are kept and they go first, so a run of different numbers cannot push out the pinned reports or the problem list (BK-70).
 2. `staleReport` is the rule for reports over days of history: the previous run is shown with its age while a refresh runs, or when it fails. It is never used for `aging`, or for anything that shows live problem state.
 3. `heavy` is a gate that lets `HEAVY_REPORTS_AT_ONCE` (2) reports read Zabbix at the same time. A cold noise report over 365 days takes 7 seconds and thousands of SQL statements, and every new `days` or `severity` is a cold one, so the others wait their turn. A cached answer never waits. A reader who leaves while theirs waits drops it from the line (BK-59): the gate asks, when the turn comes, whether anyone still waits for it, and a read already running is left to finish.
 4. The warm-up reads the default report, 7 days and the top 10, last of all, so the first visitor after a start finds it ready.

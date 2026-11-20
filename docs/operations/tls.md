@@ -37,7 +37,10 @@ hop, and a number is that many.
 ## Option A: nginx in front
 
 A second nginx, on the host. If it runs in a container on the compose network instead, point
-`proxy_pass` at `http://portal-web:8080`.
+`proxy_pass` at `http://portal-web:8080`, and give that container `restart: unless-stopped`: nginx looks the
+name up once, when it starts, so when the whole stack is restarted at once the proxy can start before `portal-web` exists
+and stop with `host not found in upstream`. In a trial on 18 November 2026 it stopped on the first such restart and
+answered five seconds after the second, with the policy set.
 
 ```nginx
 server {
@@ -79,6 +82,33 @@ server {
 The portal's own nginx still sets the real limit for each route (360 seconds for an ordinary call, 480 for the SLA and for explanations),
 so the hour here only lets the streams run.
 
+A proxy in a container is one more container on the machine, and it sees every request. Docker keeps the log of a container
+without a limit unless it is told one, so give the proxy what the portal's own file gives its containers: a restart policy, a
+rotated log and limits. This overlay, listed after the portal's files (add `:docker-compose.proxy.yml` to the end of the `COMPOSE_FILE` line that `.env` already holds, as step 5 of [the runbook](vm-runbook.md)
+sets it, or give it as one more `-f` after the files that line names), merges with the portal's file without complaint (`docker compose config` was run on it):
+
+```yaml
+services:
+  tls-proxy:
+    image: nginx:1.30-alpine        # pin the version, as the portal's own images are pinned
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./proxy/portal.conf:/etc/nginx/conf.d/default.conf:ro
+      - /etc/ssl/portal:/etc/ssl/portal:ro
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    mem_limit: 256m
+    memswap_limit: 256m
+    pids_limit: 128
+    cpus: 1
+```
+
 ## Option B: Caddy
 
 Caddy gets and renews a certificate by itself for a public name. For a name only your network knows,
@@ -117,6 +147,17 @@ services:
       # Raise 300 to 31536000 once every address people use has been checked.
       - traefik.http.middlewares.portal-hsts.headers.stsSeconds=300
 ```
+
+Give the Traefik container the same restart policy, rotated log and limits as the overlay above.
+
+## Who can reach the proxy
+
+A rule on the machine's own firewall (ufw or firewalld) that lets only the users in on port 443 does not hold for a container
+that publishes `443:443`. Docker writes its own rules for a published port, and they are checked before ufw's, so such a
+container answers every address that can reach the machine, whatever ufw says. Make the restriction where Docker does not
+go around it: in HCML's network firewall, in the `DOCKER-USER` chain (the rules Docker leaves to the operator), or run the
+proxy on the host, as in the first form of Option A, so that port 443 is the host's own and the host firewall sees it. The
+portal itself stays on `127.0.0.1` in all three.
 
 ## HSTS
 
@@ -194,8 +235,15 @@ only its own certificate, which is why the `chain.pem` step is there; the same g
 even a renewed certificate unless the server is set to send the GeoTrust intermediate with it.
 
 These recipes were written from each product's documentation and from how this portal reads its
-headers (`server/src/security/auth.ts`, `setup.md` §23, ADR-0010). They were **not run** against a live
-proxy: nothing here could start one. Before you rely on one, run `nginx -t` or `caddy validate`,
-and the three `curl` checks above. The checks that do run in CI are the ones in
-`server/src/__tests__/deploy-docs.test.ts`: they only confirm that this page still names HSTS, the
-forwarded protocol and the two settings.
+headers (`server/src/security/auth.ts`, `setup.md` §23, ADR-0010). Only the nginx one has been run, and
+once: on 18 November 2026, in a container on the compose network, with a throwaway certificate for a
+made-up name, on a stand-in for the machine and not on the machine ([vm-runbook.md](vm-runbook.md), step 6).
+What was seen: the page loads and `/bff/api/health` answers through the proxy with the certificate
+checked; one `Strict-Transport-Security` header and not two; a sign-in sets `HttpOnly; Secure; SameSite=Strict`;
+a sign-in whose `Origin` names another site is refused with 403 `csrf`; and a sign-in sent to the web
+container without `X-Forwarded-Proto` sets the cookie without `Secure`. Not seen: Caddy and Traefik (neither
+was started), a certificate from HCML, the portal's real name, and the event streams (the live Dashboard and
+the Assistant) through the proxy. Before you rely on any recipe, run `nginx -t` or `caddy validate`, and
+the three `curl` checks above. The checks that do run in CI are in
+`server/src/__tests__/deploy-docs.test.ts` and `compose-vm.test.ts`: they confirm that this page still names HSTS, the
+forwarded protocol and the two settings, says which recipe was run, and gives the proxy a restart policy, a rotated log and limits, and that the overlay of the virtual machine merges with a real Compose. None of them starts a proxy.

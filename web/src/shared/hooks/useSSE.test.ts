@@ -3,8 +3,9 @@ import { act, renderHook } from '@testing-library/react';
 import { unreadableMessage, type Guard } from '../../guards';
 
 const me = vi.fn(() => Promise.resolve({ authEnabled: true }));
-vi.mock('../../api', () => ({ api: { me: () => me() } }));
+vi.mock('../../api', () => ({ api: { me: () => me() }, AUTH_CHANGED: 'hcml:auth-changed', isSignedOut: () => false, userOrRoleChanged: () => undefined }));
 const { useSSE } = await import('./useSSE');
+const { resetAuthProbe } = await import('./useAuth');
 
 /** An EventSource the test drives: frames, errors and closes happen when it says so. */
 class FakeEventSource {
@@ -35,7 +36,8 @@ let visibility: DocumentVisibilityState = 'visible';
 
 beforeEach(() => {
   FakeEventSource.all = [];
-  me.mockClear();
+  me.mockReset().mockImplementation(() => Promise.resolve({ authEnabled: true }));
+  resetAuthProbe();
   visibility = 'visible';
   vi.useFakeTimers();
   vi.stubGlobal('EventSource', FakeEventSource);
@@ -79,6 +81,28 @@ describe('useSSE', () => {
     expect(me).toHaveBeenCalledTimes(1);
     act(() => vi.advanceTimersByTime(2_000));
     expect(FakeEventSource.all).toHaveLength(2);
+  });
+
+  // The server ends a person's streams when their pages change (SC-57), and the drop that follows is the first thing to notice: it asks at once what the account may open, and does not leave a page taken away to the next look.
+  it('tells the pages when the answer to that question is another one', async () => {
+    const changed = vi.fn();
+    window.addEventListener('hcml:access-changed', changed);
+    const answer = (pages: Record<string, string>) => ({ authEnabled: true, user: { name: 'ana', role: 'guest' }, pages, modules: Object.keys(pages) });
+    me.mockResolvedValueOnce(answer({ '/': 'guest', '/network': 'guest' }) as never).mockResolvedValue(answer({ '/': 'guest' }) as never);
+    renderHook(() => useSSE('/bff/api/stream', 'problems'));
+    const drop = async () => {
+      const source = latest();
+      await act(async () => {
+        source.readyState = FakeEventSource.CLOSED;
+        source.onerror?.({});
+      });
+    };
+    await drop();
+    expect(changed).not.toHaveBeenCalled();
+    await act(async () => void vi.advanceTimersByTime(2_000));
+    await drop();
+    window.removeEventListener('hcml:access-changed', changed);
+    expect(changed).toHaveBeenCalledTimes(1);
   });
 
   it('treats a stream gone quiet as dropped', () => {

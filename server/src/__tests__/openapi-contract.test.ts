@@ -106,6 +106,13 @@ const BODY: Record<string, object> = {
   '/api/sli/email': { month: '2026-09', formats: ['pdf'] },
   '/api/sli/recipients': { recipients: ['ana@example.org'] },
   '/api/sli/schedule': { enabled: true, day: 1, time: '00:00', formats: ['pdf'], recipients: ['ana@example.org'], notify: [] },
+  // The user made here is the one the next two change: the paths come in this order in the file.
+  '/api/users': { name: 'new.user', role: 'guest', modules: ['sla'], password: 'a-long-password-1' },
+  '/api/users/{name}': { displayName: 'New User', modules: ['sla', 'noise'] },
+  '/api/users/{name}/password': { password: 'another-password-1' },
+  '/api/auth/password': { current: 'admin-pass', password: 'a-brand-new-password' },
+  '/api/auth/request': { name: 'A. Visitor', pages: ['sla'], reason: 'To read the monthly report' },
+  '/api/users/requests/{id}/approve': { name: 'asked.for', role: 'guest', modules: ['sla'], password: 'a-long-password-1' },
 };
 
 /**
@@ -113,7 +120,10 @@ const BODY: Record<string, object> = {
  * succeed, so that its success body is held to the file too (IN-84): with the write token and the mail unset, three of them once
  * answered 503 or 400 and were accepted as "documented".
  */
-const NOT_2XX: Record<string, { status: number; why: string }> = {};
+const NOT_2XX: Record<string, { status: number; why: string }> = {
+  // The administrator here is a user of .env, whose password is changed there; users-routes.test.ts holds the 200 of a user of the file to its shape.
+  'post /api/auth/password': { status: 409, why: 'adi is kept in .env' },
+};
 
 /** Sign-out and renewal end the session they are sent with, so each gets one of its own. */
 const OWN_SESSION = new Set(['/api/auth/refresh', '/api/auth/logout']);
@@ -146,6 +156,8 @@ beforeAll(async () => {
     AI_BASE_URL: 'http://127.0.0.1:9/v1',
     ANTHROPIC_API_KEY: '',
     AI_API_KEY: '',
+    // Requests for an account are on, so that the five operations behind them answer their success and not their 404 (FR-62).
+    ACCOUNT_REQUESTS: 'true',
   })) {
     vi.stubEnv(key, value);
   }
@@ -158,6 +170,22 @@ beforeAll(async () => {
   const { registerErrorHandler } = await import('../http/errors.js');
   const { registerHealth } = await import('../http/health.js');
   const { setupAuth } = await import('../security/auth.js');
+  const { createDirectory, readEnvUsers } = await import('../security/accounts.js');
+  const { memoryUsers } = await import('../security/userStore.js');
+  const { useUserDirectory } = await import('../services/userDirectory.js');
+  const { memoryRequests } = await import('../security/requestStore.js');
+  const { useRequestStore } = await import('../services/accountRequests.js');
+  // Users that can be changed, so that the operations behind the Users page answer their success.
+  const directory = createDirectory(readEnvUsers(), memoryUsers());
+  useUserDirectory(directory);
+  // Two requests waiting, one for the approval to make an account of and one for the refusal to take off the list.
+  const created = Math.floor(Date.now() / 1000);
+  useRequestStore(
+    memoryRequests([
+      { id: 'req-approve', name: 'Asked For', pages: ['sla'], reason: 'To read the monthly report', created },
+      { id: 'req-refuse', name: 'Another Person', pages: ['sla'], reason: 'To read the monthly report', created },
+    ]),
+  );
   const routes = await Promise.all([
     import('../routes/hosts.js').then((m) => m.hostRoutes),
     import('../routes/devices.js').then((m) => m.deviceRoutes),
@@ -182,6 +210,8 @@ beforeAll(async () => {
     import('../routes/sli.js').then((m) => m.sliRoutes),
     import('../routes/sliExport.js').then((m) => m.sliExportRoutes),
     import('../routes/sliMail.js').then((m) => m.sliMailRoutes),
+    import('../routes/users.js').then((m) => m.usersRoutes),
+    import('../routes/accountRequests.js').then((m) => m.accountRequestRoutes),
     // The schedule is the scheduler's to run; here it only has to answer the questions the routes ask of it.
     import('../routes/sliSchedule.js').then((m) => async (instance: FastifyInstance) => {
       await instance.register(m.sliScheduleRoutes, { schedule: { availability: () => ({ available: true, why: '' }), next: () => null, problem: () => '' } });
@@ -191,7 +221,7 @@ beforeAll(async () => {
   app = Fastify({ logger: false, ajv: AJV_OPTIONS });
   registerHealth(app);
   registerErrorHandler(app);
-  await setupAuth(app);
+  await setupAuth(app, directory);
   for (const plugin of routes) await app.register(plugin);
   await app.ready();
 
@@ -227,7 +257,7 @@ describe('every answer fits docs/api/openapi.yaml (BK-14)', () => {
       const session = OWN_SESSION.has(path) ? await signIn() : token;
       const res = await app.inject({
         method: method.toUpperCase() as 'GET',
-        url: path + (SAMPLE[path] ?? ''),
+        url: path.replace('{name}', 'new.user').replace('{id}', path.endsWith('/approve') ? 'req-approve' : 'req-refuse') + (SAMPLE[path] ?? ''),
         headers: page(session),
         // A DELETE has no body, and the server refuses a JSON content type with an empty one.
         ...(method === 'get' || method === 'delete' ? {} : { payload: BODY[path] ?? {} }),

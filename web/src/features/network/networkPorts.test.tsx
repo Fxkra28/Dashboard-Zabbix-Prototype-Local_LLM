@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { BrowserRouter } from 'react-router-dom';
 import { api } from '../../api';
@@ -42,7 +42,11 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-const rowOf = async (name: string) => (await screen.findByText(name)).closest('tr') as HTMLElement;
+const rowOf = async (name: string) => {
+  // The port buttons are drawn once the account is known (FR-71): let that settle, so that the row found is the one that stays.
+  await act(async () => undefined);
+  return (await screen.findByText(name)).closest('tr') as HTMLElement;
+};
 
 describe('the port rows on Network', () => {
   it('open a port from a button named by the interface, and keep the row out of the tab order', async () => {
@@ -128,5 +132,34 @@ describe('a selected device card (UX-18)', () => {
     expect(rule('.device.sel')).not.toMatch(/outline/);
     // On a selected card the focus ring moves outside the selection ring.
     expect(rule('.device.sel:focus-visible')).toMatch(/outline-offset:\s*4px/);
+  });
+});
+
+// FR-71: the traffic of a port is a graph, and the Graphs page owns the graph route.
+describe('a person who has Network and not Graphs', () => {
+  const guest = (modules: string[]) => ({ authEnabled: true, user: { name: 'budi', role: 'guest' as const }, expiresIn: 3600, modules: modules as never, pages: {} });
+
+  it('sees the interface names as text, with a line that says where the graph is, and no panel of refusals', async () => {
+    resetAuthProbe();
+    vi.spyOn(api, 'me').mockResolvedValue(guest(['network']));
+    open('/network?hostid=1');
+    const row = await rowOf('Gi1/0/2');
+    expect(within(row).queryByRole('button')).toBeNull();
+    expect(row).not.toHaveClass('clickable');
+    expect(await screen.findByText(/graph of a port is on the Graphs page, which is not on your account/)).toBeInTheDocument();
+    await userEvent.setup().click(row);
+    expect(screen.queryByTestId('port-graph')).toBeNull();
+    expect(screen.queryByText(/Traffic:/)).toBeNull();
+  });
+
+  it('keeps the buttons, and says nothing of the Graphs page, once the account holds it', async () => {
+    resetAuthProbe();
+    vi.spyOn(api, 'me').mockResolvedValue(guest(['network', 'graphs']));
+    open('/network?hostid=1');
+    const row = await rowOf('Gi1/0/2');
+    expect(within(row).getByRole('button', { name: 'Gi1/0/2' })).toBeInTheDocument();
+    expect(screen.queryByText(/is not on your account/)).toBeNull();
+    await userEvent.setup().click(within(row).getByRole('button', { name: 'Gi1/0/2' }));
+    expect(await screen.findByTestId('port-graph')).toBeInTheDocument();
   });
 });

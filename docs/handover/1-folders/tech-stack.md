@@ -43,7 +43,7 @@ The portal has no database. Every figure is read from Zabbix when it is asked fo
 | Logo | Part | What it does here | Where |
 |---|---|---|---|
 | ![Claude logo](../images/stack/claude.png) | Claude | The hosted model behind Explain and the Assistant in the first copy, `hcml-portal`. | `server/` |
-| ![Ollama logo](../images/stack/ollama.png) | Ollama | The model on the same machine behind the same two features in the second copy, `hcml-portal-ollama`. Nothing leaves the machine. | `server/` |
+| ![Ollama logo](../images/stack/ollama.png) | Ollama | The model on the same machine behind the same two features in the second copy, `hcml-portal-ollama`. No question leaves the machine. | `server/` |
 
 ## Running it
 

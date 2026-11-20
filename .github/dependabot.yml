@@ -27,6 +27,10 @@ updates:
       npm-minor-and-patch:
         patterns: ['*']
         update-types: [minor, patch]
+    # echarts-for-react 3.1.0 added an exports map without ./esm/core, which the chart code imports: eleven suites fail to load. It stays at 3.0.6 until the import is changed (IN-107).
+    ignore:
+      - dependency-name: echarts-for-react
+        update-types: ['version-update:semver-minor']
 
   - package-ecosystem: docker
     directory: /server
@@ -35,5 +39,12 @@ updates:
 
   - package-ecosystem: docker
     directory: /web
+    schedule:
+      interval: weekly
+
+  # The model server's image is named in a compose file, docker-compose.vm.yml, which no Dockerfile holds (IN-104). It is a setting there (OLLAMA_IMAGE), so a pull request may not
+  # reach the line; the monthly round of docs/handover/4-working/run-it.md names it too.
+  - package-ecosystem: docker-compose
+    directory: /
     schedule:
       interval: weekly

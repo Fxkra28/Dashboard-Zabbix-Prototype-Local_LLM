@@ -5,18 +5,17 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * `GET /api/auth/me` returns the role each menu page needs, worked out from the guard's own rules,
- * and the sidebar filters with that instead of copying the role rules by hand. These tests keep the
- * menu and the server from drifting apart.
+ * `GET /api/auth/me` returns the pages the user has, each with the role it needs, worked out from the table of routes (security/modules.ts), and the sidebar filters with that
+ * instead of copying the rules by hand. These tests keep the menu and the server from drifting apart.
  */
 vi.hoisted(() => {
   process.env.AUTH_ENABLED = 'true';
   process.env.JWT_SECRET = 'test-only-secret-at-least-32-bytes-long';
-  process.env.PORTAL_USERS = 'ana:viewer-pass:viewer,olu:operator-pass:operator,adi:admin-pass:admin';
+  process.env.PORTAL_USERS = 'ana:viewer-pass:viewer,wen:wall-pass:wall,olu:operator-pass:operator,adi:admin-pass:admin';
 });
 
-const { setupAuth, requiredRole, tokenClaims } = await import('../security/auth.js');
-const { PAGE_API, pageRoles } = await import('../security/pageAccess.js');
+const { setupAuth, tokenClaims } = await import('../security/auth.js');
+const { MODULES, MODULE_IDS, moduleRole, ruleFor } = await import('../security/modules.js');
 const { registerErrorHandler } = await import('../http/errors.js');
 
 let app: FastifyInstance;
@@ -28,12 +27,11 @@ beforeAll(async () => {
 });
 afterAll(() => app.close());
 
-const me = async (role: string) => {
-  // The user for the role from PORTAL_USERS above, with this portal's issuer and audience: both are checked.
-  const sub = { viewer: 'ana', operator: 'olu', admin: 'adi' }[role];
-  const token = app.jwt.sign({ sub, role, ...tokenClaims('hcml_session') }, { expiresIn: '1h' });
+const me = async (name: string, role: string) => {
+  // A user of PORTAL_USERS above, with this portal's issuer and audience: both are checked.
+  const token = app.jwt.sign({ sub: name, role, ...tokenClaims('hcml_session') }, { expiresIn: '1h' });
   const res = await app.inject({ url: '/api/auth/me', headers: { host: '127.0.0.1:8081', cookie: `hcml_session=${token}` } });
-  return res.json() as { pages: Record<string, string> };
+  return res.json() as { pages: Record<string, string>; modules: string[]; user: { role: string } };
 };
 
 const SERVER_SRC = fileURLToPath(new URL('..', import.meta.url));
@@ -48,56 +46,77 @@ function sources(dir = SERVER_SRC): string[] {
   });
 }
 
-describe('GET /api/auth/me: pages', () => {
-  it('gives each page the role its API route needs, the same for every caller', async () => {
-    for (const role of ['viewer', 'operator', 'admin']) {
-      const { pages } = await me(role);
-      expect(pages).toEqual(pageRoles(requiredRole));
-      for (const [page, api] of Object.entries(PAGE_API)) expect(pages[page], `${page} via ${api}`).toBe(requiredRole(api));
-    }
+describe('GET /api/auth/me: pages and modules', () => {
+  it('gives an administrator every page, each with the role its route needs, the scorecard and the user pages for administrators', async () => {
+    const { pages, modules, user } = await me('adi', 'admin');
+    expect(user.role).toBe('admin');
+    expect(Object.keys(pages).sort()).toEqual(MODULES.map((m) => m.page).sort());
+    expect(modules.sort()).toEqual([...MODULE_IDS].sort());
+    for (const m of MODULES) expect(pages[m.page], m.page).toBe(moduleRole(m.id));
+    expect(pages['/reports/inventory']).toBe('admin');
+    expect(pages['/users']).toBe('admin');
+    expect(pages['/problems']).toBe('guest');
   });
 
-  it('marks the engineering pages wall, which a wall screen and an operator both pass, the scorecard admin, and the rest viewer', async () => {
-    const { pages } = await me('viewer');
-    expect(pages['/network']).toBe('wall');
-    expect(pages['/links']).toBe('wall');
-    expect(pages['/reports/inventory']).toBe('admin');
-    expect(pages['/problems']).toBe('viewer');
-    expect(pages['/sla']).toBe('viewer');
-    expect(pages['/assistant']).toBe('viewer');
+  it('gives a viewer of .env the pages a viewer had, a guest without the network pages, the scorecard and the user pages', async () => {
+    const { pages, user } = await me('ana', 'viewer');
+    expect(user.role).toBe('guest');
+    for (const page of ['/', '/problems', '/sites', '/hosts', '/devices', '/latest', '/graphs', '/maps', '/services', '/sla', '/reports/capacity', '/reports/noise', '/reports/top-triggers', '/assistant']) {
+      expect(pages[page], page).toBe('guest');
+    }
+    for (const page of ['/network', '/links', '/reports/inventory', '/users']) expect(pages, page).not.toHaveProperty(page);
+  });
+
+  it('gives a wall account of .env the network pages too, as a guest, and an operator of .env the same pages', async () => {
+    const wall = await me('wen', 'wall');
+    expect(wall.user.role).toBe('guest');
+    expect(wall.pages['/network']).toBe('guest');
+    expect(wall.pages['/links']).toBe('guest');
+    expect(wall.pages).not.toHaveProperty('/reports/inventory');
+    const operator = await me('olu', 'operator');
+    expect(Object.keys(operator.pages).sort()).toEqual(Object.keys(wall.pages).sort());
   });
 });
 
-describe('the sidebar and the server agree on the pages', () => {
+describe('the table of routes and the menu agree', () => {
   const sidebar = readFileSync(SIDEBAR, 'utf8');
   const menuPages = [...sidebar.matchAll(/\bto:\s*'([^']+)'/g)].map((m) => m[1]);
 
   it('reads the menu, so a change to the file format cannot make this pass on nothing', () => {
-    expect(menuPages.length).toBeGreaterThanOrEqual(17);
+    expect(menuPages.length).toBeGreaterThanOrEqual(18);
   });
 
-  it('has an entry in the server table for every page in the menu, and no entry for a page that is not', () => {
-    expect([...menuPages].sort()).toEqual(Object.keys(PAGE_API).sort());
+  it('has a module for every page in the menu, and no module for a page that is not', () => {
+    expect([...menuPages].sort()).toEqual(MODULES.map((m) => m.page).sort());
+  });
+
+  it('has the module itself among the owners of the route that fills its page', () => {
+    for (const m of MODULES) {
+      const rule = ruleFor(m.entry);
+      expect(rule, `${m.page} via ${m.entry} has no row`).toBeDefined();
+      expect(rule!.modules, `${m.id} does not own ${m.entry}`).toContain(m.id);
+    }
   });
 
   it('has no page for the Availability & response report, which the SLA page took over', () => {
-    expect(Object.keys(PAGE_API)).not.toContain('/reports/availability');
+    expect(MODULES.map((m) => m.page)).not.toContain('/reports/availability');
     expect(menuPages).not.toContain('/reports/availability');
-    // The SLA page now reads the availability and aging reports too, and a viewer may read both, as the old page's viewers did.
-    expect(PAGE_API['/sla']).toBe('/api/sli');
-    for (const url of ['/api/sli', '/api/reports/availability', '/api/reports/aging']) expect(requiredRole(url), url).toBe('viewer');
+    // The SLA page reads the availability and aging reports too, and a guest with the SLA page may read both.
+    expect(MODULES.find((m) => m.id === 'sla')!.entry).toBe('/api/sli');
+    for (const url of ['/api/sli', '/api/reports/availability', '/api/reports/aging']) expect(ruleFor(url)!.role, url).toBe('guest');
+    expect(ruleFor('/api/reports/availability')!.modules).toContain('sla');
   });
 
   it('keeps no role rules of its own', () => {
-    // A role written next to a menu item is a second copy of auth.ts ROUTE_RULES.
-    expect(sidebar).not.toMatch(/\brole:\s*'(viewer|operator|admin)'/);
+    // A role written next to a menu item is a second copy of the table of routes.
+    expect(sidebar).not.toMatch(/\brole:\s*'(guest|operator|admin)'/);
   });
 
   it('points every page at a route the server really registers', () => {
     const code = sources()
       .map((f) => readFileSync(f, 'utf8'))
       .join('\n');
-    for (const api of new Set(Object.values(PAGE_API))) {
+    for (const api of new Set(MODULES.map((m) => m.entry))) {
       const registered = new RegExp(`\\.(get|post)\\(\\s*['"\`]${api.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')}['"\`]`);
       expect(code, `${api} is not registered`).toMatch(registered);
     }

@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { login } from '../../api';
 import { resetAuthProbe } from '../../shared/hooks/useAuth';
 import BrandMark from '../../shared/components/BrandMark';
+import RequestAccount, { RequestAccountLink } from './RequestAccount';
 
 /**
  * Where to go after signing in: the page the session ended on (api/session.ts
@@ -30,6 +31,8 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // The form for an account replaces the sign-in card while it is open (FR-62).
+  const [asking, setAsking] = useState(false);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,6 +60,14 @@ export default function Login() {
       setBusy(false);
     }
   };
+
+  if (asking) {
+    return (
+      <main className="login-wrap">
+        <RequestAccount onClose={() => setAsking(false)} />
+      </main>
+    );
+  }
 
   return (
     <main className="login-wrap">
@@ -100,6 +111,7 @@ export default function Login() {
             {error}
           </div>
         )}
+        <RequestAccountLink open={asking} onOpen={() => setAsking(true)} />
       </form>
     </main>
   );

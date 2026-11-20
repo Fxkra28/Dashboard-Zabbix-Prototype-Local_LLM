@@ -4,7 +4,8 @@ import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { api, login } from '../api';
 import { resetAuthProbe } from '../shared/hooks/useAuth';
 import { ErrorState } from '../shared/components/states';
-import type { Me, Role } from '../types';
+import type { Me } from '../types';
+import { meFor, type Kind } from './accounts';
 
 /**
  * What operators read must not be written for the person who installed the portal. Setting
@@ -23,8 +24,8 @@ const { default: Assistant } = await import('../features/assistant/Assistant');
 const { default: Network } = await import('../features/network/Network');
 const { default: Overview } = await import('../features/dashboard/Overview');
 
-const as = (role: Role): Me => ({ authEnabled: true, user: { name: 'x', role }, expiresIn: 3600 });
-const signedInAs = (role: Role) => {
+const as = (kind: Kind): Me => meFor(kind);
+const signedInAs = (role: Kind) => {
   resetAuthProbe();
   vi.spyOn(api, 'me').mockResolvedValue(as(role));
 };
@@ -44,7 +45,7 @@ describe('error hints', () => {
   const zabbixDown = 'Could not reach Zabbix at the configured address.';
   const portalDown = 'Failed to fetch';
 
-  it.each<Role>(['viewer', 'operator'])('tell a %s who to ask, not which setting to change', async (role) => {
+  it.each<Kind>(['viewer', 'operator'])('tell a %s who to ask, not which setting to change', async (role) => {
     signedInAs(role);
     const { unmount } = render(<ErrorState message={zabbixDown} />);
     expect(await screen.findByText('Cannot reach the monitoring server. Tell the portal admin.')).toBeInTheDocument();
@@ -80,7 +81,7 @@ describe('error hints', () => {
 });
 
 describe('the Assistant page when no model is set up', () => {
-  it.each<Role>(['viewer', 'operator'])('tells a %s to ask, without the setting names', async (role) => {
+  it.each<Kind>(['viewer', 'operator'])('tells a %s to ask, without the setting names', async (role) => {
     signedInAs(role);
     render(<Assistant />);
     expect(await screen.findByText(/The assistant is not set up on this portal/)).toBeInTheDocument();

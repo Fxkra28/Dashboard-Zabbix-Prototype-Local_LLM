@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { api } from '../../api';
 import { noteMisfit, unreadableMessage, type Guard } from '../../guards';
+import { serverNow } from '../lib/clock';
+import { recheckAccess } from './useAuth';
 
 /** The BFF writes at least every 15 s, a `ping` when nothing else (stream.ts); three missed means the line is dead. */
 export const STREAM_SILENT_MS = 45_000;
@@ -99,7 +100,7 @@ export function useSSE<T>(url: string, event: string, silentMs?: number, guard?:
       source.addEventListener('ping', (e) => {
         watch(source);
         const age = haveList ? ageOf((e as MessageEvent).data) : null;
-        if (age !== null) setUpdatedAt((prev) => Math.max(prev ?? 0, Date.now() - age));
+        if (age !== null) setUpdatedAt((prev) => Math.max(prev ?? 0, serverNow() - age));
       });
 
       // Both a server-sent `event: error` frame and a dropped connection arrive
@@ -118,15 +119,13 @@ export function useSSE<T>(url: string, event: string, silentMs?: number, guard?:
           return;
         }
         // The page cannot see the httpOnly cookie, so it asks; with auth off
-        // the answer is always yes.
+        // the answer is always yes. It asks what the account may open, so that a page taken away
+        // from the person, which is also why the server ended the stream, is found out now.
         if (!checkingAuth) {
           checkingAuth = true;
-          void api
-            .me()
-            .catch(() => undefined)
-            .finally(() => {
-              checkingAuth = false;
-            });
+          void recheckAccess().finally(() => {
+            checkingAuth = false;
+          });
         }
         // CONNECTING means the browser is already retrying; CLOSED means it gave up.
         if (source.readyState === EventSource.CLOSED) {
@@ -152,7 +151,7 @@ export function useSSE<T>(url: string, event: string, silentMs?: number, guard?:
           watch(source);
           attempt = 0;
           haveList = true;
-          setUpdatedAt(Date.now());
+          setUpdatedAt(serverNow());
           setConnected(true);
           setError(null);
         } catch {

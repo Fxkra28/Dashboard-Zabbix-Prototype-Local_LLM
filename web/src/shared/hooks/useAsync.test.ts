@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
+import { HttpFailure } from '../../api';
 import { useAsync } from './useAsync';
 
 /** A promise the test settles by hand, remembering the signal its run was given. */
@@ -96,6 +97,39 @@ describe('useAsync', () => {
     expect(init.signal).toBeInstanceOf(AbortSignal);
     unmount();
     await waitFor(() => expect(init.signal?.aborted).toBe(true));
+  });
+});
+
+// FR-67: a refusal of the request itself is not a failure of the moment, so a page does not offer to ask again.
+describe('useAsync and a request the server refused (FR-67)', () => {
+  const failWith = (status: number) => renderHook(() => useAsync(() => Promise.reject(new HttpFailure(`HTTP ${status}`, status, true))));
+
+  it.each([400, 403, 404, 422])('is not retryable after a %i', async (status) => {
+    const { result } = failWith(status);
+    await waitFor(() => expect(result.current.error).toBe(`HTTP ${status}`));
+    expect(result.current.retryable).toBe(false);
+  });
+
+  it.each([408, 429, 499, 500, 502, 503, 504])('stays retryable after a %i, which is about the moment', async (status) => {
+    const { result } = failWith(status);
+    await waitFor(() => expect(result.current.error).toBe(`HTTP ${status}`));
+    expect(result.current.retryable).toBe(true);
+  });
+
+  it('stays retryable after a network failure, which is not an HTTP answer', async () => {
+    const { result } = renderHook(() => useAsync(() => Promise.reject(new TypeError('Failed to fetch'))));
+    await waitFor(() => expect(result.current.error).toBe('Failed to fetch'));
+    expect(result.current.retryable).toBe(true);
+  });
+
+  it('is retryable again once a later run succeeds', async () => {
+    let fail = true;
+    const { result } = renderHook(() => useAsync(() => (fail ? Promise.reject(new HttpFailure('HTTP 400', 400, true)) : Promise.resolve('ok'))));
+    await waitFor(() => expect(result.current.retryable).toBe(false));
+    fail = false;
+    await act(async () => result.current.reload());
+    await waitFor(() => expect(result.current.data).toBe('ok'));
+    expect(result.current.retryable).toBe(true);
   });
 });
 

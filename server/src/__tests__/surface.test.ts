@@ -2,7 +2,8 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { sep } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
-import { requiredRole } from '../security/auth.js';
+import { PUBLIC_ROUTES } from '../security/auth.js';
+import { ruleFor } from '../security/modules.js';
 import { toMs } from '../services/links.js';
 
 vi.mock('../clients/zabbix.js', async (importOriginal) => {
@@ -13,10 +14,10 @@ vi.mock('../clients/zabbix.js', async (importOriginal) => {
 /**
  * The API surface, pinned.
  *
- * Not a style check: the RBAC rules in auth.ts are matched against URL
- * strings, so a route added or renamed without a matching rule silently falls
- * back to `viewer`. This test makes any change to the surface visible in a
- * diff, next to the role each route resolves to.
+ * Not a style check: the table of routes in security/modules.ts is matched against URL
+ * strings, so a route added or renamed without a matching row would be closed to everyone
+ * but administrators. This test makes any change to the surface visible in a
+ * diff, and fails for a route that has no row.
  */
 async function registerAll() {
   // Named explicitly rather than picked out of each module's exports: several
@@ -46,6 +47,8 @@ async function registerAll() {
     import('../routes/sli.js').then((m) => m.sliRoutes),
     import('../routes/sliExport.js').then((m) => m.sliExportRoutes),
     import('../routes/sliMail.js').then((m) => m.sliMailRoutes),
+    import('../routes/users.js').then((m) => m.usersRoutes),
+    import('../routes/accountRequests.js').then((m) => m.accountRequestRoutes),
   ]);
   // The schedule route takes the scheduler it asks, as index.ts hands it; the surface does not call it.
   const { sliScheduleRoutes } = await import('../routes/sliSchedule.js');
@@ -70,7 +73,7 @@ async function registerAll() {
 /** The route modules `registerAll` mounts, by file name. */
 const MOUNTED = [
   'hosts', 'devices', 'problems', 'history', 'net', 'meters', 'topHosts', 'webMonitoring', 'stream', 'reports', 'maps', 'sla',
-  'explain', 'sites', 'services', 'inventory', 'links', 'analytics', 'actions', 'chat', 'sli', 'sliExport', 'sliMail', 'sliSchedule',
+  'explain', 'sites', 'services', 'inventory', 'links', 'analytics', 'actions', 'chat', 'sli', 'sliExport', 'sliMail', 'sliSchedule', 'users', 'accountRequests',
 ];
 
 describe('API surface', () => {
@@ -83,14 +86,15 @@ describe('API surface', () => {
     expect(files).toEqual([...MOUNTED].sort());
   });
 
-  it('registers exactly the 45 route-module endpoints', async () => {
+  it('registers exactly the 54 route-module endpoints', async () => {
     // Plus /api/health and /api/ready (health.ts), POST /api/auth/login, GET
-    // /api/auth/me, POST /api/auth/refresh and POST /api/auth/logout, which live in
-    // auth.ts, 51 endpoints in total.
+    // /api/auth/me, POST /api/auth/refresh, POST /api/auth/password and POST /api/auth/logout, which live in
+    // auth.ts, 61 endpoints in total.
     const { app, routes } = await registerAll();
     expect(routes.sort()).toMatchInlineSnapshot(`
       [
         "DELETE /api/sli/recipients",
+        "GET /api/auth/request",
         "GET /api/chat/warm",
         "GET /api/devices",
         "GET /api/explain/problem",
@@ -130,9 +134,17 @@ describe('API surface', () => {
         "GET /api/sli/schedule",
         "GET /api/stats",
         "GET /api/stream",
+        "GET /api/users",
+        "GET /api/users/requests",
+        "PATCH /api/users/:name",
+        "POST /api/auth/request",
         "POST /api/chat",
         "POST /api/problems/acknowledge",
         "POST /api/sli/email",
+        "POST /api/users",
+        "POST /api/users/:name/password",
+        "POST /api/users/requests/:id/approve",
+        "POST /api/users/requests/:id/refuse",
         "PUT /api/sli/recipients",
         "PUT /api/sli/schedule",
       ]
@@ -150,29 +162,53 @@ describe('API surface', () => {
     // pinned so none can drift in unnoticed.
     const { app, routes } = await registerAll();
     const notGet = routes.filter((r) => !r.startsWith('GET ')).sort();
+    // POST /api/auth/request is the one route anyone can reach that writes to disk (FR-62): a request for an account, capped and off unless a setting is on.
     expect(notGet).toEqual([
       'DELETE /api/sli/recipients',
+      'PATCH /api/users/:name',
+      'POST /api/auth/request',
       'POST /api/chat',
       'POST /api/problems/acknowledge',
       'POST /api/sli/email',
+      'POST /api/users',
+      'POST /api/users/:name/password',
+      'POST /api/users/requests/:id/approve',
+      'POST /api/users/requests/:id/refuse',
       'PUT /api/sli/recipients',
       'PUT /api/sli/schedule',
     ]);
     await app.close();
   });
 
-  it('gates every privileged route and leaves the rest at viewer', async () => {
+  it('gives every route a row in the table of routes, and gates the privileged ones', async () => {
     const { app, routes } = await registerAll();
-    const byRole = routes.reduce<Record<string, string[]>>((acc, r) => {
-      const url = r.split(' ')[1];
-      (acc[requiredRole(url)] ??= []).push(url);
+    // The public routes are judged before the table is read (security/auth.ts), so they have no row.
+    const urls = [...new Set(routes.map((r) => r.split(' ')[1]))].filter((url) => !PUBLIC_ROUTES.has(url));
+    // A route with no row is closed to everyone but administrators, so none of these may be one.
+    expect(urls.filter((url) => ruleFor(url) === undefined)).toEqual([]);
+    const byRole = urls.reduce<Record<string, string[]>>((acc, url) => {
+      (acc[ruleFor(url)!.role] ??= []).push(url);
       return acc;
     }, {});
 
-    // The routes that send a report out of the portal, and set who gets it and when, are the administrator's (IN-82).
-    expect([...new Set(byRole.admin)].sort()).toEqual(['/api/reports/inventory', '/api/sli/email', '/api/sli/recipients', '/api/sli/schedule']);
-    expect(byRole.wall?.sort()).toEqual(['/api/links', '/api/net/devices', '/api/net/interfaces', '/api/net/meters']);
+    // The routes that send a report out of the portal, and set who gets it and when, and the ones that manage users, are the administrator's (IN-82).
+    expect(byRole.admin.sort()).toEqual([
+      '/api/reports/inventory',
+      '/api/sli/email',
+      '/api/sli/recipients',
+      '/api/sli/schedule',
+      '/api/users',
+      '/api/users/:name',
+      '/api/users/:name/password',
+      '/api/users/requests',
+      '/api/users/requests/:id/approve',
+      '/api/users/requests/:id/refuse',
+    ]);
     expect(byRole.operator).toEqual(['/api/problems/acknowledge']);
+    // The network routes belong to the Network and Links modules, and to nothing else.
+    const owners = (url: string) => ruleFor(url)!.modules;
+    for (const url of ['/api/net/devices', '/api/net/interfaces', '/api/net/meters']) expect(owners(url), url).toEqual(['network']);
+    expect(owners('/api/links')).toEqual(['links']);
     await app.close();
   });
 

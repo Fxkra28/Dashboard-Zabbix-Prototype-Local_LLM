@@ -179,8 +179,8 @@ jobs:
         run: node tools/check/parity.check.mjs
 
   # A secret scan of what is pushed. It reads the commits of the push or
-  # the pull request, not the whole history, so a leak already in history (the token in
-  # cb97069) does not fail every run: revoking that token is the fix, and rewriting history is
+  # the pull request, not the whole history, so a leak already in history (an old token in
+  # the early commits) does not fail every run: revoking that token is the fix, and rewriting history is
   # the repository owner's call. A manual run has no commit range and would read everything, so it
   # skips this job. Comments on pull requests and the findings artifact are off: on a public
   # repository either would publish the very thing the scan found. A repository owned by an

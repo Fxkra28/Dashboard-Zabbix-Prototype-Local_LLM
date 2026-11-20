@@ -17,6 +17,11 @@ export class BadRequestError extends Error {
   readonly code = 'bad_request';
 }
 
+/** A request that is right but cannot be answered yet: the newest reading is older than the range it asks for. It passes with the next read. Mapped to 503 `data_not_read_yet` in errors.ts. */
+export class DataNotReadYetError extends Error {
+  readonly code = 'data_not_read_yet';
+}
+
 /** The monthly schedule cannot run on this portal. Mapped to 503 `schedule_unavailable`; the message says what to change. */
 export class ScheduleUnavailableError extends Error {
   readonly code = 'schedule_unavailable';

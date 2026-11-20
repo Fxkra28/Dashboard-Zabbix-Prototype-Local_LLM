@@ -17,14 +17,14 @@ const COMPLIANT = [
   '3.1 FG60F-CHARLIE-01',
   '12.1 FG-100F-POR-1',
   // Three-segment device names.
-  '1.2.1 IDX02CORESWITCH',
-  '9.1.1 WHP-MBH_IE3200_AS01',
+  '1.2.1 TANGO02CORESWITCH',
+  '9.1.1 TANGO-ROMEO_IE3200_AS01',
   '11.3.5 MOPU ARUBA 5',
   '12.1.1 POR-C9200-01',
   '4.3.3 FPSO ARUBA 3',
-  '6.3.2 STP ARUBA 2',
+  '6.3.2 KILO ARUBA 2',
   // Two-digit site numbers.
-  '11.1 FG-60F-MAC-MOPU-1',
+  '11.1 FG-60F-BRAVO-MOPU-1',
   '14.2.1 TWSB-SW-01',
   // HCML's own stray trailing dots: real, and deliberately tolerated.
   '1.2.2. IDX02ACCESSSWITCH',

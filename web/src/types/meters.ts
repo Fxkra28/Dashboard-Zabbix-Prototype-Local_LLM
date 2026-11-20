@@ -1,4 +1,4 @@
-/** Internet traffic meters (GET /api/net/meters, wall, operator and admin): the gauge widgets of one Zabbix dashboard. */
+/** Internet traffic meters (GET /api/net/meters, for an account that has the Network page): the gauge widgets of one Zabbix dashboard. */
 
 /** What a zone's colour in Zabbix means; `none` is a grey or no colour. */
 export type MeterLevel = 'none' | 'low' | 'ok' | 'warn' | 'critical';

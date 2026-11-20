@@ -6,6 +6,8 @@
 * Amended: 2026-09-25 by [ADR-0010](0010-session-cookie.md). The token moved from `localStorage` into
   an httpOnly cookie, and renewal is timed from the `expiresIn` the BFF sends. The bullets below
   describe the renewal as it works now.
+* Amended: 2026-11-17, by [ADR-0017](0017-keep-the-portals-users-in-a-file-of-their-own.md): a renewal looks the user up again in the directory (`.env` and the users file), so a user who is disabled or past their expiry cannot renew, and a changed role or list of pages applies at once
+* Amended: 2026-11-19 (SC-67): the way to end a person's access is Disable on the Users page for anyone the file of users holds, which is refused on their next request, and to take the entry out of `PORTAL_USERS` and recreate the container only for a user of `.env` alone. A person copied from `PORTAL_USERS` into the file stays until they are disabled, whatever `.env` says; the two bullets below that said otherwise are corrected in place
 * Amended: 2026-10-12 (tracker SC-14). Since 7 October every request looks its user up again, so a removed
   user loses access at once rather than at the next renewal. The 12 hours is now the default of `SESSION_HOURS`,
   a setting from 2 to 24, and raising `SESSION_EPOCH` ends every session without a new secret.
@@ -76,11 +78,13 @@ issuing two-minute tokens, before ADR-0010.
 ### Positive Consequences
 
 * A wall screen stays signed in for as long as its page is open.
-* Removing a user still works as it did: because each renewal looks the user up again, someone
-  taken out of `PORTAL_USERS` loses access within 12 hours of the BFF restart, when their current
-  token runs out (a live stream is ended by the BFF at that moment, SC-15). Without that lookup, renewal would have made a removed user's access endless. A
+* Ending a user still works as it did: because each renewal looks the user up again, someone
+  who is disabled on the Users page (ADR-0017) is refused on their next request, and someone of
+  `.env` alone who is taken out of `PORTAL_USERS` loses access when the container is recreated (at the time
+  of this decision, within 12 hours of the BFF restart, when their current token ran out; a live stream is
+  ended by the BFF at that moment, SC-15). Without that lookup, renewal would have made a removed user's access endless. A
   changed role reaches an open page at its next renewal instead of at the next sign-in. Audit item
-  SC-14 in `tracker.md` (no revocation) is only partly closed: one person's token still cannot be
+  SC-14 in the work log (no revocation) is only partly closed: one person's token still cannot be
   cancelled alone.
 * A closed tab renews nothing. A laptop that sleeps past the expiry wakes to the login page; one
   that wakes before it renews within a minute.
@@ -90,7 +94,7 @@ issuing two-minute tokens, before ADR-0010.
 * **A token that keeps being renewed never ends.** Before, a stolen token worked for at most 12
   hours. Now whoever holds one can renew it every 11 hours indefinitely. The owner accepted this
   trade-off: "an unattended, open portal also stays signed in" (DESIGN.md section 9).
-* The only ways to end such a session early are removing the user and restarting the BFF (at the
+* The only ways to end such a session early are disabling the user on the Users page (at once), or, for a user of `.env` alone, removing the entry and recreating the container (at the
   next renewal, within 12 hours, when this was decided, and at once since 7 October), or changing
   `JWT_SECRET` or raising `SESSION_EPOCH`, either of which signs everyone out at once.
 * Renewal makes a stolen token worth more. Until ADR-0010 the token sat in `localStorage`, readable

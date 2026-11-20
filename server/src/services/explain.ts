@@ -1,8 +1,12 @@
 import { cached } from '../core/cache.js';
 import { humanize, type OnUsage, type ProblemExplanation, type SlaExplanation } from '../clients/ai.js';
-import type { SliProfile } from '../core/config.js';
+import { config, type SliProfile } from '../core/config.js';
+
+/** The language a user chose for Explain; none is English, as it always was. */
+type Language = 'en' | 'id' | null;
 import { cachedProblems, SEVERITY_NAMES, withOpdata } from '../domain/queries.js';
 import type { SliGroup, SliHost, SliReport } from '../sli/engine.js';
+import { HOST_NAME_MAX, PROBLEM_NAME_MAX, promptText } from './assistantLines.js';
 import { snapshotClock } from './assistantSnapshot.js';
 import { slasView, sliView } from './sla.js';
 import { getMonthlySli } from './sli.js';
@@ -94,7 +98,7 @@ export interface NotFound {
  * which, and keyed by event alone it would go on saying "not acknowledged" for an hour after
  * someone had.
  */
-export async function explainProblem(eventid: string, onUsage: OnUsage, signal?: AbortSignal): Promise<ProblemExplanation | NotFound> {
+export async function explainProblem(eventid: string, onUsage: OnUsage, signal?: AbortSignal, language?: Language): Promise<ProblemExplanation | NotFound> {
   const listed = (await cachedProblems()).find((p) => p.eventid === eventid);
   if (!listed) return { notFound: 'No open problem with that eventid: it may have been resolved.' };
 
@@ -102,32 +106,39 @@ export async function explainProblem(eventid: string, onUsage: OnUsage, signal?:
   const resolved = Boolean(listed.r_eventid && listed.r_eventid !== '0');
   const state = `${acknowledged ? 'ack' : 'unack'}:${resolved ? 'resolved' : 'open'}`;
   // The model call stops when every reader of this explanation has left, so a closed tab does not keep the one slot (BK-67).
-  return cached(`explain:problem:${eventid}:${state}`, 3_600_000, async (f) => {
+  return cached(`explain:problem:${eventid}:${state}:${language ?? 'en'}`, 3_600_000, async (f) => {
     // The list leaves operational data out (queries.ts), so it is read here for this one problem.
     const [problem] = await withOpdata([listed]);
     return humanize(
       'problem',
       {
-        host: problem.host,
-        notification: problem.name,
-        opdata: problem.opdata || null,
+        // Text copied from Zabbix, made one plain line with the data fence cut out and a length of its own (SC-63), as the chat does.
+        host: promptText(problem.host, HOST_NAME_MAX),
+        notification: promptText(problem.name, PROBLEM_NAME_MAX),
+        opdata: problem.opdata ? promptText(problem.opdata, 100) : null,
         severity: SEVERITY_NAMES[problem.severity] ?? problem.severity,
         started: snapshotClock(new Date(Number(problem.clock) * 1000)),
         acknowledged,
         resolved,
-        tags: problem.tags ?? [],
+        // Tags are free text that may hold secrets: a model outside the machine gets none, as the Assistant gives it none (SC-72).
+        tags: config.ai.external ? [] : (problem.tags ?? []).slice(0, EXPLAIN_TAGS_MAX).map((t) => ({ tag: promptText(t.tag, 40), value: promptText(t.value, 80) })),
       },
       onUsage,
       f.signal,
+      language,
     );
   }, { signal });
 }
+
+/** The most tags of one problem that go to the model. */
+const EXPLAIN_TAGS_MAX = 20;
 
 /** The derived monthly SLA of one scope (overall | site:N | category:NAME), in plain language. */
 export async function explainDerivedSla(
   { month, profile, scope }: { month: string; profile: SliProfile; scope: string },
   onUsage: OnUsage,
   signal?: AbortSignal,
+  language?: Language,
 ): Promise<SlaAnswer | NotFound> {
   const report = await getMonthlySli(month, profile, signal);
   const picked = pickScope(report, scope);
@@ -149,9 +160,9 @@ export async function explainDerivedSla(
   // The engine already compared the figure with the target; the model only words it, so a slip near the target cannot show green.
   const meetingTarget = group.meeting === true;
   const figure = `${group.name} was at ${pct(group.sli, report.target)} % in ${month}, against a target of ${pct(report.target)} %.`;
-  return cached(`explain:sla:derived:${month}:${profile}:${scope}`, 300_000, async (f) => ({
+  return cached(`explain:sla:derived:${month}:${profile}:${scope}:${language ?? 'en'}`, 300_000, async (f) => ({
     ...agreeWithFigure(await humanize('sla', {
-      sla: `${group.name}: monthly availability derived from ICMP ping triggers`,
+      sla: `${promptText(group.name, HOST_NAME_MAX)}: monthly availability derived from ICMP ping triggers`,
       slo_target_percent: report.target,
       reporting_period: `calendar month ${month} (${report.timezone})${report.closed ? '' : ', still in progress'}`,
       method:
@@ -176,17 +187,17 @@ export async function explainDerivedSla(
         .filter((h) => h.sli !== null)
         .slice(0, 12)
         .map((h) => ({
-          device: h.name,
+          device: promptText(h.name, HOST_NAME_MAX),
           achieved_percent: h.sli,
           downtime_minutes: minutes(h.downtime),
           error_budget_minutes_left: minutes(h.errorBudget),
         })),
-    }, onUsage, f.signal), meetingTarget, figure),
+    }, onUsage, f.signal, language), meetingTarget, figure),
   }), { signal });
 }
 
 /** One Zabbix SLA's standing in the current period, in plain language. */
-export async function explainZabbixSla(slaid: string, serviceid: string | undefined, onUsage: OnUsage, signal?: AbortSignal): Promise<SlaAnswer | NotFound> {
+export async function explainZabbixSla(slaid: string, serviceid: string | undefined, onUsage: OnUsage, signal?: AbortSignal, language?: Language): Promise<SlaAnswer | NotFound> {
   const sla = (await slasView()).find((s) => s.slaid === slaid);
   if (!sla) return { notFound: 'No SLA with that slaid.' };
 
@@ -204,18 +215,18 @@ export async function explainZabbixSla(slaid: string, serviceid: string | undefi
   const meetingTarget = sli.every((s) => s.sli >= Number(sla.slo));
   const figure = `The lowest service is at ${pct(Math.min(...sli.map((s) => s.sli)), Number(sla.slo))} % against a target of ${pct(Number(sla.slo))} %.`;
   // Shorter TTL than problems: the SLI moves as the period progresses.
-  return cached(`explain:sla:${slaid}:${serviceid ?? 'all'}`, 300_000, async (f) => ({
+  return cached(`explain:sla:${slaid}:${serviceid ?? 'all'}:${language ?? 'en'}`, 300_000, async (f) => ({
     ...agreeWithFigure(await humanize('sla', {
-      sla: sla.name,
+      sla: promptText(sla.name, PROBLEM_NAME_MAX),
       slo_target_percent: Number(sla.slo),
       reporting_period: SLA_PERIODS[sla.period] ?? sla.period,
       services: sli.map((s) => ({
-        service: s.name,
+        service: promptText(s.name, PROBLEM_NAME_MAX),
         achieved_percent: s.sli,
         uptime_minutes: Math.round(s.uptime / 60),
         downtime_minutes: Math.round(s.downtime / 60),
         error_budget_minutes_left: Math.round(s.error_budget / 60),
       })),
-    }, onUsage, f.signal), meetingTarget, figure),
+    }, onUsage, f.signal, language), meetingTarget, figure),
   }), { signal });
 }

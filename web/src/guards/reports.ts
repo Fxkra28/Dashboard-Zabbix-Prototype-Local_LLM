@@ -40,6 +40,7 @@ const capacityRow = shape<CapacityRow>({
 
 const capacity = shape<CapacityReport>({
   days: num,
+  generatedAt: opt(num),
   metrics: listOf(shape<CapacityReport['metrics'][number]>({ key: text, label: text, rows: listOf(capacityRow) })),
 });
 

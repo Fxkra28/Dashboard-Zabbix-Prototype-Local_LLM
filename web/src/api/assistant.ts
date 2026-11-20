@@ -28,7 +28,8 @@ export async function chatStream(
   const res = await fetch('/bff/api/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...CSRF },
-    body: JSON.stringify({ messages }),
+    // What the page keeps for itself (language, a cut mark) stays on the page.
+    body: JSON.stringify({ messages: messages.map(({ role, content }) => ({ role, content })) }),
     signal,
   });
 

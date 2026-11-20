@@ -6,6 +6,8 @@
 * Amended: 2026-10-07, the claim that the portal has no state to back up (the `.env` files are state)
 * Amended: 2026-11-04, by [ADR-0015](0015-keep-a-small-state-file-for-recipients-and-the-schedule.md): the hosted copy keeps one small file of its own, on a volume
 * Amended: 2026-11-16, by [ADR-0016](0016-keep-the-web-check-figures-of-closed-months.md): both copies keep the web check figures of closed months in a second small file on that volume
+* Amended: 2026-11-17, by [ADR-0017](0017-keep-the-portals-users-in-a-file-of-their-own.md): both copies keep their users, with a role and a list of modules for each, in a third file on that volume
+* Amended: 2026-11-19: the last two negative consequences said that the `.env` files are the only state, quoted a comment that no longer exists and said that adding a user needs a restart; none holds since ADR-0017, and they are corrected below
 
 ## Context and Problem Statement
 
@@ -50,12 +52,15 @@ and its age. The problem list never may.
 
 ### Negative Consequences
 
-* **The `.env` files are the portal's only state, and nothing backs them up.** The users and their
-  roles (`PORTAL_USERS`), the Zabbix read and write tokens, the model key, `JWT_SECRET` and the SLA
-  settings live there. Git ignores them on purpose, so a lost laptop or a deleted file takes all of
-  it, and this ADR once said the portal had no state to back up, which was wrong (corrected
-  2026-10-07, tracker IN-24). The answer is a backup of those files, kept encrypted and off the
-  machine, and a versioned list of the non-secret settings:
+* **The `.env` files and the volume `portal-state` are the portal's state, and nothing else backs
+  them up.** As first written this said that the `.env` files were the only state; since ADR-0015 to
+  ADR-0017 the volume holds small files too. The first administrator, the Zabbix read and write tokens,
+  the model key, `JWT_SECRET` and the SLA settings live in `.env`; the other users, the saved
+  recipients, the schedule, the web check figures of closed months and, when the form for an account is on, its requests live on the volume. Git ignores
+  `.env` on purpose, so a lost laptop or a deleted file takes all of it, and `docker compose down -v`
+  deletes the volume. This ADR once said the portal had no state to back up, which was wrong (corrected
+  2026-10-07, tracker IN-24). The answer is one backup of the `.env` files and the volume together,
+  kept encrypted and off the machine, and a versioned list of the non-secret settings:
   [`operations/backup-and-restore.md`](../../operations/backup-and-restore.md) and
   `deploy/settings.example`.
 * Everything is lost on restart: including a closed month's SLA report that had been cached for
@@ -64,12 +69,12 @@ and its age. The problem list never may.
 * The 24-hour TTL is a ceiling, not a floor. Keys are parameterised: `graph:<ids>:<from>:<to>`,
   `net:interfaces:<hostid>` across 139 hosts, against a 500-entry cap, so ordinary browsing can evict a
   fresh SLA report within minutes. **Nobody has measured the real hit rate.**
-* Portal-side state has nowhere to live. the comment above the user list in `security/auth.ts` says it outright: *"Users come from env:
-  there is no database yet (that phase was deferred)."* Consequences: a password may still sit in
-  plain text in the `.env` file (an scrypt hash is accepted since 7 October 2026), adding a user needs
-  a restart, there are no saved views, and, because the single write uses one shared Zabbix token,
-  Zabbix structurally cannot record which portal operator acknowledged an event. No Zabbix table could
-  hold that.
+* Portal-side state had nowhere to live, until the small files of ADR-0015 to ADR-0017. The comment
+  that once said *"Users come from env: there is no database yet"* is gone: a person is added on the
+  Users page and kept in `users.json`, with a hash of the password, and no restart is needed. What
+  is still true: a password of `.env` may sit there in plain text (a hash is accepted), there are no
+  saved views, and, because the single write uses one shared Zabbix token, Zabbix structurally cannot
+  record which portal operator acknowledged an event. No Zabbix table could hold that.
 * Horizontal scaling would need Redis, because the cache and the SSE client set are per process.
 
 ## Pros and Cons of the Options

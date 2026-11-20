@@ -10,8 +10,8 @@ but every view before this one was a flat host list. Management reads sites, not
 ## Zabbix has no "site"
 
 There is no site object in the Zabbix API, so the BFF derives one. HCML's Goal 1 says site
-mapping *isn't standardised yet*, so [`services/sites.ts`](../../server/src/services/sites.ts) refuses to
-assume a convention and instead tries the most deliberate signal first:
+mapping *isn't standardised yet*, so [`domain/siteOf.ts`](../../server/src/domain/siteOf.ts) refuses to
+assume a convention and instead tries the most deliberate signal first. The Sites page, the Hosts, Devices and Network pages, the SLA reading and the Assistant all use it (BK-103):
 
 | # | Signal | Zabbix source | Why this order |
 |---|---|---|---|

@@ -17,8 +17,12 @@ Server-Sent Events are the simplest live-push transport (chosen over WebSocket i
 - Limits. At most `STREAM_MAX_CLIENTS` screens in all (default 100) and `STREAM_MAX_PER_USER` for
   one signed-in user (default 5; one client address when auth is off). A screen past either limit
   gets `429 too_many_streams` with `Retry-After: 30`. The browser cannot read that body, so it falls
-  back to the 60 s poll and retries. A stream is also ended when the token it was opened with
-  expires, so the browser reconnects with the renewed cookie, and when the BFF shuts down.
+  back to the 60 s poll and retries.
+- How a stream ends. The stream checks the session once, when it opens, so it is closed from the server when something that would refuse the person now has happened (SC-57), and the
+  browser reconnects as the account allows at that moment, or is sent to sign in. The causes are: the token it was opened with expires, or the person's account does (an expiry set on the Users page),
+  whichever is first; the person signs out; an administrator disables the person, gives them an expiry, changes their role or their pages, resets their password or asks for a new one, or
+  the person changes their own password; and the BFF shuts down. Before this a person who was disabled, or whose pages were taken away, kept a screen that already had its stream until the
+  twelve hours of its token ran out.
 - Browser: [`useSSE`](../../web/src/shared/hooks/useSSE.ts) wraps `EventSource`, for two pages. The Dashboard shows the stream's list. The Problems page keeps its 30 s poll and uses the stream as a signal: when a frame says a problem opened, resolved, was acknowledged, went into maintenance or was re-graded (`features/problems/liveChange.ts`), it reads the full list at once, because the frames leave out the tags and the live value it also shows. A Problems tab holds a stream slot, which `STREAM_MAX_PER_USER` counts. `EventSource` can't set headers,
   but it sends the session cookie on a same-origin request like any other, so the stream is
   authenticated by cookie. No route accepts a token in the query string.

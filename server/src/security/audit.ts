@@ -56,16 +56,24 @@ export function aiUse(req: FastifyRequest, kind: AiKind) {
   };
 }
 
+/** What period a report was for: a month, or two times and the hours of the day that counted (services/sliAsk.ts askForLog). */
+export interface PeriodLog {
+  month?: string;
+  from?: number;
+  to?: number;
+  dayHours?: string;
+  days?: string;
+}
+
 /** One report taken: who, what and how large. */
-export function auditDownload(req: FastifyRequest, report: { report: string; month: string; format: string; bytes: number }): void {
+export function auditDownload(req: FastifyRequest, report: PeriodLog & { report: string; format: string; bytes: number }): void {
   req.log.info({ event: 'report_download', user: actor(req), ip: req.ip, ...report }, 'report download');
 }
 
-export interface EmailAudit {
+export interface EmailAudit extends PeriodLog {
   /** By hand, from the SLA page, or by the monthly schedule. */
   trigger: 'manual' | 'schedule';
   report: string;
-  month: string;
   formats: string[];
   bytes: number;
   recipients: number;
@@ -99,4 +107,17 @@ export function logSkipped(log: LineLog, user: string, report: Omit<EmailAudit, 
 
 export function auditEmail(req: FastifyRequest, report: EmailAudit): void {
   logEmail(req.log, actor(req), report, req.ip);
+}
+
+/** A name for a log line: control characters and brackets dropped, and cut short, like the actor's. */
+const logged = (name: string): string => name.replace(/[\p{Cc}\p{Cf}[\]]/gu, '').trim().slice(0, 64);
+
+/** One step of a request for an account (FR-62): received from an address, kept or dropped as a copy, then approved or refused by an administrator. Never the reason, which is free text. */
+export function auditRequest(req: FastifyRequest, action: 'received' | 'ignored' | 'approved' | 'refused', target: string): void {
+  req.log.info({ event: 'account_request', user: actor(req), ip: req.ip, action, target: logged(target) }, `account request ${action}`);
+}
+
+/** One change to a user: who did what to whom, from which address. Never a password or a hash; `detail` holds the role and the modules, which are no secret. */
+export function auditUser(req: FastifyRequest, action: string, target: string, detail: Record<string, unknown> = {}): void {
+  req.log.info({ event: 'user_admin', user: actor(req), ip: req.ip, action, target: logged(target), ...detail }, `user ${action}`);
 }

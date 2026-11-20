@@ -29,7 +29,7 @@ info:
     length (2 to 24), presented one of two ways.
     Every guarded path takes either:
 
-    - `sessionCookie`, the browser's way. `POST /api/auth/login` and `POST /api/auth/refresh` set it
+    - `sessionCookie`, the browser's way. `POST /api/auth/login`, `POST /api/auth/refresh` and `POST /api/auth/password` set it
       with `Set-Cookie`: `HttpOnly`, `SameSite=Strict`, `Path=/`, a `Max-Age` equal to the session length
       (43200 at the default 12 hours), and `Secure` when
       the request arrived over HTTPS. No script on the page can read it, and no response body carries
@@ -43,34 +43,39 @@ info:
     from their logs, for pages loaded before the cookie change.
 
     **Forgery check.** A `POST`, `PUT`, `PATCH` or `DELETE` on `/api/*` that authenticates with the
-    cookie, and every call to `POST /api/auth/login` and `POST /api/auth/logout`, must carry the
+    cookie, and every call to `POST /api/auth/login`, `POST /api/auth/logout` and `POST /api/auth/request`, must carry the
     header `X-HCML-CSRF: 1`. When the browser sends an `Origin`, it must name the request's own host
     and port. Anything else gets `403 csrf` (`CsrfRefused`), before the guard runs and with auth on
-    or off. A request with a Bearer header is not checked, except on sign-in and sign-out, since a browser
+    or off. A request with a Bearer header is not checked, except on sign-in, sign-out and the request for an account, since a browser
     never adds one by itself.
     `csrfRefusal` in `security/auth.ts`; ADR-0010.
 
     The guard judges the route the router matched, not the URL text, so a percent-encoded path such
     as `/%61pi/hosts` is guarded like `/api/hosts`. Only `/api/health`, `/api/auth/login`,
-    `/api/auth/me` and `/api/auth/logout` are outside it, matched exactly.
+    `/api/auth/me`, `/api/auth/logout` and `/api/auth/request` are outside it, matched exactly. The last is the one public
+    route that writes to disk, and it is off unless `ACCOUNT_REQUESTS=true`.
 
     When `AUTH_ENABLED=false` no route is guarded at all and every caller is treated as `admin`. The
-    forgery check still applies to sign-in and sign-out.
+    forgery check still applies to sign-in, sign-out and the request for an account.
 
     ### Roles
 
-    OpenAPI cannot express a role requirement per path, so each operation states its role in the
-    description. From `ROUTE_RULES` (`server/src/security/auth.ts`), first match wins, unmatched is
-    `viewer`:
+    OpenAPI cannot express a role or a module per path, so each operation states what it needs in its
+    description. Who may use a route is two things (ADR-0017): a **role**, which says what the user may do, and
+    the **modules** the user holds, which say what they may see. The table of routes in
+    `server/src/security/modules.ts` gives each route the modules that own it (holding any one is enough) and the role it
+    needs; first match wins, and a route with no row is closed to everyone but administrators. An administrator holds every module.
 
-    | Role | Paths |
+    | Role | What it adds |
     |---|---|
-    | `admin` | `/api/reports/inventory`, `/api/sli/email`, `/api/sli/schedule`, `/api/sli/recipients` |
-    | `operator` | `POST /api/problems/acknowledge` |
-    | `wall` | `/api/links`, `/api/net/*`: the network pages, read only, for a NOC screen's account |
-    | `viewer` | everything else |
+    | `guest` | Reads. |
+    | `operator` | `POST /api/problems/acknowledge`. |
+    | `admin` | `/api/users*`, `/api/reports/inventory`, `/api/sli/email`, `/api/sli/schedule`, `/api/sli/recipients`. |
 
-    The ranks run viewer, wall, operator, admin, and a role passes every rule below its own.
+    The ranks run guest, operator, admin, and a role passes every rule below its own. The pages of the menu are the modules: the Dashboard, Problems, Sites, Hosts, Devices,
+    Latest data, Graphs, Maps, Network, Links & WAN health, Services, SLA, Capacity trends, Alert noise, Top 100 triggers, Inventory & ownership scorecard, the Assistant,
+    and Users and access. `/api/net/*` belongs to the Network module and `/api/links` to Links & WAN health; the routes that two pages share belong to both. The names `viewer` and `wall`
+    that `.env` and older sessions carry still read: as a guest, a `wall` account with the Network and Links pages as well.
 
     ### Errors
 
@@ -146,9 +151,9 @@ info:
 
     A slow read that is still waiting for its place when the connection of the person who asked closes
     is never started, and the answer that nobody reads is **499 `cancelled`** (`Cancelled` in
-    `core/gate.ts`). Only a script that gives up can see it. It is documented on the seven routes that can
-    drop a read: `/api/sli`, `/api/reports/availability`, `/api/reports/noise`, `/api/reports/capacity`,
-    `/api/reports/top-triggers` and the two Explain routes, where it also ends a model call that is running. A read that has
+    `core/gate.ts`). Only a script that gives up can see it. It is documented on the nine routes that can
+    drop a read: `/api/sli`, `/api/sli/export`, `/api/reports/availability`, `/api/reports/noise`, `/api/reports/capacity`,
+    `/api/reports/top-triggers`, `/api/services/derived` and the two Explain routes, where it also ends a model call that is running. A read that has
     already started finishes and is kept for the next reader, except a model call that nobody waits for any more.
   contact:
     name: HCML Monitoring Portal
@@ -162,7 +167,7 @@ servers:
 
 tags:
   - name: Meta
-    description: Health, readiness and authentication. Only `/api/ready` is guarded; the others are registered before the guard.
+    description: Health, readiness and authentication. `/api/ready`, `/api/auth/refresh` and `/api/auth/password` are guarded; `/api/health`, `/api/auth/login`, `/api/auth/me`, `/api/auth/logout` and `/api/auth/request` are public.
   - name: Hosts
     description: Hosts, groups, items and latest values. `server/src/routes/hosts.ts`
   - name: Problems
@@ -170,7 +175,7 @@ tags:
   - name: History
     description: The downsampled graph series, from raw history or hourly trends.
   - name: Network
-    description: Devices, interfaces and ports. **wall.** `server/src/routes/net.ts`
+    description: Devices, interfaces and ports. **Network page.** `server/src/routes/net.ts`
   - name: Reports
     description: Top triggers, stats, availability, noise, aging, capacity, inventory.
   - name: Sites
@@ -183,6 +188,8 @@ tags:
     description: Zabbix network maps.
   - name: AI
     description: The plain-language layer. On demand only, never called on page load.
+  - name: Users
+    description: The portal's users, their roles and their modules (ADR-0017). **admin.** `server/src/routes/users.ts`
 
 security:
   - sessionCookie: []
@@ -238,7 +245,7 @@ paths:
                     type: boolean
                     description: |
                       Whether a question leaves this machine's own network: true when the hosted Anthropic backend is configured, or when
-                      the model is on a host that is not local (`AI_BASE_URL` names a public address). The Assistant and Explain then say so
+                      the model is on a host that is not local (`AI_BASE_URL` names a public address) or has a name that Ollama sends to ollama.com (it ends in `cloud` after a colon, an underscore or a hyphen, as `kimi-k2:cloud` does). The Assistant and Explain then say so
                       next to every answer; a model on this machine, on a private address or on a name that only resolves inside a
                       network shows nothing.
                   writeBack:
@@ -292,7 +299,7 @@ paths:
       summary: Whether the portal can read Zabbix, as a status code
       description: |
         For a monitor that holds a session cookie or a Bearer token, so it is guarded like any route and
-        needs `viewer`. `GET /api/health` always answers 200 and says inside `ready` whether Zabbix does;
+        needs `guest`. `GET /api/health` always answers 200 and says inside `ready` whether Zabbix does;
         this answers `503` while the portal cannot read Zabbix, so a status check is enough.
 
         It reads the same cached check as `/api/health`: one `host.get` with the read-only token, given up
@@ -325,13 +332,15 @@ paths:
         deliberately, since it is otherwise an unthrottled password oracle: the global limit, and 10
         attempts a minute per account and address of its own (`LOGIN_ATTEMPTS_PER_MINUTE` in `auth.ts`).
         After 10 failures in a row for one account from one address, sign-in is locked for a minute,
-        doubling with each further failure up to 5 minutes; a success clears it. Both answer 429 with
+        doubling with each further failure up to 5 minutes; a success clears it. An address that fails 30 times within 15 minutes, across at least 10 different names, is locked the same way
+        whatever the names: a password tried once against many accounts never trips the lock of one (SC-61; `SPRAY_FAILURES` and `SPRAY_NAMES` in `auth.ts`). All answer 429 with
         `Retry-After`.
 
-        Credentials come from `PORTAL_USERS` (comma-separated `name:password:role` triples) or from
-        `PORTAL_USER`/`PORTAL_PASS` as a single-admin shorthand. A password is plain text or an scrypt
-        hash (`scrypt.N.r.p.salt.hash`, made by `server/scripts/hash-password.ts`), and either is compared
-        in constant time. A plain one is still plain text in the environment.
+        Credentials come from the file of users (`users.json` in the data folder, managed on the Users page) and from `.env`: `PORTAL_USERS` (comma-separated
+        `name:password:role` triples) or `PORTAL_USER`/`PORTAL_PASS` as a single-admin shorthand, whose first administrator always signs in from `.env` (ADR-0017). A password is plain text or an Argon2id
+        hash (`argon2id.m.t.p.salt.hash`, or an older `scrypt.N.r.p.salt.hash`, made by `server/scripts/hash-password.ts`), and either is compared
+        in constant time. A plain one is still plain text in the environment. A disabled user, and one past their expiry, is refused with the same 401 as a wrong password. Where hashes are in use, a name nobody has costs as long to refuse as a wrong password for a name
+        that exists, so the time of the answer does not say which names are real (SC-60).
 
         The token goes into the session cookie, never the body. Needs `X-HCML-CSRF: 1`, with or
         without a cookie, and with auth off too: a refused sign-in gets 403 and sets no cookie.
@@ -378,13 +387,17 @@ paths:
       summary: Who the current session says you are, and how long it has left
       description: |
         Self-verifying: registered before the guard and calls `jwtVerify()` itself, on the cookie or
-        a Bearer header. Drives the sidebar's role filter, which is cosmetic: the BFF enforces with a
-        403 regardless. `pages` gives the role each menu page needs, worked out from the guard's own
-        rules (`pageAccess.ts`), so the sidebar keeps no second copy of them. `expiresIn` is relative,
-        so the page times its renewal without trusting its own clock.
+        a Bearer header. Drives the sidebar's filter, which is cosmetic: the BFF enforces with a
+        403 regardless. `pages` gives the pages this user has, each with the role it needs, worked out from the table of routes
+        (`modules.ts`), so the sidebar keeps no second copy of it, and a page the user lacks is not in it. `modules` is the list of the modules the user holds.
+        The role and the modules are those of now, not those the session began with. `expiresIn` is relative,
+        so the page times its renewal without trusting its own clock. `mustChange` is present, and true, when the password is a temporary one: nothing else can be read until it is changed.
+        `user.source` says where the account is kept, `file` for the file of users and `env` for `.env`: one of `.env` cannot change its password on the Account page (FR-73).
+        The web app asks again when its tab is shown or gains focus (at most once a minute), after each renewal, and every ten minutes while the page stays in view, so a page an
+        administrator gives or takes away reaches a screen that is already open (FR-70).
 
         When `AUTH_ENABLED=false` this returns `{ authEnabled: false, user: { name: "anonymous",
-        role: "admin" }, expiresIn: null, pages }`. `user` is **never** null, despite `web/src/types.ts`
+        role: "admin" }, expiresIn: null, pages, modules }`, with every module but the Users page. `user` is **never** null, despite `web/src/types/auth.ts`
         allowing it.
       operationId: getMe
       tags: [Meta]
@@ -395,7 +408,7 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [authEnabled, user, expiresIn, pages]
+                required: [authEnabled, user, expiresIn, pages, modules]
                 properties:
                   authEnabled: { type: boolean }
                   user: { $ref: '#/components/schemas/User' }
@@ -405,8 +418,13 @@ paths:
                     description: Seconds until the session ends. Null with auth off.
                   pages:
                     type: object
-                    description: The minimum role for each menu page, by path, such as `/network`.
-                    additionalProperties: { type: string, enum: [viewer, wall, operator, admin] }
+                    description: The pages this user has, by path such as `/network`, each with the minimum role it needs. A page the user lacks is not here.
+                    additionalProperties: { type: string, enum: [guest, operator, admin] }
+                  modules:
+                    type: array
+                    description: The modules the user holds, by id.
+                    items: { $ref: '#/components/schemas/ModuleId' }
+                  mustChange: { type: boolean, description: 'True when the password is a temporary one that must be changed first.' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/RateLimited' }
 
@@ -422,7 +440,7 @@ paths:
         Behind the guard, so it takes the cookie or a Bearer header; a `?token=` is refused like on
         every route. A cookie renewal is a cookie POST and needs `X-HCML-CSRF: 1`; a Bearer renewal
         does not. The user is looked up again in the current user list: one removed from
-        `PORTAL_USERS`, or a name listed there twice, gets 401 and no cookie, and the new token carries
+        `PORTAL_USERS`, a name listed there twice, a user disabled on the Users page and one past their expiry get 401 and no cookie, and the new token carries
         the role configured now, not the one in the old token. It takes no body: none, or a JSON
         object that is ignored. Any other JSON body is a 400. Registered only when
         `AUTH_ENABLED=true`; otherwise 404.
@@ -449,6 +467,50 @@ paths:
         '403': { $ref: '#/components/responses/CsrfRefused' }
         '429': { $ref: '#/components/responses/RateLimited' }
 
+  /api/auth/password:
+    post:
+      summary: Change your own password
+      description: |
+        For a user of the file of users (ADR-0017); a user kept in `.env`, the first administrator, is refused with 409, since their password is changed there, and the Account page shows
+        a sentence instead of the form for them (`user.source` of `GET /api/auth/me`, FR-73). Asks for the current password, which is
+        tried at most 10 times a minute for each user, and for a new one that is at least 8 and at most 256 characters, not on the lists of passwords that anyone can guess (the common ones, one of their base words with digits or signs after it, or one character repeated), and not holding `hcml` or the sign-in name, and that is not the current one. A change ends every older
+        session of the person, renews this one (the new session cookie is set, as for `POST /api/auth/refresh`), and clears `mustChange`. It is the one call, with sign-out, renewal and
+        `GET /api/auth/me`, that a user with a temporary password may make. It needs `X-HCML-CSRF: 1` with a cookie. The log gets one line, never the password.
+      operationId: changePassword
+      tags: [Meta]
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current, password]
+              properties:
+                current: { type: string }
+                password: { type: string }
+      responses:
+        '200':
+          description: Changed. The session cookie is set again with a fresh token.
+          headers:
+            Set-Cookie: { $ref: '#/components/headers/SetSessionCookie' }
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - { $ref: '#/components/schemas/Session' }
+                  - type: object
+                    required: [ok]
+                    properties:
+                      ok: { type: boolean }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/CsrfRefused' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
   /api/auth/logout:
     post:
       summary: Sign out by clearing the session cookie
@@ -458,7 +520,7 @@ paths:
         with. It also ends the session on the server: every token of that sign-in, the ones a renewal gave
         too, is refused from then on (a list in memory, which a restart forgets), and the live streams of
         the session are closed at once. A copy of a token that someone keeps renewing after the owner only
-        closed the tab, without signing out, works until the user is taken out of `PORTAL_USERS`, a new
+        closed the tab, without signing out, works until the user is disabled on the Users page (or, for a user of `.env` alone, taken out of `PORTAL_USERS` and the container recreated), a new
         `JWT_SECRET` is set, or a higher `SESSION_EPOCH` is set and the server restarted (SC-14); there is no
         absolute age, because a wall screen must stay signed in. A live stream also ends when its token expires, and the browser reconnects (SC-15). Needs `X-HCML-CSRF: 1` like any POST that touches the cookie. It takes no body: none, or a JSON object that is ignored. Any other JSON body is a 400.
       operationId: logout
@@ -491,12 +553,73 @@ paths:
         '400': { $ref: '#/components/responses/BadRequest' }
         '403': { $ref: '#/components/responses/CsrfRefused' }
 
+  /api/auth/request:
+    get:
+      summary: Whether the sign-in page offers a request for an account, and for which pages
+      description: |
+        Public, like sign-in. Answers `{ "enabled": false }` unless `ACCOUNT_REQUESTS=true`, sign-in is on, and the portal has a data folder to keep the requests and the users in (FR-62).
+        When it is on it lists the pages a person may ask for, those a guest can hold (not the Users page or the scorecard), and the longest name and reason it keeps.
+      operationId: getAccountRequestInfo
+      tags: [Meta]
+      security: []
+      responses:
+        '200':
+          description: Whether requests are accepted.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountRequestInfo' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+    post:
+      summary: Leave a request for an account
+      description: |
+        Public, and the one public route that writes to disk, so it is held tight (FR-62). A 404 while the setting is off. It is checked like sign-in is: it needs `X-HCML-CSRF: 1` and an `Origin`
+        of the portal's own, and a body over 8 KB is a 413. The body is a name, the pages wanted, chosen from the list `GET /api/auth/request` gives (at most 20), and a reason. The name is cut at
+        80 characters and the reason at 500; control characters are dropped. What is wrong with a body is a 400 in words: a name under 2 characters, no page, a page that is not on the list, a reason
+        under 3 characters, or a field the portal does not know. One address may leave `ACCOUNT_REQUESTS_PER_ADDRESS` requests a day (3 by default; 429 with `Retry-After`; the addresses of one IPv6 network, a /64, count as one, as they do for sign-in), at most
+        `ACCOUNT_REQUESTS_MAX_PENDING` wait at once (50 by default; 503 `requests_full`), and a request nobody answers is dropped after 30 days. A request whose name is already waiting, whatever the case,
+        is dropped, and the answer is the same 202 as for one that was kept, so the form says nothing about who is known. When the list is full it is the same 503 for a name that is waiting and for one that is not, for the same reason.
+        The log gets the step and the name, never the reason.
+      operationId: leaveAccountRequest
+      tags: [Meta]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountRequestBody' }
+      responses:
+        '202':
+          description: Kept, or a copy of one that was waiting. Nothing says which.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean, const: true }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/CsrfRefused' }
+        '404':
+          description: '`not_found`, this portal does not accept requests for an account.'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429':
+          description: '`rate_limited`, this address has left as many requests as it may for one day, or the 300 requests a minute of the client address. `Retry-After` says how long to wait.'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '500': { $ref: '#/components/responses/RequestsError' }
+        '503':
+          description: '`requests_full`, the list of requests is full; an administrator has to clear it.'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+
   /api/hosts:
     get:
-      summary: Every monitored host, with its resolved site
+      summary: Every host, disabled ones included, with its resolved site
       description: |
-        Cached 30 s. `site` is derived by `naming.ts` from four ranked signals: tag, host name,
-        inventory, group, because no HCML host carries a site tag. It is null when none match.
+        Cached 30 s. `site` is resolved by `siteRefOf` in `sites.ts` from four ranked signals: tag, host name,
+        inventory, group, because no HCML host carries a site tag. It is null when none of them names one of HCML's sites. The
+        Sites page and the scorecard use the same rule, and so do `/api/hosts/overview`, `/api/devices` and `/api/net/devices`, so a host is under one site on every page (BK-94).
       operationId: getHosts
       tags: [Hosts]
       responses:
@@ -525,7 +648,7 @@ paths:
       description: |
         Cached 15 s. `state` is the portal's own reachability judgement (`reachability.ts`), ping
         first, interface flags only as a fallback, on 17 Sep, 16 of 23 hosts Zabbix called
-        unavailable answered ping. `reason` records which signal decided it.
+        unavailable answered ping. `reason` records which signal decided it. `site` is the same as on `/api/hosts`.
       operationId: getHostsOverview
       tags: [Hosts]
       responses:
@@ -539,11 +662,15 @@ paths:
                   allOf:
                     - $ref: '#/components/schemas/ZHost'
                     - type: object
-                      required: [state, reason, problems]
+                      required: [state, reason, problems, site]
                       properties:
                         state: { $ref: '#/components/schemas/HostState' }
                         reason: { $ref: '#/components/schemas/StateReason' }
                         problems: { $ref: '#/components/schemas/ProblemCounts' }
+                        site:
+                          oneOf:
+                            - $ref: '#/components/schemas/SiteRef'
+                            - type: 'null'
         '401': { $ref: '#/components/responses/Unauthorized' }
         '502': { $ref: '#/components/responses/ZabbixError' }
         '503': { $ref: '#/components/responses/ZabbixUnavailable' }
@@ -601,8 +728,8 @@ paths:
       description: |
         Cached 30 s. `hostid` is required unless `itemids` is given.
 
-        `search` is passed to Zabbix with `startSearch: true` deliberately: without it Zabbix runs
-        `LIKE '%…%'` and scans all 51,845 items at about 105 ms per call.
+        `search` is a substring match on the item's key (`search: { key_ }`, with no `startSearch`), so it finds text in the middle of a key. A prefix match would be quicker for Zabbix,
+        but the picker would stop finding mid-key text; the words here once said the prefix match was in use, and it never was.
 
         The items carry no `lastvalue` or `lastclock`. Zabbix looks each of them up on its own, from 30 ms to half a second an
         item on HCML's, which made a host of 609 items take 20 to 32 s, and the item picker never shows them. `/api/latest` has them.
@@ -623,7 +750,7 @@ paths:
           schema: { type: string }
         - name: search
           in: query
-          description: Prefix match on `key_`.
+          description: Substring match on `key_`.
           schema: { type: string }
         - name: graphable
           in: query
@@ -753,8 +880,9 @@ paths:
         flushed after every frame and keep-alive, with `Content-Encoding: gzip` and `Vary: Accept-Encoding`;
         on HCML's list the first frame goes from 166 kB to 19 kB.
 
-        The stream ends when the session token it was opened with expires, so the browser reconnects
-        with the renewed cookie or is sent to sign in, and when the BFF shuts down on `SIGTERM`.
+        The stream ends, and the browser reconnects with the renewed cookie or is sent to sign in, when: the session token it was opened with expires, or the person's account does, whichever is
+        first (SC-57); the person signs out; an administrator changes the person (disables them, sets an expiry, changes the role or the pages, resets the password or asks for a new one) or the
+        person changes their own password, so that the screen comes back as the account allows now (SC-57); and when the BFF shuts down on `SIGTERM`.
 
         No `id:` field is emitted, so `Last-Event-ID` resumption is not supported. Browsers cannot
         set headers on `EventSource`, but it sends the session cookie on a same-origin request like
@@ -764,7 +892,7 @@ paths:
       tags: [Problems]
       responses:
         '200':
-          description: The stream opens and stays open until its token expires.
+          description: The stream opens and stays open until its token or the account expires, or the account changes.
           content:
             text/event-stream:
               schema: { type: string }
@@ -829,7 +957,7 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403':
-          description: '`forbidden`, a viewer asked for a network interface item (key starting `net.if`). Wall screens, operators and admins may read them.'
+          description: '`forbidden`, an account without the Network page asked for a network interface item (key starting `net.if`). Accounts that have the Network page, and administrators, may read them.'
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
         '502': { $ref: '#/components/responses/ZabbixError' }
         '503': { $ref: '#/components/responses/ZabbixUnavailable' }
@@ -837,7 +965,7 @@ paths:
   /api/net/devices:
     get:
       summary: Network devices with ICMP state
-      description: '**wall.** Cached 30 s. Narrowed to `NET_GROUP_IDS` when that is configured.'
+      description: '**Network page.** Cached 30 s. Narrowed to `NET_GROUP_IDS` when that is configured.'
       operationId: getNetDevices
       tags: [Network]
       responses:
@@ -855,7 +983,7 @@ paths:
     get:
       summary: Internet traffic meters, read from the gauge widgets of a Zabbix dashboard
       description: |
-        **wall.** Cached 30 s. The dashboard itself is kept for two minutes.
+        **Network page.** Cached 30 s. The dashboard itself is kept for two minutes.
 
         Reads the dashboard named by `INTERNET_METERS_DASHBOARD` (default `Global view`, HCML's own) with
         `dashboard.get` and makes one meter of each gauge widget: the interface item it is bound to, the
@@ -893,7 +1021,7 @@ paths:
     get:
       summary: Interfaces for one device, searched then filtered then paged
       description: |
-        **wall.** Cached 15 s.
+        **Network page.** Cached 15 s.
 
         Order matters and is observable: `search` is applied first, `summary` is computed over the
         searched set, *then* `status` filters, *then* the page is sliced. So `summary` counts more
@@ -1289,6 +1417,9 @@ paths:
         measured 22 Sep.
 
         `avg` is the unweighted mean of the hourly averages, not a sample-weighted mean.
+
+        The busiest interfaces are those of the moment the report was built: the 40 with the highest last rate against the port's speed (four times `top` when that is more) are chosen then, and only those are read for the
+        `days` asked for and ranked by their average over them. A link that was quiet at that moment, and busy before it, is not in the list. `generatedAt` says when (BK-92).
       operationId: getCapacityReport
       tags: [Reports]
       parameters:
@@ -1318,7 +1449,7 @@ paths:
     get:
       summary: Naming, site, owner and criticality completeness
       description: |
-        **admin: the only admin-gated path.** Cached 60 s, and the cheapest heavy report: exactly
+        **admin.** Cached 60 s, and the cheapest heavy report: exactly
         one Zabbix call, everything else computed in process.
 
         `dimensions` always has four entries in the order `naming`, `site`, `owner`, `criticality`.
@@ -1340,7 +1471,7 @@ paths:
     get:
       summary: WAN links and paths, from ICMP item triplets
       description: |
-        **wall.** Cached 20 s.
+        **Links page.** Cached 20 s.
 
         A "link" is not a Zabbix entity. It is synthesised from the `icmpping`, `icmppingloss` and
         `icmppingsec` items on a host, paired into a path by the `link_group` item tag. `jitter` is
@@ -1363,7 +1494,7 @@ paths:
     get:
       summary: Hosts grouped into sites
       description: |
-        Cached 15 s. Zabbix has no site entity. `naming.ts` resolves one from four ranked
+        Cached 15 s. Zabbix has no site entity. `resolveSite` (`services/sites.ts`) resolves one from four ranked
         signals, tag, host name, inventory, group, and `coverage` reports how many hosts each
         signal accounted for, which is the metric for the standardisation goal.
       operationId: getSites
@@ -1382,8 +1513,9 @@ paths:
     get:
       summary: Zabbix-native service tree
       description: |
-        Cached 30 s. Recursive, depth-capped at 12, and de-duplicated by `serviceid` because a shared
-        dependency legitimately appears under two parents: it is a DAG, not a tree.
+        Cached 30 s. Recursive, depth-capped at 12. A shared
+        dependency legitimately appears under two parents (it is a DAG, not a tree), so it is built under each of them, and `descendants` counts each distinct `serviceid` once. A service below several parents is built under each of them, so the tree stops at 5,000 nodes and says so
+        with `truncated: true` (BK-96).
 
         **At HCML this returns an empty tree**: the `services` table has zero rows. Use
         `/api/sla/source` to decide whether to render this or the derived equivalent.
@@ -1522,14 +1654,36 @@ paths:
       parameters:
         - name: month
           in: query
-          description: Defaults to the current month in `Asia/Jakarta`.
+          description: Defaults to the current month in `Asia/Jakarta`. Not with `from` and `to`.
           schema: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
         - name: profile
           in: query
           schema: { type: string, enum: [availability, hcml-report] }
+        - name: from
+          in: query
+          description: |
+            The start of a window that is not a calendar month, in Unix seconds, on the hour in the report's time zone. Goes with `to`. The month
+            it starts in must have begun no more than 400 days ago, since Zabbix keeps events for about a year, and the window may be at most 366 days.
+          schema: { type: string, pattern: '^\d{1,12}$' }
+        - name: to
+          in: query
+          description: The end of the window, in Unix seconds, on the hour. A window that ends in the future is measured up to now.
+          schema: { type: string, pattern: '^\d{1,12}$' }
+        - name: dayHours
+          in: query
+          description: |
+            Count only these hours of the day, as `start-end` in whole hours: `8-17` is 08:00 to 17:00, `22-6` runs from 22:00 through midnight to 06:00 of the next day,
+            and a span belongs to the day it starts. With `month` or with `from` and `to`.
+          schema: { type: string, pattern: '^\d{1,2}-\d{1,2}$' }
+        - name: days
+          in: query
+          description: Count only spans that begin on these days of the week, Monday 1 to Sunday 7, separated by commas. All days when left out.
+          schema: { type: string, pattern: '^[1-7](,[1-7])*$' }
       responses:
         '200':
-          description: The monthly report.
+          description: |
+            The report. For a calendar month with no `dayHours` or `days` it is the monthly report, with its web checks. For any other window it has no web checks
+            (`web` is empty), since those need the raw readings of the last 31 days and are kept monthly, and `month` is null unless the window was given as a month.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SliReport' }
@@ -1541,17 +1695,275 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
         '499': { $ref: '#/components/responses/Cancelled' }
         '502': { $ref: '#/components/responses/ZabbixError' }
-        '503': { $ref: '#/components/responses/ZabbixUnavailable' }
+        '503': { $ref: '#/components/responses/SliUnavailable' }
+
+  /api/users:
+    get:
+      summary: The users, the modules, and whether they can be changed
+      description: |
+        **admin.** The users that can sign in (the break-glass account first, then by name), the modules a user can be given, the modules a new user of each role starts with,
+        and whether the users are kept across a restart (`durable`) and may be changed here (`editable`). Without a data folder the users are those of `.env` and neither is true. `secure` says that this
+        request came over HTTPS: real accounts wait for it. With sign-in off (`AUTH_ENABLED=false`) all of the Users routes answer 503 `sign_in_off`, since nobody could be told from an administrator (SC-59).
+        The requests waiting for an account are read from `GET /api/users/requests`.
+      operationId: listUsers
+      tags: [Users]
+      responses:
+        '200':
+          description: The users.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [users, modules, presets, durable, editable, failing, secure]
+                properties:
+                  users: { type: array, items: { $ref: '#/components/schemas/UserRecord' } }
+                  modules: { type: array, items: { $ref: '#/components/schemas/ModuleInfo' } }
+                  presets:
+                    type: object
+                    description: "The modules a new user of each role starts with. Only a start: what is stored is the user's own list."
+                    required: [guest, operator, admin]
+                    properties:
+                      guest: { type: array, items: { $ref: '#/components/schemas/ModuleId' } }
+                      operator: { type: array, items: { $ref: '#/components/schemas/ModuleId' } }
+                      admin: { type: array, items: { $ref: '#/components/schemas/ModuleId' } }
+                  durable: { type: boolean }
+                  editable: { type: boolean }
+                  failing: { type: boolean, description: 'A save failed and has not worked since.' }
+                  secure: { type: boolean }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/SignInOff' }
+    post:
+      summary: Add a user
+      description: |
+        **admin.** The name is 3 to 64 letters, digits and `. _ @ -`, beginning and ending with a letter or digit, and unique whatever the case. The role is `guest`, `operator` or `admin`; the modules
+        are those of the role's preset when left out, and an administrator always has every one. The password is at least 8 and at most 256 characters, not on the lists of passwords that anyone can guess (the common ones, one of their base words with digits or signs after it, or one character repeated), and not holding `hcml` or the sign-in name, and the user must
+        change it at the first sign-in unless `mustChange` is false. 409 when the name is taken, when there is no data folder to keep users in, or when the portal holds the most it can (200).
+        A field the portal does not know is a 400 that names it; it is not dropped, so a mistyped field cannot pass as a change that did nothing (BK-97). The log gets one line, never the password.
+      operationId: createUser
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewUser' }
+      responses:
+        '201':
+          description: Added.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user: { $ref: '#/components/schemas/UserRecord' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/UsersError' }
+        '503': { $ref: '#/components/responses/SignInOff' }
+
+  /api/users/{name}:
+    patch:
+      summary: Change a user
+      description: |
+        **admin.** Any of the name shown, the role, the modules, the language, the expiry, `disabled` and `mustChange`; at least one. A user is never deleted, only disabled. A new role keeps the modules the user
+        may still have. 409 for a user kept in `.env`, for a change that would leave no administrator who can sign in, and for an administrator who disables, demotes or expires their own account. Takes effect on the user's next request, and the person's open live streams end so that they come back as the account allows now (SC-57).
+        A field the portal does not know is a 400 that names it; it is not dropped, so a mistyped field cannot pass as a change that did nothing (BK-97).
+      operationId: updateUser
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UserPatch' }
+      responses:
+        '200':
+          description: Changed.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user: { $ref: '#/components/schemas/UserRecord' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/UsersError' }
+        '503': { $ref: '#/components/responses/SignInOff' }
+
+  /api/users/{name}/password:
+    post:
+      summary: Set a user's password
+      description: |
+        **admin.** A reset. The user must change it at the next sign-in unless `mustChange` is false, and every session of theirs begun before now ends, and so do their open live streams. The password is held to the same rule as a new user's: at least 8 and at most 256 characters, not on the lists of passwords that anyone can guess (the common ones, one of their base words with digits or signs after it, or one character repeated), and not holding `hcml` or the sign-in name. A field the portal does not know is a 400 that names it; it is not dropped, so a mistyped field cannot pass as a change that did nothing (BK-97).
+      operationId: resetUserPassword
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: name
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string }
+                mustChange: { type: boolean }
+      responses:
+        '200':
+          description: Set.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user: { $ref: '#/components/schemas/UserRecord' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/UsersError' }
+        '503': { $ref: '#/components/responses/SignInOff' }
+
+  /api/users/requests:
+    get:
+      summary: The requests for an account that are waiting
+      description: |
+        **admin.** The requests left on the sign-in page (FR-62), the oldest first. `enabled` is whether the portal accepts them now, `max` how many may wait at once
+        (`ACCOUNT_REQUESTS_MAX_PENDING`). A request nobody answers is dropped after 30 days. With sign-in off this answers 503 `sign_in_off`, as the other Users routes do.
+      operationId: listAccountRequests
+      tags: [Users]
+      responses:
+        '200':
+          description: The requests.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountRequestList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '503': { $ref: '#/components/responses/SignInOff' }
+
+  /api/users/requests/{id}/approve:
+    post:
+      summary: Approve a request by making the account
+      description: |
+        **admin.** The body is the one of `POST /api/users`: the administrator types the name (it need not be the one asked for), the role, the pages and a temporary password, and the account is made
+        exactly as the Users page makes any. The request is taken off the list first, in one step, so that of two administrators who answer it at once only one gets it and the other has 404; when the account cannot be made (the name is taken, there is no data folder, the password is not accepted)
+        it is put back where it was. 404 when the request is gone, for example answered by another administrator. A field the portal does not know is a 400 that names it; it is not dropped, so a mistyped field cannot pass as a change that did nothing (BK-97). The log gets the step and the names, never a password.
+      operationId: approveAccountRequest
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/NewUser' }
+      responses:
+        '201':
+          description: The account is made and the request is off the list.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [user]
+                properties:
+                  user: { $ref: '#/components/schemas/UserRecord' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500':
+          description: '`users_error` (the file of users could not be saved) or `requests_error` (the file of requests could not be saved): see `UsersError` and `RequestsError`.'
+          content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+        '503': { $ref: '#/components/responses/SignInOff' }
+
+  /api/users/requests/{id}/refuse:
+    post:
+      summary: Refuse a request
+      description: |
+        **admin.** Takes the request off the list and makes no account. It takes no body: none, or a JSON object that is ignored. 404 when the request is gone.
+      operationId: refuseAccountRequest
+      tags: [Users]
+      parameters:
+        - $ref: '#/components/parameters/CsrfHeader'
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: false
+        description: Ignored. Nothing, or a JSON object.
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200':
+          description: Refused.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok: { type: boolean, const: true }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+        '500': { $ref: '#/components/responses/RequestsError' }
+        '503': { $ref: '#/components/responses/SignInOff' }
 
   /api/sli/export:
     get:
-      summary: The monthly SLA report as a PDF, Excel or CSV download
+      summary: The SLA report for a month, or for a range of days, as a PDF, Excel or CSV download
       description: |
-        **viewer.** The figures `/api/sli` shows for one month, both methods side by side, as one
-        file. `format=pdf` is the printable report; `format=xlsx` is the workbook, a Summary sheet and
+        **guest.** The figures `/api/sli` shows for one month, or for a window of whole hours and the hours of the day that count (`from`, `to`, `dayHours`,
+        `days`, read as `/api/sli` reads them), both methods side by side, as one file. `format=pdf` is the printable report; `format=xlsx` is the workbook, a Summary sheet and
         one sheet per table; `format=csv` is one zip holding a CSV file for the first page and for each
         table, and a notes file that explains them. The file states when it was generated and, for the
         current month, that its figures are not final.
+
+        A file for a window is the same file with the period in place of the month. It has one figure for the whole window, not one for each month it touches, and
+        its first page, its period line and its notes say which hours of the day were counted. Its Web checks table is there and empty, with the reason, since web checks are
+        measured by calendar month: choose a month for them. A month with `dayHours` or `days` is a file of that kind too, and is named apart from the plain month's.
 
         `decimal`, `date` and `separator` choose how numbers and dates are written, and never what they say:
         a figure, a verdict and the order of the rows are the same in every style. `decimal` is the mark in a
@@ -1566,12 +1978,13 @@ paths:
         `X-Data-Stale` and `X-Data-Age-Seconds`. Nothing is kept for long: a
         built file is reused for ten seconds, then built again from the cached figures.
 
-        `format` and the style are checked before Zabbix is asked, so a bad request costs nothing. `month`,
+        `format`, the style, the window and the hours are checked before Zabbix is asked, so a bad request costs nothing. `month`, `from`, `to`, `dayHours`, `days`,
         `format`, `decimal`, `date` and `separator` are the only parameters: any other is a 400, so a misspelt
-        `month` is never read as the current month. `month` is
+        `month` is never read as the current month. A month and a window together are a 400. `month` is
         validated as on `/api/sli`, and a month that has not started, or is more than about 400 days
-        back, is a 400. The file name is made from the validated month alone, `HCML_SLA_Report_<month>.pdf`,
-        `.xlsx` or `_csv.zip`, never from other request text.
+        back, is a 400, as is a window that begins in such a month or that has no hour inside the daily hours chosen. The file name is made from the validated month, or from the dates and hours of the
+        report itself, never from other request text: `HCML_SLA_Report_<month>.pdf`, `.xlsx` or `_csv.zip` for a month,
+        `HCML_SLA_Report_<first day>_to_<last day>` for a window, and `_0800-1700` and `_d12345` after it when hours of the day were chosen.
 
         The body is not JSON, so it is never compressed whatever `Accept-Encoding` says, and
         `Cache-Control: private, no-store` keeps a shared cache from holding on to it.
@@ -1580,8 +1993,24 @@ paths:
       parameters:
         - name: month
           in: query
-          description: Defaults to the current month in `Asia/Jakarta`. An empty value means the default.
+          description: Defaults to the current month in `Asia/Jakarta`. An empty value means the default. Not with `from` and `to`.
           schema: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
+        - name: from
+          in: query
+          description: The start of a window that is not a calendar month, in Unix seconds, on the hour in the report's time zone. Goes with `to`, as on `/api/sli`.
+          schema: { type: string, pattern: '^\d{1,12}$' }
+        - name: to
+          in: query
+          description: The end of the window, in Unix seconds, on the hour. A window that ends in the future is measured up to now, and its file says the figures are not final.
+          schema: { type: string, pattern: '^\d{1,12}$' }
+        - name: dayHours
+          in: query
+          description: Count only these hours of the day, as `start-end` in whole hours, as on `/api/sli`. With `month` or with `from` and `to`.
+          schema: { type: string, pattern: '^\d{1,2}-\d{1,2}$' }
+        - name: days
+          in: query
+          description: Count only spans that begin on these days of the week, Monday 1 to Sunday 7, separated by commas. All days when left out.
+          schema: { type: string, pattern: '^[1-7](,[1-7])*$' }
         - name: format
           in: query
           required: true
@@ -1630,7 +2059,7 @@ paths:
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
         '499': { $ref: '#/components/responses/Cancelled' }
         '502': { $ref: '#/components/responses/ZabbixError' }
-        '503': { $ref: '#/components/responses/ZabbixUnavailable' }
+        '503': { $ref: '#/components/responses/SliUnavailable' }
 
   /api/sli/email:
     get:
@@ -1662,23 +2091,27 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
-      summary: Email one month's SLA report
+      summary: Email the SLA report for a month, or for a range of days
       description: |
-        **admin.** Builds the files `/api/sli/export` gives for the month, one to three formats, and sends them as attachments
+        **admin.** Builds the files `/api/sli/export` gives for the month, or for the `window` and the hours of the day, one to three formats, and sends them as attachments
         to one message, with the four figures of the report's first page in its text, through the SMTP server the `MAIL_`
         settings name. `to` is who it goes to: one to ten plain addresses, each in `allowedDomains` when that list is not empty.
         Left out, the saved list is used (`GET`), and with `remember: true` the list that was given is saved once the report has gone.
-        `style` is written as `/api/sli/export` writes it. Any other field, in the body or in `style`, is a 400: there is no subject
+        `style` is written as `/api/sli/export` writes it. Any other field, in the body, in `window` or in `style`, is a 400: there is no subject
         and no message to set, and no copy or blind copy.
 
+        The body names a `month`, or a `window` with `from` and `to` in Unix seconds (inside an object, since `to` is the list of people), and with either one
+        `dayHours` and `days` as on `/api/sli`. Neither, or both, is a 400. A range waits ten minutes after its end, as a month does. Only a plain month is entered in the portal's short
+        record of sends, which is the monthly schedule's book and is kept by month; a range, or a month in the hours of the day, is in the log alone. The schedule itself stays monthly.
+
         Checked in this order: the shape of the body (400), whether email is set up (503 `mail_disabled`), the month, the formats, the
-        style and the recipients (400, each with a sentence that says what is wrong; a month that has not started, that is more than about 400 days back or that ended less than ten minutes ago, is one of them), the allowance of 5 sends an hour for each person
+        style and the recipients (400, each with a sentence that says what is wrong; a month or a window that has not started, that begins more than about 400 days back, that has no hour inside the daily hours chosen or that ended less than ten minutes ago, is one of them), the allowance of 5 sends an hour for each person
         (429 with `Retry-After`; only a request that gets this far is counted), the mail login (502 `mail_error`, before Zabbix is
         asked, so a wrong password fails in a second), and then the two reports are read and the message is sent. A month in which neither method
         finds a device is not sent (502 `empty_report`). A month that is
         not cached can take as long as the download does.
 
-        Every send and every failure is logged with the user, the month, the formats, the size, the number of recipients and the
+        Every send and every failure is logged with the user, the month (or the window's two times and the hours), the formats, the size, the number of recipients and the
         domains they are in, and never the addresses, the subject or a file; the portal also keeps a short record of it (counts only). A send that the mail server took for only some of the addresses is logged at warning level.
         A failure at the mail server is one fixed sentence for its kind (`login`, `connect`, `timeout`, `tls`, `recipients`,
         `rejected`, `other`); what the server said goes to the log only. The sentence for `timeout` says that the report may or may not have gone,
@@ -1693,9 +2126,17 @@ paths:
           application/json:
             schema:
               type: object
-              required: [month, formats]
+              required: [formats]
               properties:
-                month: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$' }
+                month: { type: string, pattern: '^\d{4}-(0[1-9]|1[0-2])$', description: A calendar month. Not with `window`. }
+                window:
+                  type: object
+                  description: 'A window of whole hours that is not a calendar month. Both times are needed, on the hour in the report''s time zone, and the window may be at most 366 days. Not with `month`.'
+                  properties:
+                    from: { type: integer, minimum: 0, description: 'The start, in Unix seconds.' }
+                    to: { type: integer, minimum: 0, description: 'The end, in Unix seconds.' }
+                dayHours: { type: string, pattern: '^\d{1,2}-\d{1,2}$', description: 'Count only these hours of the day, as `8-17`. As on `/api/sli`.' }
+                days: { type: string, pattern: '^[1-7](,[1-7])*$', description: 'Count only spans that begin on these days of the week, Monday 1 to Sunday 7.' }
                 formats:
                   type: array
                   minItems: 1
@@ -1726,7 +2167,9 @@ paths:
                 properties:
                   sent: { type: integer, description: How many recipients the server took the message for. }
                   refused: { type: integer, description: How many it refused. The message still went to the others. }
-                  month: { type: string }
+                  month: { oneOf: [{ type: string }, { type: 'null' }], description: 'The month the report was for, or null for a window.' }
+                  from: { type: integer, description: 'The window''s start. Only for a window.' }
+                  to: { type: integer, description: 'The window''s end. Only for a window.' }
                   files:
                     type: array
                     items:
@@ -1734,7 +2177,7 @@ paths:
                       required: [format, fileName, bytes]
                       properties:
                         format: { type: string, enum: [pdf, xlsx, csv] }
-                        fileName: { type: string, description: 'The attached file, `HCML_SLA_Report_<month>.pdf`, `.xlsx` or `_csv.zip`.' }
+                        fileName: { type: string, description: 'The attached file, named as `/api/sli/export` names it.' }
                         bytes: { type: integer }
                   remembered: { type: boolean, description: 'Whether the list was saved. False when it was not asked for, and when saving it failed after the report had gone.' }
         '400': { $ref: '#/components/responses/BadRequest' }
@@ -1752,7 +2195,7 @@ paths:
           description: '`mail_error`, the mail server did not take the report, `empty_report`, neither method found a device in that month, so the report would have been empty, or `zabbix_error`. The message says which setting to check, or where to look.'
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
         '503':
-          description: '`mail_disabled`, email is not set up on this portal, or it is off while sign-in is off and `ALLOW_EMAIL_WITHOUT_AUTH` is not true, or a Zabbix state (`zabbix_timeout`, `zabbix_auth`).'
+          description: '`mail_disabled`, email is not set up on this portal, or it is off while sign-in is off and `ALLOW_EMAIL_WITHOUT_AUTH` is not true, `data_not_read_yet` (no reading is newer than the start of the range; `Retry-After`; see `SliUnavailable`), or a Zabbix state (`zabbix_timeout`, `zabbix_auth`).'
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
 
   /api/sli/recipients:
@@ -1908,11 +2351,11 @@ paths:
       summary: Plain-language explanation of one problem
       description: |
         Cached 1 h, keyed by the event id together with its acknowledged and resolved state, so
-        an explanation is not reused after the problem changes.
+        an explanation is not reused after the problem changes. It follows the Problems and Dashboard pages: a person who holds only the Assistant page does not have it (SC-62).
 
         Buffered JSON, not streamed. This path sends the host name, trigger name, opdata, severity,
-        start time, flags and the problem's tags to the model: in `hcml-portal` that means they
-        leave the machine.
+        start time and flags to the model, and the problem's tags (up to 20) only to a model on this
+        machine: in `hcml-portal` that means the rest leaves the machine and the tags do not (SC-72).
       operationId: explainProblem
       tags: [AI]
       parameters:
@@ -1953,6 +2396,8 @@ paths:
 
         `noData: true` marks an answer produced without calling the model because there was
         nothing to measure.
+
+        It follows the SLA and Services pages: a person who holds only the Assistant page does not have it (SC-62).
       operationId: explainSla
       tags: [AI]
       parameters:
@@ -1988,7 +2433,7 @@ paths:
         '429':
           description: |
             `rate_limited`, more calls than the per-user limit a minute (`AI_CHAT_PER_MINUTE` and `AI_EXPLAIN_PER_MINUTE`, 10 each by default), or, with a
-            local model, a call of the same person that is still waiting or running (one for each person); or `ai_budget`, the daily token budget is used
+            local model, a call of the same person that is still waiting or running (one for each person); with `source=derived`, also more than four of the person's reads of the derived SLA at once (`Retry-After` 10); or `ai_budget`, the daily token budget is used
             up (hosted Claude and a model at an outside address, counted by the tokens it reports or else by the size of what went in and out; `AI_DAILY_TOKENS_PER_USER` and `AI_DAILY_TOKENS_TOTAL`). `Retry-After` says how long to wait.
           content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
         '404':
@@ -2042,9 +2487,9 @@ paths:
 
         | Event | Payload |
         |---|---|
-        | `context` | the estate snapshot's metadata, counts and a `truncated` flag |
+        | `context` | the estate snapshot's metadata, counts and a `truncated` flag; for a user whose pages show only part of the estate, `shown` names the parts the model was given, and the counts of the others are 0 |
         | `token` | `{ "t": string }`, concatenate in order |
-        | `done` | `{ ms, text, firstTokenMs }`, `text` is the cleaned answer and replaces the concatenated tokens |
+        | `done` | `{ ms, text, firstTokenMs, truncated, remembered, language }`: `text` is the cleaned answer and replaces the concatenated tokens; `truncated` is true when the model stopped at its length limit; `remembered` is how many turns of the conversation the model was given, the question included, so the page can show where its memory ends (FR-72); `language` is the one the answer was asked in, `en` or `id` (UX-73) |
         | `error` | `{ "message": string }` |
 
         Once the response is hijacked the HTTP status can no longer change, so failures after that
@@ -2274,7 +2719,7 @@ components:
       name: hcml_session
       description: |
         The browser's scheme. The JWT in an httpOnly, SameSite=Strict cookie, set by
-        `POST /api/auth/login` and `POST /api/auth/refresh` and cleared by `POST /api/auth/logout`.
+        `POST /api/auth/login`, `POST /api/auth/refresh` and `POST /api/auth/password` and cleared by `POST /api/auth/logout`.
         Expires after `SESSION_HOURS` (12 hours by default), renewable while valid, carries
         `{ sub, role, ep, jti, sid }`. The name is `SESSION_COOKIE`,
         default `hcml_session`. Cookies ignore ports, so the Docker stack of hcml-portal-ollama
@@ -2287,7 +2732,7 @@ components:
       description: |
         The same JWT in an `Authorization` header, for scripts and tests: take it from the login
         response's `Set-Cookie` header. Wins when a request carries the cookie too. Needs no
-        `X-HCML-CSRF` header, except on sign-in and sign-out, which always need it.
+        `X-HCML-CSRF` header, except on sign-in, sign-out and the request for an account, which always need it.
 
   parameters:
     CsrfHeader:
@@ -2295,10 +2740,10 @@ components:
       in: header
       required: false
       description: |
-        Must be `1` on sign-in, sign-out and every `POST`, `PUT`, `PATCH` or `DELETE` that
+        Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
         authenticates with the session cookie. A page on another site cannot add a custom header
         without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
-        Bearer header, except on sign-in and sign-out.
+        Bearer header, except on sign-in, sign-out and the request for an account.
       schema: { type: string, const: '1' }
 
   headers:
@@ -2318,7 +2763,13 @@ components:
       description: '`unauthorized`, missing or expired portal JWT. Not the same as `zabbix_auth`.'
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Forbidden:
-      description: '`forbidden`, authenticated, but the role is below what this path requires.'
+      description: '`forbidden`, authenticated, but the role is below what this path requires, or the user does not hold a module that owns it. `password_change_required` when the password is a temporary one.'
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: '`not_found`, there is no such user, or no such request for an account.'
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: '`conflict`, the change cannot be made: the name is taken, the user is kept in `.env`, there is no data folder, or it would leave no administrator who can sign in.'
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     CsrfRefused:
       description: |
@@ -2327,13 +2778,14 @@ components:
         `null`. Answered before the guard, so it comes before any 401.
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     PayloadTooLarge:
-      description: Body over Fastify's 1 MiB default, or over 4 KB on `POST /api/auth/login`.
+      description: |
+        Body over Fastify's 1 MiB default, or over the limit of the route, which is 4 KB on `POST /api/auth/login`, `POST /api/auth/password` and `POST /api/users/{name}/password`, 8 KB on `POST /api/auth/request`, `POST /api/users`, `PATCH /api/users/{name}` and the approval of a request, and 1 KB on the refusal of a request.
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     RateLimited:
       description: |
         300 requests per minute per client, counted before the guard, so refused requests count too.
         `/api/health`, `/api/stream` and `POST /api/auth/logout` are exempt. The stream has its own cap
-        instead, `429 too_many_streams`, described under `/api/stream`.
+        instead, `429 too_many_streams`, described under `/api/stream`. `Retry-After` says how many seconds to wait.
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Cancelled:
       description: |
@@ -2343,6 +2795,29 @@ components:
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     Internal:
       description: '`internal`. The message is fixed; the detail is in the BFF log only.'
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    UsersError:
+      description: |
+        `users_error`, the file of users could not be saved, for example because the data volume is full or read-only. The message says to check the data folder; the detail is in the BFF log only (BK-99).
+        Any other failure is `internal`.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    RequestsError:
+      description: |
+        `requests_error`, the file of requests for an account could not be saved, for example because the data volume is full or read-only. The message says to check the data folder; the detail is in the BFF log only.
+        Any other failure is `internal`.
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    SliUnavailable:
+      description: |
+        `data_not_read_yet`: the request is right and the figures are not there yet, because no reading is newer than the start of the range and the month could not be read again now. `Retry-After` says 60 seconds,
+        and the same request is answered once the next read has run (BK-80). Or `zabbix_timeout`, `zabbix_auth`, as for any read (`ZabbixUnavailable`).
+      headers:
+        Retry-After:
+          description: Seconds to wait before asking again (`data_not_read_yet`).
+          schema: { type: integer }
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    SignInOff:
+      description: |
+        `sign_in_off`, the users cannot be managed while sign-in is off (`AUTH_ENABLED=false`). The guard that tells an administrator from anyone else is not installed then, so these routes refuse everyone (SC-59).
       content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
     ZabbixError:
       description: '`zabbix_error`, unreachable, non-2xx, non-JSON-RPC, or a JSON-RPC error.'
@@ -2476,7 +2951,119 @@ components:
       required: [name, role]
       properties:
         name: { type: string }
-        role: { type: string, enum: [viewer, wall, operator, admin] }
+        role: { type: string, enum: [guest, operator, admin] }
+        displayName: { type: string, description: 'The name shown, on `GET /api/auth/me`.' }
+        source:
+          type: string
+          enum: [env, file]
+          description: 'On `GET /api/auth/me`: `env` for an account kept in `.env`, which cannot change its password on the Account page (FR-73), `file` for one of the file of users.'
+        language: { type: string, enum: [en, id], description: 'The language the person chose for the Assistant, on `GET /api/auth/me`, when they chose one.' }
+
+    ModuleId:
+      type: string
+      enum: [dashboard, problems, sites, hosts, devices, latest, graphs, maps, network, links, services, sla, capacity, noise, top-triggers, inventory, assistant, users]
+      description: One page of the menu. `inventory` and `users` are for administrators and cannot be given to anyone else.
+
+    ModuleInfo:
+      type: object
+      required: [id, label, page, adminOnly]
+      properties:
+        id: { $ref: '#/components/schemas/ModuleId' }
+        label: { type: string }
+        page: { type: string, description: 'The path of its page, such as `/network`.' }
+        adminOnly: { type: boolean, description: 'Its page needs the administrator role, so it cannot be given to anyone else.' }
+
+    NewUser:
+      type: object
+      required: [name, role, password]
+      properties:
+        name: { type: string }
+        displayName: { type: string }
+        role: { type: string, enum: [guest, operator, admin] }
+        modules: { type: array, items: { $ref: '#/components/schemas/ModuleId' } }
+        language: { oneOf: [{ type: string, enum: [en, id] }, { type: 'null' }] }
+        password: { type: string }
+        expires: { oneOf: [{ type: integer }, { type: 'null' }] }
+        mustChange: { type: boolean }
+
+    UserPatch:
+      type: object
+      minProperties: 1
+      properties:
+        displayName: { type: string }
+        role: { type: string, enum: [guest, operator, admin] }
+        modules: { type: array, items: { $ref: '#/components/schemas/ModuleId' } }
+        language: { oneOf: [{ type: string, enum: [en, id] }, { type: 'null' }] }
+        disabled: { type: boolean }
+        expires: { oneOf: [{ type: integer }, { type: 'null' }] }
+        mustChange: { type: boolean }
+
+    UserRecord:
+      type: object
+      description: A user as the Users page reads them. Never a password or a hash.
+      required: [name, displayName, role, modules, language, source, breakGlass, disabled, expires, mustChange, created, createdBy, lastSignIn]
+      properties:
+        name: { type: string }
+        displayName: { type: string }
+        role: { type: string, enum: [guest, operator, admin] }
+        modules: { type: array, items: { $ref: '#/components/schemas/ModuleId' } }
+        language: { oneOf: [{ type: string, enum: [en, id] }, { type: 'null' }] }
+        source:
+          type: string
+          enum: [env, file]
+          description: '`env` for a user kept in `.env`, which the page cannot change; `file` for one of the file of users.'
+        breakGlass: { type: boolean, description: 'The first administrator of `.env`: it signs in with the password in `.env` whatever the state of the file.' }
+        disabled: { type: boolean }
+        expires: { oneOf: [{ type: integer }, { type: 'null' }], description: 'Unix seconds after which the user cannot sign in, or null.' }
+        mustChange: { type: boolean }
+        created: { oneOf: [{ type: integer }, { type: 'null' }] }
+        createdBy: { oneOf: [{ type: string }, { type: 'null' }] }
+        lastSignIn: { oneOf: [{ type: integer }, { type: 'null' }] }
+
+    AccountRequestInfo:
+      type: object
+      required: [enabled]
+      description: What the sign-in page asks before it offers the form for a request for an account (FR-62).
+      properties:
+        enabled: { type: boolean, description: 'False unless ACCOUNT_REQUESTS is on, sign-in is on, and there is a data folder.' }
+        pages:
+          type: array
+          description: The pages a person may ask for. Only when `enabled`.
+          items:
+            type: object
+            required: [id, label]
+            properties:
+              id: { $ref: '#/components/schemas/ModuleId' }
+              label: { type: string }
+        nameMax: { type: integer, description: 'The longest name kept. Only when `enabled`.' }
+        reasonMax: { type: integer, description: 'The longest reason kept. Only when `enabled`.' }
+
+    AccountRequestBody:
+      type: object
+      additionalProperties: false
+      required: [name, pages, reason]
+      properties:
+        name: { type: string, maxLength: 400 }
+        pages: { type: array, maxItems: 64, items: { type: string, maxLength: 64 } }
+        reason: { type: string, maxLength: 4000 }
+
+    AccountRequest:
+      type: object
+      required: [id, name, pages, reason, created]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        pages: { type: array, items: { $ref: '#/components/schemas/ModuleId' } }
+        reason: { type: string }
+        created: { type: integer, description: Unix seconds when it was left. }
+
+    AccountRequestList:
+      type: object
+      required: [enabled, max, requests]
+      properties:
+        enabled: { type: boolean, description: Whether the portal accepts requests now. }
+        max: { type: integer, description: How many requests may wait at once. }
+        requests: { type: array, items: { $ref: '#/components/schemas/AccountRequest' } }
 
     Session:
       type: object
@@ -2484,6 +3071,7 @@ components:
       description: What sign-in and renewal return. The token is in the `Set-Cookie` header, never here.
       properties:
         user: { $ref: '#/components/schemas/User' }
+        mustChange: { type: boolean, description: 'True when the password is a temporary one that must be changed first.' }
         expiresIn: { type: integer, minimum: 7200, maximum: 86400, example: 43200, description: 'Seconds the new session lasts: SESSION_HOURS times 3600, so 43200 (12 hours) by default.' }
 
     SiteRef:
@@ -3014,11 +3602,12 @@ components:
         total: { type: integer }
         degraded: { type: integer }
         worst: { type: integer, description: Worst status anywhere; -1 when everything is fine. }
+        truncated: { type: boolean, const: true, description: 'Present, and true, when the tree was cut at 5,000 nodes because services that share children appear under each parent.' }
 
     ServiceNode:
       type: object
       required: [serviceid, name, status, algorithm, tags, problems, children, worst, descendants]
-      description: Recursive, depth-capped at 12. De-duplicated by `serviceid`, the graph is a DAG.
+      description: Recursive, depth-capped at 12. The graph is a DAG, so a service below several parents is built under each of them, and `descendants` counts each distinct `serviceid` once.
       properties:
         serviceid: { type: string }
         name: { type: string }
@@ -3132,6 +3721,19 @@ components:
         closed: { type: boolean }
         timezone: { type: string }
         target: { type: number }
+        dailyHours:
+          type: object
+          required: [start, end, weekdays, seconds]
+          description: |
+            Present when the window was restricted to hours of the day. Only these hours were measured: `window` of each host is `seconds`, an outage counts as an incident
+            when any part of it lies inside them, and `longest` is the longest part inside them.
+          properties:
+            start: { type: integer, minimum: 0, maximum: 23 }
+            end: { type: integer, minimum: 0, maximum: 24, description: 'Not after `start` means the span runs through midnight into the next morning.' }
+            weekdays:
+              oneOf: [{ type: array, items: { type: integer, minimum: 1, maximum: 7 } }, { type: 'null' }]
+              description: Days the spans begin on, Monday 1 to Sunday 7, or null for every day.
+            seconds: { type: integer, description: The seconds of the window that the hours keep. }
         basis:
           type: object
           required: [triggers, gapPolicy, noDataPolicy, maintenancePolicy]
@@ -3411,9 +4013,12 @@ components:
 
     CapacityReport:
       type: object
-      required: [days, metrics]
+      required: [days, metrics, generatedAt]
       properties:
         days: { type: integer }
+        generatedAt:
+          type: integer
+          description: Unix seconds when the report was built. The list of busiest interfaces was chosen at that moment, from the latest rate of each port, and only then ranked by the days.
         metrics:
           type: array
           items:
@@ -3538,6 +4143,7 @@ components:
         summary: { type: string }
         tagsExplained:
           type: array
+          description: One row for each tag the model was given, so none when the model is outside the machine (SC-72).
           items:
             type: object
             required: [tag, value, meaning]

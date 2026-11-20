@@ -2,7 +2,7 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Developers | about 55 min | [Server: SLA and reports](server-sla-and-reports.md) | [Server: export](server-export.md) |
+| Developers | about 75 min | [Server: SLA and reports](server-sla-and-reports.md) | [Server: export](server-export.md) |
 
 This chapter is about answers that move, or that a person asks for. The live problem list is pushed to every open Dashboard. The warm-up reads the slow views after a start. Explain puts one problem or one SLA into plain words. The Assistant answers a free question about the estate. Explain and the Assistant are the only places where the portal calls a language model, and in both the model has no tools: it is handed text that the portal already shows and answers from it, so the worst a bad answer can do is be wrong. The model is Anthropic's hosted API in `hcml-portal` and a local model through Ollama in `hcml-portal-ollama`. The code is the same, and `AI_PROVIDER` picks the branch. [AI providers](../3-integrations/ai-providers.md) covers the providers themselves.
 
@@ -245,8 +245,8 @@ export async function notifyProblemsChanged(): Promise<void> {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/routes/stream.ts#streamRoutes sha=3e4f529e3e2a -->
-`server/src/routes/stream.ts:6-48`
+<!-- gen:snippet server/src/routes/stream.ts#streamRoutes sha=d5ed5aca60a5 -->
+`server/src/routes/stream.ts:7-53`
 
 ```ts
 export async function streamRoutes(app: FastifyInstance): Promise<void> {
@@ -275,17 +275,21 @@ export async function streamRoutes(app: FastifyInstance): Promise<void> {
     });
 
     const unsubscribe = subscribe(reply.raw, ownerOf(req), { gzip });
-    // A token is checked when the stream opens only. Ending the stream when it
-    // expires makes the browser reconnect with the renewed cookie, or be sent to sign in.
+    // A token is checked when the stream opens only. Ending the stream when it, or the account, expires
+    // makes the browser reconnect with the renewed cookie, or be sent to sign in.
     const left = msUntilExpiry(req);
     const expiry = left === null ? null : setTimeout(() => endStreamOf(reply.raw), left);
     expiry?.unref?.();
     // Signing out ends the session's streams at once, or a screen that was open would keep its frames.
     const session = sessionIdOf(req.user);
     const stopWatching = session ? onSignOut((signedOut) => signedOut === session && endStreamOf(reply.raw)) : undefined;
+    // A change to the person (disabled, new pages, a new password) ends their screens too: they come back as the account allows now (SC-57).
+    const person = (req.user as { sub?: unknown } | undefined)?.sub;
+    const stopAccount = typeof person === 'string' ? onAccountChange((name) => name === person && endStreamOf(reply.raw)) : undefined;
     const gone = () => {
       if (expiry) clearTimeout(expiry);
       stopWatching?.();
+      stopAccount?.();
       unsubscribe();
     };
     req.raw.on('close', gone);
@@ -297,7 +301,7 @@ export async function streamRoutes(app: FastifyInstance): Promise<void> {
 
 1. Screens are counted: `STREAM_MAX_CLIENTS` (100) in all and `STREAM_MAX_PER_USER` (5) for one signed-in user, or for one client address with sign-in off. A screen over either limit gets a 429 with a `retry-after` of 30 seconds. The browser's `EventSource` cannot read the body, but curl and the log can.
 2. The route writes the headers itself, so it adds `X-Request-Id` and `Vary` itself: writing the head directly skips the hooks that `requestId.ts` and `compress.ts` use. `X-Accel-Buffering: no` lets nginx pass the stream straight through.
-3. A token is checked only when the stream opens, so a timer ends the stream when the token expires (`msUntilExpiry`). The browser then reconnects with the renewed cookie, or is sent to sign in. Signing out ends the open streams of that session at once: the route listens for `onSignOut` with the session id of its token, and ends its own stream when that id is signed out.
+3. A token is checked only when the stream opens, so a timer ends the stream when the token or the person's account expires, whichever is first (`msUntilExpiry`). The browser then reconnects with the renewed cookie, or is sent to sign in. Signing out ends the open streams of that session at once: the route listens for `onSignOut` with the session id of its token, and ends its own stream when that id is signed out. A change to the person ends their screens too, so that they come back as the account allows now: the route listens for `onAccountChange` with the person's name, and it fires when they are disabled, given an expiry, given another role or other pages, or have the password reset or changed (SC-57).
 4. The `preClose` hook ends every stream, since `close()` would otherwise wait on an open stream until Docker kills the container.
 5. After an acknowledge or a close, `notifyProblemsChanged` makes a forced read and a push. It runs once `actions.ts` has cleared the cache, so the change shows without waiting for the next tick.
 
@@ -362,11 +366,11 @@ Tests: `light-reads.test.ts`.
 
 ### explainProblem
 
-<!-- gen:snippet server/src/services/explain.ts#explainProblem sha=d19f7ae92aa9 -->
-`server/src/services/explain.ts:97-124`
+<!-- gen:snippet server/src/services/explain.ts#explainProblem sha=aeb9bc02813a -->
+`server/src/services/explain.ts:101-131`
 
 ```ts
-export async function explainProblem(eventid: string, onUsage: OnUsage, signal?: AbortSignal): Promise<ProblemExplanation | NotFound> {
+export async function explainProblem(eventid: string, onUsage: OnUsage, signal?: AbortSignal, language?: Language): Promise<ProblemExplanation | NotFound> {
   const listed = (await cachedProblems()).find((p) => p.eventid === eventid);
   if (!listed) return { notFound: 'No open problem with that eventid: it may have been resolved.' };
 
@@ -374,23 +378,26 @@ export async function explainProblem(eventid: string, onUsage: OnUsage, signal?:
   const resolved = Boolean(listed.r_eventid && listed.r_eventid !== '0');
   const state = `${acknowledged ? 'ack' : 'unack'}:${resolved ? 'resolved' : 'open'}`;
   // The model call stops when every reader of this explanation has left, so a closed tab does not keep the one slot (BK-67).
-  return cached(`explain:problem:${eventid}:${state}`, 3_600_000, async (f) => {
+  return cached(`explain:problem:${eventid}:${state}:${language ?? 'en'}`, 3_600_000, async (f) => {
     // The list leaves operational data out (queries.ts), so it is read here for this one problem.
     const [problem] = await withOpdata([listed]);
     return humanize(
       'problem',
       {
-        host: problem.host,
-        notification: problem.name,
-        opdata: problem.opdata || null,
+        // Text copied from Zabbix, made one plain line with the data fence cut out and a length of its own (SC-63), as the chat does.
+        host: promptText(problem.host, HOST_NAME_MAX),
+        notification: promptText(problem.name, PROBLEM_NAME_MAX),
+        opdata: problem.opdata ? promptText(problem.opdata, 100) : null,
         severity: SEVERITY_NAMES[problem.severity] ?? problem.severity,
         started: snapshotClock(new Date(Number(problem.clock) * 1000)),
         acknowledged,
         resolved,
-        tags: problem.tags ?? [],
+        // Tags are free text that may hold secrets: a model outside the machine gets none, as the Assistant gives it none (SC-72).
+        tags: config.ai.external ? [] : (problem.tags ?? []).slice(0, EXPLAIN_TAGS_MAX).map((t) => ({ tag: promptText(t.tag, 40), value: promptText(t.value, 80) })),
       },
       onUsage,
       f.signal,
+      language,
     );
   }, { signal });
 }
@@ -398,15 +405,15 @@ export async function explainProblem(eventid: string, onUsage: OnUsage, signal?:
 <!-- /gen -->
 
 1. The problem is looked up in the shared list. One that is no longer there gives a `notFound`, which the route turns into a 404 with "No open problem with that eventid: it may have been resolved."
-2. The cache key is the event id and its state, acknowledged or not, resolved or not. A given problem's meaning does not change, so an answer is kept an hour. But the explanation says whether someone has acknowledged it, and a key by event alone would go on saying "not acknowledged" for an hour after someone had.
-3. The shared list leaves out operational data, so `withOpdata` reads it here for this one problem. The notification text, which is the trigger name with its data, is what the team receives.
-4. `humanize`, in `clients/ai.ts`, sends the facts to the model with a fixed schema that both providers enforce, and checks that the answer is complete before returning it. It is given the flight's `signal`, which the cache raises when the last reader of this explanation has left, so a closed tab stops a call that waits for the slot or runs, and does not keep the one slot busy for everybody (BK-67). While another reader is still there, the call goes on. If the reader left while the operational data was still being read, before the call asked for its signal, the signal it is given has already fired, and `humanize` refuses it before it asks for a slot or a probe (BK-71). The start time goes as the clock of the SLA zone with its name, such as `Wed, 7 Oct 2026, 15:00 WIB (Asia/Jakarta)`, because that is how the portal shows it; a UTC string would be seven hours off.
+2. The cache key is the event id, its state (acknowledged or not, resolved or not) and the language the reader chose, `en` unless they chose Bahasa Indonesia. A given problem's meaning does not change, so an answer is kept an hour. But the explanation says whether someone has acknowledged it, and a key by event alone would go on saying "not acknowledged" for an hour after someone had. The language is in the key so that two readers who chose different languages never get each other's answer.
+3. The shared list leaves out operational data, so `withOpdata` reads it here for this one problem. The notification text, which is the trigger name with its data, is what the team receives. The text copied from Zabbix is made one plain line with the data fence cut out and a length of its own (`promptText`), as the chat does, and at most 20 tags go to a model on this machine (SC-63). A model outside the machine is given none (SC-72): tags are free text that staff write, and may hold an owner, a contact or a ticket number, and the Assistant gives such a model none either. The answer then has no row for a tag, and the page shows no glossary of tags for it.
+4. `humanize`, in `clients/ai.ts`, sends the facts to the model with a fixed schema that both providers enforce, and checks that the answer is complete before returning it. For a reader who chose Bahasa Indonesia it adds one line that asks for every text value in that language and keeps the JSON keys, the host and site names and the numbers as given (`languageLine`). It is given the flight's `signal`, which the cache raises when the last reader of this explanation has left, so a closed tab stops a call that waits for the slot or runs, and does not keep the one slot busy for everybody (BK-67). While another reader is still there, the call goes on. If the reader left while the operational data was still being read, before the call asked for its signal, the signal it is given has already fired, and `humanize` refuses it before it asks for a slot or a probe (BK-71). The start time goes as the clock of the SLA zone with its name, such as `Wed, 7 Oct 2026, 15:00 WIB (Asia/Jakarta)`, because that is how the portal shows it; a UTC string would be seven hours off.
 5. The route wraps the call in `aiUse`, which logs one `ai_call` line when it ends: who asked, from where, `explain`, how it ended (`answered`, `not_found`, `aborted` for a reader who left, or `failed`) and the tokens the hosted model billed. An answer from the cache costs none. The line never holds the facts or the answer.
 
 ### explainDerivedSla and the no-data answer
 
 <!-- gen:snippet server/src/services/explain.ts#noDataExplanation sha=bcaeb0052e31 -->
-`server/src/services/explain.ts:24-32`
+`server/src/services/explain.ts:28-36`
 
 ```ts
 export function noDataExplanation(what: string, why: string, recommendation: string): SlaAnswer {
@@ -422,7 +429,7 @@ export function noDataExplanation(what: string, why: string, recommendation: str
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/explain.ts#pickScope sha=b0f41dec7272 -->
-`server/src/services/explain.ts:58-73`
+`server/src/services/explain.ts:62-77`
 
 ```ts
 export function pickScope(report: SliReport, scope: string): { group: SliGroup; hosts: SliHost[] } | null {
@@ -462,6 +469,22 @@ The Assistant is the page behind the sidebar's Assistant. Where Explain rewrites
 | `assistantFacts.ts` | How many hosts are in each state, and since when a host has been down |
 | `assistantSnapshot.ts` | The snapshot the model answers from, built and then reused while nothing it describes changes |
 | `assistantFocus.ts` | The FOCUS block for a site or a host the question names |
+| `assistantInternet.ts` | The internet links as prompt lines, for the snapshot and for the focus on a site |
+| `assistantDetail.ts` | What a question gets beyond the snapshot and the site focus, read for what it names and the pages the user holds |
+| `assistantTopics.ts` | What a question wants: values, a past time, host details or a person, read from its words |
+| `assistantWhen.ts` | The time a question is about, as an exact window in the SLA time zone |
+| `assistantPast.ts` | The problems that opened in a past window, grouped by host and trigger |
+| `assistantValues.ts` | The latest values of a host, or the highest across the hosts of a site |
+| `assistantHostInfo.ts` | What a host is: its state, groups and templates and, on this machine only, addresses, tags, inventory and contacts |
+| `assistantAcks.ts` | Who acknowledged a problem and what they wrote, on this machine only |
+| `assistantSla.ts` | The SLA of a named month, a year, a week or a run of days, and the hours that count |
+| `assistantOpen.ts` | Every open problem of a site, a host or a severity, beyond the few the snapshot names |
+| `assistantMaintenance.ts` | The maintenance windows that are on or coming up |
+| `assistantLinks.ts` | The WAN links and the web checks |
+| `assistantSeries.ts` | The lowest, average, highest and last of an item over a window |
+| `assistantPorts.ts` | The state of one port of a switch or firewall |
+| `assistantReports.ts` | The capacity, alert noise, top triggers and inventory scorecard in a few lines each |
+| `assistantMaps.ts` | What a host is linked to on Zabbix's maps, and the maps there are |
 | `assistantAnswer.ts` | Asking the model, and cleaning what it says |
 
 A test that replaces `getSnapshot` or `streamAnswer` through `assistant.ts` replaces what the route calls, and nothing underneath.
@@ -486,12 +509,13 @@ export function detectLanguage(text: string): 'English' | 'Bahasa Indonesia' | n
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/assistantPrompt.ts#languageReminder sha=83cda095ce05 -->
-`server/src/services/assistantPrompt.ts:91-96`
+<!-- gen:snippet server/src/services/assistantPrompt.ts#languageReminder sha=acbd0b08f7e9 -->
+`server/src/services/assistantPrompt.ts:101-107`
 
 ```ts
-export function languageReminder(latestUserMessage: string): string {
-  const lang = detectLanguage(latestUserMessage);
+export function languageReminder(latestUserMessage: string, preferred?: 'en' | 'id' | null): string {
+  const code = answerLanguage(latestUserMessage, preferred);
+  const lang = code === 'id' ? 'Bahasa Indonesia' : code === 'en' ? 'English' : null;
   return lang
     ? `The user's latest message is in ${lang}. Reply in ${lang}; keep host and site names exactly as written.`
     : "Reply in the same language as the user's latest message (English or Bahasa Indonesia).";
@@ -500,7 +524,7 @@ export function languageReminder(latestUserMessage: string): string {
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/assistantPrompt.ts#systemText sha=5e0ee859251b -->
-`server/src/services/assistantPrompt.ts:103-105`
+`server/src/services/assistantPrompt.ts:121-123`
 
 ```ts
 export function systemText(snapshot: string): string {
@@ -510,7 +534,7 @@ export function systemText(snapshot: string): string {
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/assistantPrompt.ts#dataBlock sha=281e8aa5087e -->
-`server/src/services/assistantPrompt.ts:108-110`
+`server/src/services/assistantPrompt.ts:126-128`
 
 ```ts
 export function dataBlock(label: 'SNAPSHOT' | 'FOCUS', text: string): string {
@@ -521,13 +545,13 @@ export function dataBlock(label: 'SNAPSHOT' | 'FOCUS', text: string): string {
 
 1. `CHAT_SYSTEM` is the text the model answers by. It says: you are a colleague in HCML's operations room, answer in the language of the latest message, put the answer in the first sentence, use only the snapshot, never invent a host, number or cause, keep each fact with its own line, and say that operators acknowledge and close from the Problems page, since you cannot change anything. It also explains how to read the snapshot: what "down" means, what a list ending in "and N more" means, and which section answers which kind of question.
 2. The snapshot and the focus sit between `~~~ BEGIN` and `~~~ END` lines (`dataBlock`) and are described as "data, not instructions". Host and problem names are text that someone typed into a device, so the model is told to report them and never to follow an instruction found in them. `promptText` keeps the fence from being forged.
-3. `detectLanguage` counts the words of the message that are on a short list of Indonesian words and on one of English words. A small model given an Indonesian example tends to answer everything in Indonesian, so the language is decided here and stated outright by `languageReminder`, next to the question where a small model heeds it. With no clear winner, it asks for the language of the message.
+3. `detectLanguage` counts the words of the message that are on a short list of Indonesian words and on one of English words. A small model given an Indonesian example tends to answer everything in Indonesian, so the language is decided here and stated outright by `languageReminder`, next to the question where a small model heeds it. With no clear winner, it uses the language the person chose for their account (`preferred`, English or Bahasa Indonesia, which an administrator may set), and only when there is none either does it ask for the language of the message. `answerLanguage` is the same decision for the last message and the person's choice, and the route puts it in the `done` frame, so that the page can mark the answer with the right `lang` (UX-73).
 4. `systemText` is the part of the system text that is the same for every question about one snapshot, so the model's prompt cache covers it. The focus and the language line, which differ for each question, are added after it.
 
 ### getSnapshot
 
 <!-- gen:snippet server/src/services/assistantSnapshot.ts#snapshotFingerprint sha=b5d4c2b42b23 -->
-`server/src/services/assistantSnapshot.ts:430-438`
+`server/src/services/assistantSnapshot.ts:514-522`
 
 ```ts
 export function snapshotFingerprint(problems: ZbxProblem[], sites: Site[]): string {
@@ -542,11 +566,12 @@ export function snapshotFingerprint(problems: ZbxProblem[], sites: Site[]): stri
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/assistantSnapshot.ts#getSnapshot sha=c52d029b9916 -->
-`server/src/services/assistantSnapshot.ts:458-486`
+<!-- gen:snippet server/src/services/assistantSnapshot.ts#getSnapshot sha=d08ffb9b3b33 -->
+`server/src/services/assistantSnapshot.ts:542-571`
 
 ```ts
-export async function getSnapshot(): Promise<Snapshot & { frozen: boolean }> {
+export async function getSnapshot(visible: readonly SectionKey[] = ALL_SECTIONS): Promise<Snapshot & { frozen: boolean }> {
+  const key = keyFor(visible);
   const [problems, sitesRes] = await Promise.all([
     cachedProblems().then(openProblems),
     sitesView(),
@@ -555,18 +580,18 @@ export async function getSnapshot(): Promise<Snapshot & { frozen: boolean }> {
   let built = false;
   const build = async () => {
     built = true;
-    const snapshot = await buildSnapshot();
+    const snapshot = await buildSnapshot(visible);
     if (!snapshot.complete) throw new IncompleteSnapshot(snapshot);
     return snapshot;
   };
   try {
-    let snapshot = await cached(SNAPSHOT_KEY, SNAPSHOT_FREEZE_MS, build);
+    let snapshot = await cached(key, SNAPSHOT_FREEZE_MS, build);
     if (!built && snapshot.fingerprint !== fingerprint) {
       const problemsChanged = snapshot.fingerprint.split('.')[0] !== fingerprint.split('.')[0];
       const settled = Date.now() - snapshot.meta.generatedAt >= HOST_STATE_SETTLE_MS;
       if (problemsChanged || settled) {
-        invalidate(SNAPSHOT_KEY);
-        snapshot = await cached(SNAPSHOT_KEY, SNAPSHOT_FREEZE_MS, build);
+        invalidate(key);
+        snapshot = await cached(key, SNAPSHOT_FREEZE_MS, build);
       }
     }
     return { ...snapshot, frozen: !built };
@@ -580,8 +605,8 @@ export async function getSnapshot(): Promise<Snapshot & { frozen: boolean }> {
 
 1. A local model reads every token it has not seen at about 330 tokens a second. A snapshot rebuilt for each question differed in its first line, the time it was taken, so each question made the model read about 2,000 tokens again: 6 to 8 seconds before the first word. Reused, the system text is byte for byte the same and Ollama serves it from its prompt cache.
 2. `snapshotFingerprint` is two hashes joined by a dot: one of each open problem's id, severity and acknowledgement, and one of each host's state. The rest of the text, the ages, the operational data and the SLA figures, may lag by up to five minutes (`SNAPSHOT_FREEZE_MS`).
-3. `getSnapshot` keeps the snapshot under the key `chat:snapshot`. A problem that opens, closes, is acknowledged or changes severity rebuilds it at once. A host that changes state rebuilds it only when the snapshot is a minute old (`HOST_STATE_SETTLE_MS`), because the offshore radio links flip between up and down every 16 seconds or so, and rebuilding on each flip would undo the freeze when the estate is busiest.
-4. A snapshot built while the derived SLA or services were still computing is incomplete. It is thrown as `IncompleteSnapshot` through `cached`, so it is answered from once and never stored. A write-back (acknowledge or close) clears `chat:snapshot` too.
+3. `getSnapshot` is given the sections that the person's pages show (`sectionsFor`), and keeps a copy for each set of sections: the whole text under the key `chat:snapshot`, and a cut-down one under that key with the sections added. Two people with the same pages share a copy, and nobody is handed a copy made for someone with more pages. A problem that opens, closes, is acknowledged or changes severity rebuilds it at once. A host that changes state rebuilds it only when the snapshot is a minute old (`HOST_STATE_SETTLE_MS`), because the offshore radio links flip between up and down every 16 seconds or so, and rebuilding on each flip would undo the freeze when the estate is busiest.
+4. A snapshot built while the derived SLA or services were still computing, or the gauges of the Internet view were still being read, is incomplete. It is thrown as `IncompleteSnapshot` through `cached`, so it is answered from once and never stored. Gauges that cannot be read at all (no dashboard, no gauge, or Zabbix refuses it) do not make it incomplete: the part is left out and the snapshot is kept. A write-back (acknowledge or close) clears every copy.
 
 Tests: `chat.test.ts`, `chat-route.test.ts` and `ai-limits.test.ts`.
 
@@ -589,16 +614,16 @@ Tests: `chat.test.ts`, `chat-route.test.ts` and `ai-limits.test.ts`.
 
 `server/src/services/assistantSnapshot.ts`. The snapshot as compact plain text. Plain text and not JSON on purpose: it is about half the tokens for the same facts, and a small model reads "3 hosts, 1 unreachable" more reliably than nested braces. It is 236 lines, so it is quoted in two parts.
 
-<!-- gen:snippet server/src/services/assistantSnapshot.ts#SNAPSHOT_CHAR_CAP sha=5f1f386ea62f -->
-`server/src/services/assistantSnapshot.ts:53-53`
+<!-- gen:snippet server/src/services/assistantSnapshot.ts#SNAPSHOT_CHAR_CAP sha=19ea8fdb619b -->
+`server/src/services/assistantSnapshot.ts:113-113`
 
 ```ts
-export const SNAPSHOT_CHAR_CAP = 5_500;
+export const SNAPSHOT_CHAR_CAP = 6_200;
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/assistantSnapshot.ts#BUDGET sha=d90d297d3afe -->
-`server/src/services/assistantSnapshot.ts:55-64`
+<!-- gen:snippet server/src/services/assistantSnapshot.ts#BUDGET sha=da4aaf4abf0f -->
+`server/src/services/assistantSnapshot.ts:115-125`
 
 ```ts
 const BUDGET = {
@@ -607,6 +632,7 @@ const BUDGET = {
   sites: 900,
   recent: 550,
   unreachable: 850,
+  internet: 700,
   sla: 700,
   services: 400,
   problems: 1_850,
@@ -614,15 +640,18 @@ const BUDGET = {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/assistantSnapshot.ts#buildSnapshot lines=2-28 sha=fc8bea29a1a2 -->
-`server/src/services/assistantSnapshot.ts:175-201` (lines 2 to 28 of buildSnapshot)
+<!-- gen:snippet server/src/services/assistantSnapshot.ts#buildSnapshot lines=2-28 sha=af0fb710ec0b -->
+`server/src/services/assistantSnapshot.ts:241-267` (lines 2 to 28 of buildSnapshot)
 
 ```ts
 const now = Math.floor(Date.now() / 1000);
+const shows = (k: SectionKey) => visible.includes(k);
 
 // Started first so their deadline runs alongside the core queries.
 const derivedSla = withinDeadline(derivedSlaLines);
 const derivedSvc = withinDeadline(derivedServiceLines);
+// The gauges of the Internet view, for a user whose pages show it; the answer is not held for them either.
+const internetRead = shows('internet') ? readInternet() : null;
 
 // Problems and sites are the core of any answer; SLA and services are
 // valuable but optional: a Zabbix without Services configured must not
@@ -642,75 +671,73 @@ const [slaRes, svcRes, withData] = await Promise.allSettled([
   slasView(),
   serviceTreeView(),
   withOpdata(shown),
-]);
-const opdataOf = new Map((withData.status === 'fulfilled' ? withData.value : []).map((p) => [p.eventid, p.opdata]));
-const line = (p: ZbxProblem) => problemLine({ ...p, opdata: opdataOf.get(p.eventid) }, now);
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/assistantSnapshot.ts#buildSnapshot lines=192-236 sha=fc8bea29a1a2 -->
-`server/src/services/assistantSnapshot.ts:365-409` (lines 192 to 236 of buildSnapshot)
+<!-- gen:snippet server/src/services/assistantSnapshot.ts#buildSnapshot lines=192-236 sha=af0fb710ec0b -->
+`server/src/services/assistantSnapshot.ts:431-475` (lines 192 to 236 of buildSnapshot)
 
 ```ts
-  /* 7. open problems, worst first then newest, with whatever budget is left */
-  const ordered = [...problems].sort(worstFirst);
-  const used = Object.values(sections).reduce((n, s) => n + s.text.length + 2, 0);
-  const problemBudget = Math.min(BUDGET.problems, SNAPSHOT_CHAR_CAP - used);
-  const listed = ordered.slice(0, PROBLEM_CAP).map(line);
-  const restCounts = (shown: number) => severityList(severityCounts(ordered.slice(shown)), true);
-  // The title says how many are listed, or a model takes the list for all of them.
-  const problemSection = (lines: string[], shown: number) =>
-    section(
-      ordered.length <= shown
-        ? `OPEN PROBLEMS (${ordered.length}, worst first):`
-        : shown
-          ? `OPEN PROBLEMS (${ordered.length}, worst first; only the worst ${shown} are listed):`
-          : `OPEN PROBLEMS (${ordered.length}; none listed, no room left):`,
-      ordered.length ? lines : ['- none'],
-      problemBudget,
-      // Counts of the unlisted ones only, or a model takes them for the totals.
-      (left, shown) => `- …and ${left} more not listed (of those: ${restCounts(shown)})`,
-      Math.max(ordered.length, 1),
-    );
-  const fitted = (problemSection(listed, listed.length).text.match(/^- \[/gm) ?? []).length;
-  sections.problems = problemSection(listed.slice(0, fitted), fitted);
-
-  const order = ['estate', 'whole', 'sites', 'recent', 'unreachable', 'sla', 'services', 'problems'];
-  const text = order.map((k) => sections[k].text).join('\n\n');
-  const truncated = Object.values(sections).some((s) => s.truncated);
-  const sizes = Object.fromEntries(order.map((k) => [k, sections[k].text.length]));
-
-  return {
-    text,
-    sizes: { ...sizes, total: text.length },
-    meta: {
-      generatedAt: now * 1000,
-      hosts,
-      sites: sitesRes.sites.length,
-      problems: problems.length,
-      unacknowledged,
-      slas: slaCount,
-      degradedServices: degradedCount,
-      truncated,
-    },
-    fingerprint: snapshotFingerprint(problems, sitesRes.sites),
-    complete,
-  };
+    const shown = sorted.slice(0, HOSTS_PER_SITE_LINE).join(', ');
+    const extra = sorted.length > HOSTS_PER_SITE_LINE ? ` +${sorted.length - HOSTS_PER_SITE_LINE} more` : '';
+    return `- ${name} (${sorted.length}): ${shown}${extra}`;
+  });
+if (silent.length) {
+  unreachableLines.push(`- Not down, SNMP silent, no ping alarm (${silent.length}): ${silent.sort(naturalCompare).join(', ')}`);
 }
+sections.unreachable = section(
+  `UNREACHABLE HOSTS (${all.down}, by site; how long down in brackets):`,
+  unreachableLines.length ? unreachableLines : ['- none'],
+  BUDGET.unreachable + unreachableExtra,
+  (left) => `- …and ${left} more sites with unreachable hosts`,
+);
+
+/* 7. open problems, worst first then newest, with whatever budget is left */
+const ordered = [...problems].sort(worstFirst);
+const used = Object.values(sections).reduce((n, s) => n + s.text.length + 2, 0);
+const problemBudget = Math.min(BUDGET.problems, SNAPSHOT_CHAR_CAP - used);
+const listed = ordered.slice(0, PROBLEM_CAP).map(line);
+const restCounts = (shown: number) => severityList(severityCounts(ordered.slice(shown)), true);
+// The title says how many are listed, or a model takes the list for all of them.
+const problemSection = (lines: string[], shown: number) =>
+  section(
+    ordered.length <= shown
+      ? `OPEN PROBLEMS (${ordered.length}, worst first):`
+      : shown
+        ? `OPEN PROBLEMS (${ordered.length}, worst first; only the worst ${shown} are listed):`
+        : `OPEN PROBLEMS (${ordered.length}; none listed, no room left):`,
+    ordered.length ? lines : ['- none'],
+    problemBudget,
+    // Counts of the unlisted ones only, or a model takes them for the totals.
+    (left, shown) => `- …and ${left} more not listed (of those: ${restCounts(shown)})`,
+    Math.max(ordered.length, 1),
+  );
+const fitted = (problemSection(listed, listed.length).text.match(/^- \[/gm) ?? []).length;
+sections.problems = problemSection(listed.slice(0, fitted), fitted);
+
+const order = ORDER.filter((k) => shows(k) && sections[k] !== undefined);
+const text = order.map((k) => sections[k].text).join('\n\n');
+const truncated = order.some((k) => sections[k].truncated);
+const sizes = Object.fromEntries(order.map((k) => [k, sections[k].text.length]));
+const whole = visible.length === ORDER.length;
+// A count is given only with the part it belongs to: the page of a user who does not hold it would not show it.
+const counts = {
+  hosts: shows('estate') || shows('sites') || shows('unreachable') ? hosts : 0,
 ```
 <!-- /gen -->
 
-1. A prompt that overflows the model's context window is cut from the front, which silently drops the system prompt and its rules. Native Ollama gets `AI_NUM_CTX` (8,192 tokens), and through the compatible `/v1` interface Ollama's default of 4,096 applies. So the snapshot is capped in characters, about four to a token, and not trusted to fit.
+1. A prompt that overflows the model's context window is cut from the front, which silently drops the system prompt and its rules. Native Ollama gets `AI_NUM_CTX` (8,192 tokens), and through the compatible `/v1` interface Ollama's default of 4,096 applies. So the snapshot is capped in characters, about four to a token (`SNAPSHOT_CHAR_CAP`, 6,200, which is the 5,500 of before and the 700 of the internet part), and not trusted to fit.
 2. The cap is met by construction. Every section has its own budget and adds whole lines until it is spent, so the facts that a question most often needs, the estate, the sites, what is new and what is down, cannot be pushed out by a long list of problems. The problem section gets whatever is left, at most 1,850 characters.
 3. The first part starts the derived SLA and service summaries so that their deadline (`DERIVED_WAIT_MS`, 1.5 seconds) runs beside the core reads. The problems and the sites are the core of any answer. The SLA and the services are optional, so a Zabbix without services cannot leave the Assistant unable to say what is down. The operational data is read only for the problems that will be listed.
-4. The sections are, in order: the estate header and counts, all open problems counted (how many hosts have none, the five hosts with the most, and the three oldest problems), the sites worst first, what opened in the last 24 hours, the unreachable hosts by site, the SLA, the degraded services, and the open problems, worst first. Hosts that answer ping but whose SNMP is silent are listed apart, as "Not down, SNMP silent", because the model otherwise reports them as outages.
+4. The sections are, in order: the estate header and counts, all open problems counted (how many hosts have none, the five hosts with the most, and the three oldest problems), the sites worst first, what opened in the last 24 hours, the unreachable hosts by site, the internet links (only for a person whose pages show the Internet view, and only when the gauges could be read), the SLA, the degraded services, and the open problems, worst first. The internet part is written by `assistantInternet.ts` in the words of the Internet page: each link's traffic in and out as a share of its capacity, High or Critical when the gauge says so, a link that is down said to be down and not idle, and a link with no reading said to have none and why. It lists the down links, then those High or Critical, one line for what has no reading, then the busiest, within 700 characters, and ends with a line that says more links exist when it is cut. The site of a host and of a link is the one the Sites page gives it, found by the site tag, the name, the inventory and the host group, and not the name alone (BK-103). Hosts that answer ping but whose SNMP is silent are listed apart, as "Not down, SNMP silent", because the model otherwise reports them as outages.
 5. The problem section's title says how many problems it lists, or a model takes the list for all of them. A line "and N more not listed" gives the counts of the unlisted ones only, never the totals.
 6. The result carries the text, the size of each section for the log, a `meta` the page shows so the reader knows the scope, the fingerprint, and `complete`.
+7. `buildSnapshot` is given the sections to build. Each section belongs to the pages that show that part of the estate (`SECTION_MODULES`; the internet links belong to the network pages, which a guest does not have), so the text of a person who has only the SLA page holds the SLA and the services and nothing about hosts, sites, problems or links. A count in `meta` is given only with the part it belongs to. An administrator, and a portal with sign-in off, are given all of it.
 
 ### buildFocus
 
 <!-- gen:snippet server/src/services/assistantFocus.ts#sitesNamed sha=e396932d77fe -->
-`server/src/services/assistantFocus.ts:48-56`
+`server/src/services/assistantFocus.ts:70-78`
 
 ```ts
 export function sitesNamed(text: string): SiteRef[] {
@@ -725,49 +752,145 @@ export function sitesNamed(text: string): SiteRef[] {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/assistantFocus.ts#buildFocus sha=f64f6663db93 -->
-`server/src/services/assistantFocus.ts:190-204`
+<!-- gen:snippet server/src/services/assistantFocus.ts#buildFocus sha=951d4d24cb82 -->
+`server/src/services/assistantFocus.ts:262-303`
 
 ```ts
-export async function buildFocus(question: string): Promise<{ sites: string[]; hosts: string[]; text: string } | null> {
-  const named = sitesNamed(question).slice(0, FOCUS_SITES);
+export async function buildFocus(
+  question: string,
+  modules: ReadonlySet<string> | null,
+  { operator = modules === null, previous, signal, places }: { operator?: boolean; previous?: string; signal?: AbortSignal; places?: DetailContext['places'] } = {},
+): Promise<{ sites: string[]; hosts: string[]; topics: string[]; text: string; notGiven: string | null } | null> {
+  const can = (...ids: string[]) => modules === null || ids.some((id) => modules.has(id));
+  const focusAllowed = can('sites', 'hosts', 'devices');
+  // The names, severities and ages of the problems are for the pages that show them, Problems and the Dashboard (SC-65).
+  const problemLines = can('problems', 'dashboard');
   const [problems, sitesRes] = await Promise.all([
     cachedProblems().then(openProblems),
     sitesView(),
   ]);
-  const hosts = hostsNamed(question, sitesRes.sites.flatMap((s) => s.hosts)).slice(0, FOCUS_HOSTS);
-  if (!named.length && !hosts.length) return null;
+  const everyHost = sitesRes.sites.flatMap((s) => s.hosts);
+  let named = sitesNamed(question).slice(0, FOCUS_SITES);
+  let hosts = hostsNamed(question, everyHost).slice(0, FOCUS_HOSTS);
+  // A follow-up that names no host and no site is about the one before it: "dan CPU-nya?" after "Ada yang down di MOPU?" (BK-90).
+  if (!named.length && !hosts.length && previous && aboutAThing(topicsOf(question))) {
+    named = sitesNamed(previous).slice(0, FOCUS_SITES);
+    hosts = hostsNamed(previous, everyHost).slice(0, FOCUS_HOSTS);
+  }
   const now = Math.floor(Date.now() / 1000);
-  const blocks = [
-    ...named.map((s) => focusBlock(s, sitesRes.sites, problems, now)),
-    ...hosts.map((h) => hostFocusBlock(h, problems, now)),
-  ];
-  return { sites: named.map((s) => s.name), hosts: hosts.map((h) => h.name), text: dataBlock('FOCUS', blocks.join('\n\n')) };
+  // The links of a site, for a user whose pages show them: read once, from the cache the Internet view uses.
+  const links = focusAllowed && can('network') && named.length ? await readInternet() : null;
+  const blocks = focusAllowed
+    ? [
+        ...named.map((s) => focusBlock(s, sitesRes.sites, problems, now, siteInternetLines(s, links, now, siteByHostName(sitesRes.sites)), problemLines)),
+        ...hosts.map((h) => hostFocusBlock(h, problems, now, problemLines)),
+      ]
+    : [];
+  const detail = await buildDetails({ question, now, tz: snapshotZone(), readAt: snapshotTime(now), sites: named, hosts, allSites: sitesRes.sites, problems, admin: modules === null, operator, can, external: config.ai.external, signal, places });
+  blocks.push(...detail.blocks);
+  if (!blocks.length && !detail.notGiven) return null;
+  return {
+    sites: focusAllowed ? named.map((s) => s.name) : [],
+    hosts: focusAllowed ? hosts.map((h) => h.name) : [],
+    topics: detail.topics,
+    // The data, fenced; the line about what was not given is not data and goes beside it (BK-84).
+    text: blocks.length ? dataBlock('FOCUS', blocks.join('\n\n')) : '',
+    notGiven: detail.notGiven,
+  };
 }
 ```
 <!-- /gen -->
 
-1. A small model does not read a long list well, and calls down a host that only has its SNMP silent. So when the question names a site or a host, the code adds a FOCUS block that lists every host of that site by state, with its worst problems, or the host's own open problems and how many there are.
+1. A small model does not read a long list well, and calls down a host that only has its SNMP silent. So when the question names a site or a host, the code adds a FOCUS block that lists every host of that site by state, with its worst problems, or the host's own open problems and how many there are. For a site, and for a person whose pages show the Internet view, the block also lists that site's internet links.
 2. `sitesNamed` finds the sites a message names, in order, by their aliases and the parts of their display names, as whole words. A name of three letters or fewer counts only in capitals, the way the operations room writes site codes: "pas" is everyday Indonesian, and "mac address" is not the site MOPU / MAC. At most two sites get a block (`FOCUS_SITES`), because more is a comparison, which the snapshot's site list covers.
 3. `hostsNamed` does the same for hosts, by the full name and the name without its numbering, and ignores a name shorter than five letters (`HOST_TERM_MIN`): that is a common word, not a host named on purpose. At most two hosts (`FOCUS_HOSTS`).
-4. Each block is cut to `FOCUS_BUDGET`, 800 characters, a whole line at a time, and the blocks are fenced as data. With no site or host named, the function returns null and the answer uses the snapshot alone.
+4. Each block is cut to `FOCUS_BUDGET`, 800 characters, a whole line at a time, and the blocks are fenced as data. The internet links of a site come last, with a budget of their own (`FOCUS_INTERNET_BUDGET`, 400 characters), so that they never push out a host or a problem; a link is found for a site by the site the Sites page gives its host (the four signals, BK-103; the name alone for a host that page does not hold), or, for a gauge whose item is gone, by the site its title names. They are read once (`readInternet`) and only for a question that names a site.
+5. `buildFocus` is given the pages the user holds, or `null` for an administrator and for a portal with sign-in off, which are given all of it (ADR-0017). The site and host blocks need the Sites, Hosts or Devices page, and a site's internet links need the network pages as well, as the same parts of the snapshot do. The problem lines of a block need the Problems or the Dashboard page, and a person with neither is given counts (SC-65). It is also given whether the person may acknowledge (the names of those who did need the operator role), the question before this one so that a follow-up keeps its subject (BK-90), the abort signal, and the places the slow reads take in the person's lines (BK-88).
+6. After those blocks it asks `buildDetails` for what the question wants beyond them (the next part) and adds the blocks that come back. The line that says what the person was not given comes back apart (`notGiven`): it is an instruction and not data, so the route puts it into the system text beside the fence and not inside it (BK-84). With no block and no such line, the function returns null and the answer uses the snapshot alone.
+7. `warmFor` runs before the snapshot is built. The gauges of the internet links and the list of busiest hosts take 15 to 45 seconds to build on HCML's Zabbix, and the portal keeps each for ten minutes after the last request to it, so the first question after a quiet spell would find neither and be answered as if the data were not there. For a question about the links it waits for the gauges, and for one about the CPU or memory of a site, or of nothing in particular, it waits for the list (a named host is read by its own items and needs no list), each for at most 50 seconds (`COLD_READ_WAIT_MS`), for the pages the user holds. The WAN links and the web checks are waited for in the same way when a question is about them. It never throws, and the read carries on in the cache when the wait ends. Opening the Assistant page starts the list as well (`warmAndPrefill`), without waiting for it.
+
+### buildDetails
+
+`server/src/services/assistantDetail.ts`. The snapshot is small on purpose, and a question can ask for more than it holds: what happened last night, the CPU of one switch, the address of a firewall, who is in charge of a site. The model has no tools and asks for nothing, so the portal reads what the question needs, as it does for the focus on a site, and adds it to the FOCUS block.
+
+<!-- gen:snippet server/src/services/assistantDetail.ts#buildDetails sha=a7ff13993b04 -->
+`server/src/services/assistantDetail.ts:420-464`
+
+```ts
+export async function buildDetails(c: DetailContext): Promise<{ topics: string[]; blocks: string[]; notGiven: string | null }> {
+  const topics = topicsOf(c.question);
+  // The course of a value over a time, for a host the question named, gives its last figure too, so the plain values are not read beside it.
+  const seriesAsked = topics.series && topics.metrics.length > 0 && c.hosts.length > 0;
+  const seriesWanted = seriesAsked && c.can('graphs');
+  // What the question asks for, what the user's pages allow of it, and how to read it.
+  const rules: { topic: string; asked: boolean; allowed: boolean; run: () => Promise<string[]> }[] = [
+    { topic: 'details', asked: topics.details && (c.hosts.length > 0 || c.sites.length > 0), allowed: c.can('hosts', 'devices'), run: () => detailBlocks(c, topics) },
+    { topic: 'values', asked: topics.metrics.length > 0 && !seriesWanted, allowed: c.can('latest'), run: () => valuesBlocks(c, topics) },
+    { topic: 'series', asked: seriesAsked, allowed: c.can('graphs'), run: () => seriesBlocks(c, topics) },
+    { topic: 'past', asked: topics.past, allowed: c.can('problems'), run: () => pastBlocks(c, topics) },
+    { topic: 'acks', asked: topics.acks, allowed: c.can('problems'), run: () => acksBlocks(c) },
+    { topic: 'sla', asked: topics.sla, allowed: c.can('sla'), run: () => slaBlocks(c) },
+    { topic: 'open', asked: topics.openAll, allowed: c.can('problems'), run: async () => openBlocks(c) },
+    { topic: 'maintenance', asked: topics.maintenance, allowed: c.can('sla', 'hosts', 'devices', 'sites'), run: () => maintenanceBlocks(c) },
+    { topic: 'links', asked: topics.links, allowed: c.can('links'), run: () => linksBlocks(c) },
+    { topic: 'port', asked: topics.port && c.hosts.length > 0, allowed: c.can('network'), run: () => portBlocks(c) },
+    { topic: 'maps', asked: topics.maps, allowed: c.can('maps'), run: () => mapsBlocks(c) },
+    { topic: 'capacity', asked: topics.capacity || (topics.capacityOfHost && c.hosts.length > 0), allowed: c.can('capacity'), run: () => capacityBlocks(c) },
+    { topic: 'noise', asked: topics.noise, allowed: c.can('noise'), run: () => noiseBlocks(c) },
+    { topic: 'triggers', asked: topics.triggers, allowed: c.can('top-triggers'), run: () => triggerBlocks(c) },
+    { topic: 'inventory', asked: topics.inventory, allowed: c.admin && c.can('inventory'), run: () => inventoryBlocks() },
+    { topic: 'web', asked: topics.web, allowed: c.can('dashboard', 'hosts', 'sla'), run: () => webBlocks(c) },
+  ];
+  const wanted = rules.filter((r) => r.asked && r.allowed);
+  const refused = rules.filter((r) => r.asked && !r.allowed).map((r) => NOT_GIVEN_WORDS[r.topic]);
+  // The values and the series leave the traffic of an interface out for a person who does not have the Network page, and an empty answer reads as "none": the notice says it was held back (BK-84).
+  if (topics.metrics.includes('traffic') && !c.can('network')) refused.push(NOT_GIVEN_WORDS.traffic);
+  const notGiven = refused.length ? notGivenLine(refused) : null;
+
+  const made = await Promise.all(wanted.map(async (w) => ({ topic: w.topic, blocks: await w.run() })));
+  const blocks: string[] = [];
+  const used: string[] = [];
+  let total = 0;
+  for (const m of made) {
+    if (!m.blocks.length) continue;
+    // A block that would pass the total is left out whole: half of one reads as the whole of it.
+    const size = m.blocks.reduce((n, b) => n + b.length + 2, 0);
+    if (total + size > DETAIL_TOTAL) break;
+    total += size;
+    blocks.push(...m.blocks);
+    used.push(m.topic);
+  }
+  return { topics: used, blocks, notGiven };
+}
+```
+<!-- /gen -->
+
+1. `assistantTopics.ts` reads the words of the question, in English and in Bahasa Indonesia, to see what it wants: values (CPU, memory, temperature, disk, traffic, uptime, latency), a time that has passed, the details of a host, a person, who acknowledged a problem, the SLA of a window, every open problem, maintenance, the WAN links, the web checks, a series, a port, a report page or a map. The word list is a screen and not a judge. A question it misses is answered from the snapshot alone, as before, and one it catches by mistake costs a read that the model does not use. A question that names the SLA is never taken for one about the past, because the SLA is already in the snapshot.
+2. A read runs only when the question wants it, names what it needs, and the user holds a page that shows it (ADR-0017). Host details need the Hosts or Devices page and a named host or site. Latest values need the Latest data page, the interface traffic needs the network pages too, and the busiest hosts need the Dashboard page. Past problems need the Problems page. Tags, the inventory fields, the contacts, the description of a host and the name of a maintenance window need the Inventory page, and this holds for a model on this machine as well, and the names of those who acknowledged a problem need the operator role (SC-65). A part that is left out for the person's pages is named in a line of its own, `NOT GIVEN TO THIS USER`, which `buildDetails` returns apart from the blocks (`notGiven`) so that it can go beside the data; the interface traffic is named in it for a person who has the values and the graphs and not the Network page (BK-84). The reads run together, each within nine seconds (`DETAIL_WAIT_MS`), since HCML's Zabbix is slow. Each heavy topic takes one of the person's places in the line of heavy reports or of SLA reads and frees it when its read ends, whether or not the question is still waiting for it (`holding`), and one question touches at most four calendar months of SLA (`SLA_MONTHS_MAX`; BK-88). A read that fails or is late is written into the block as "could not be read from Zabbix in time", so that the model does not take silence for "none". The blocks together stay within 2,800 characters (`DETAIL_TOTAL`, raised from 2,000 by FR-66), and a block that would pass it is left out whole, because half of one reads as the whole of it. A model outside the machine is never given the far end or the label of a link, the description of a host, the alias of a port, the labels on a map or the name of a maintenance window (SC-64).
+3. The past is read in two steps. `windowOf` (`assistantWhen.ts`) turns "tadi malam", "kemarin", "minggu ini", "last 3 hours" and the like into an exact window in the SLA time zone, at most 31 days, and `windowWords` writes the window that was understood into the block, so a wrong reading shows and is not trusted. `readPast` (`assistantPast.ts`) reads the problems that opened in the window from Zabbix's event history, Average and above and at most 500, and the events that closed them. `pastSection` groups them by host and trigger, so that a link that flapped twenty times is one line, with how many times, when it last opened and whether it is still open. When the 500 are reached, the title says the counts are a floor. A question that asks how many times something happened, with no host or site named, reads nothing: the whole estate's problems do not answer it.
+4. Latest values (`assistantValues.ts`) are read only for the metrics the question names, because an item search over a host with many items takes seconds at HCML. A host gets a line for each metric, at most three items on it, and a reading older than its own interval allows is never given as a current one: the line says there is no current reading, and when the last one was. A site gets the highest of one metric across its hosts, with how many of them have a current reading. For CPU and memory the hosts come from the list that the Dashboard's Top hosts keeps for every host (`topHostsView`), because a search of the items of a whole site by name is too slow at HCML and a small limit cut a site after its first hosts; the other metrics are searched by name, with the limit of one host for each host. A question about CPU or memory that names no host or site gets the busiest hosts of the Dashboard's Top hosts widget. The name of an interface item carries the alias of the port, which a model outside this machine is not given: it is given the port and the figure (`itemName`; SC-64).
+5. Host details (`assistantHostInfo.ts`) are the state, the groups, the templates and any maintenance window of a host and, only for a model on this machine, its addresses, tags and inventory and, when a person is asked for and the user holds the Inventory page, the contacts on record. The name of the maintenance window and the description of the host are free text that staff write: they are given only to a model on this machine and to a person who holds the Inventory page. HCML's Zabbix holds no inventory and no tags for most hosts, so the usual answer to "who is in charge" is that none is recorded, and the block says so, so that an owner is never guessed. A model outside this machine is given the state, the groups and the templates, and a line that the rest is not given to it, because a tag or an inventory field may name a person.
+6. Who acknowledged (`assistantAcks.ts`). The acknowledged problems that are open now, of any age, come from the problem list the pages keep and are read by their event ids, with the people behind each update (`event.get` with `selectAcknowledges`, and `user.get` for the names); when the question names a window, the acknowledged problems that opened in it are read instead. Names and reasons go only to a model on this machine, and a model outside it is told that the problem was acknowledged, how often and when last. HCML's Zabbix holds five acknowledged open problems, all by one person and none with a message, and the block says only that.
+7. The SLA of a window (`assistantSla.ts`). `slaWindowOf` reads a month by its name, this year or last, or any window that `windowOf` reads up to a year, in whole hours, with the hours of the day that count (`hoursOf`: "jam kerja" is 08:00 to 17:00 on weekdays). `getWindowSli` works it out by the strict method from months that are read once and kept (ADR-0018). Last month and this month over every hour are in the snapshot and are not read again. A month not read before takes one to two minutes on HCML's Zabbix (98 and 131 seconds were measured), so after nine seconds the block says that it is still being worked out, and the read carries on in the cache for the next question. The capacity, noise and top triggers reports are said the same way.
+8. The lists and the pages. `assistantOpen.ts` lists every open problem of a site, a host or a severity from the problem list the pages keep, and counts the whole estate without listing it. `assistantMaintenance.ts` lists the maintenance windows that are on or coming up. `assistantLinks.ts` words the WAN links and the web checks as their pages do, worst first, and names a link by its host and far end. `assistantReports.ts` gives the capacity trends, the alert noise, the top triggers and, to an administrator only, the inventory scorecard in a few lines, at the periods the pages offer so that they share one read. `assistantMaps.ts` finds the host on Zabbix's maps and names what it is linked to there; a user without the network pages is given the maps without the network devices, as the Maps page gives them.
+9. A series and a port. `assistantSeries.ts` gives the lowest, average, highest and last of a host's item over a window, from `getGraph`, which are the figures of the Graphs page, and never points. `assistantPorts.ts` gives one port's status, speed, traffic and errors from the rows of the Network page and, when nothing matches, how many interfaces the host has and the first few names. An interface whose items are old or unsupported has no figure, and says so.
 
 ### streamAnswer
 
-<!-- gen:snippet server/src/services/assistantAnswer.ts#streamAnswer sha=4332052a70f4 -->
-`server/src/services/assistantAnswer.ts:203-245`
+<!-- gen:snippet server/src/services/assistantAnswer.ts#streamAnswer sha=6877f018eb91 -->
+`server/src/services/assistantAnswer.ts:236-278`
 
 ```ts
 export async function* streamAnswer(
   turns: ChatTurn[],
   snapshot: string,
   signal?: AbortSignal,
-  { focus, onStats, onUsage }: AnswerOptions = {},
+  { focus, onStats, onUsage, language, withheld, onFinish }: AnswerOptions = {},
 ): AsyncGenerator<string> {
   if (!config.ai.enabled) throw new AiDisabledError();
 
   const latest = [...turns].reverse().find((t) => t.role === 'user')?.content ?? '';
-  const system = [systemText(snapshot), focus, languageReminder(latest)].filter(Boolean).join('\n\n');
+  const system = chatSystem(snapshot, latest, { focus, language, withheld });
   const local = config.ai.provider === 'openai-compatible';
 
   // One local model request at a time, and AI_MAX_CONCURRENT hosted ones (ai.ts).
@@ -779,12 +902,12 @@ export async function* streamAnswer(
 
   try {
     if (!local) {
-      yield* streamAnthropic(system, turns, combined, onUsage);
+      yield* streamAnthropic(system, turns, combined, onUsage, onFinish);
       return;
     }
     const messages = [{ role: 'system', content: system }, ...turns];
-    if (await usesOllamaNative()) yield* streamOllama(messages, combined, onStats, onUsage);
-    else yield* streamOpenAiCompatible(messages, combined, onUsage);
+    if (await usesOllamaNative()) yield* streamOllama(messages, combined, onStats, onUsage, onFinish);
+    else yield* streamOpenAiCompatible(messages, combined, onUsage, onFinish);
   } catch (err) {
     // The timeout covers the whole answer, not just the first byte, so one that fires mid-stream
     // becomes a readable error instead of the bare DOMException ("The operation was aborted due to
@@ -804,11 +927,11 @@ export async function* streamAnswer(
 ```
 <!-- /gen -->
 
-1. It refuses with `AiDisabledError` when AI is off. Otherwise it builds the system text as `systemText(snapshot)`, then the focus, then the language line.
+1. It refuses with `AiDisabledError` when AI is off. Otherwise it builds the system text with `chatSystem`: `systemText(snapshot)`, then the line that names what the person's pages leave out (`withheld`, from `withheldLine`, BK-84), then the focus, then the language line (`languageReminder`, with the language the person chose as the tie-break).
 2. Then it waits for its turn. A local model handles one request at a time (`acquireModelSlot`), and a hosted one `AI_MAX_CONCURRENT` (`acquireHostedSlot`). The timeout, `AI_TIMEOUT_MS`, starts only once the model is this answer's, because waiting for another answer is not this one being slow.
 3. The hosted provider streams through the Anthropic SDK (`streamAnthropic`), up to `ANSWER_MAX_TOKENS`, 700 tokens, and reports what it was billed, so the daily budget is charged what the provider says. For a local model, `usesOllamaNative` picks Ollama's own `/api/chat` or an OpenAI-compatible stream. A model outside the network is charged as well (BK-69): the OpenAI-compatible stream is asked for its counts (`stream_options`), Ollama sends its two counts at the end, and a model that sends none is charged by the size of the question and the answer. A call the model refused costs nothing, and one that was stopped part-way costs what was written.
 4. The timeout covers the whole answer, so one that fires part-way through becomes a readable `AiUpstreamError` that says which setting to raise. A reader who presses Stop is not a failure and is passed through. The slot is always released in `finally`.
-5. The function is an async generator: the route sends each piece to the page as it arrives, which is why the answer appears while it is being written.
+5. The function is an async generator: the route sends each piece to the page as it arrives, which is why the answer appears while it is being written. `onFinish` tells the route how the answer ended: `truncated` is true when the model stopped at its length limit (`length`, `max_tokens`) and the route puts it in the `done` frame (BK-91).
 
 ### cleanAnswer and readOpenAiStream
 
@@ -835,35 +958,51 @@ export function cleanAnswer(raw: string): string {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/assistantAnswer.ts#readOpenAiStream sha=2a2206d45f16 -->
-`server/src/services/assistantAnswer.ts:52-82`
+<!-- gen:snippet server/src/services/assistantAnswer.ts#readOpenAiStream sha=ddefcd54a698 -->
+`server/src/services/assistantAnswer.ts:52-98`
 
 ```ts
-export async function* readOpenAiStream(body: ReadableStream<Uint8Array>, onCounts?: (counts: ModelCounts) => void): AsyncGenerator<string> {
+export async function* readOpenAiStream(
+  body: ReadableStream<Uint8Array>,
+  onCounts?: (counts: ModelCounts) => void,
+  onFinish?: (info: { truncated: boolean }) => void,
+): AsyncGenerator<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
+  // The reason the model gave for stopping, if any: `length` is an answer cut at the token limit, and a stream that ends with neither a reason nor [DONE] was cut short (BK-91).
+  let finish: string | null = null;
   try {
     for (;;) {
       const { value, done } = await reader.read();
-      if (done) return;
-      buf += decoder.decode(value, { stream: true });
+      // At the end, what is left is a last line with no newline after it, and it is a line all the same: a server may close the connection right after `data: [DONE]`.
+      buf += done ? `${decoder.decode()}\n` : decoder.decode(value, { stream: true });
       let nl: number;
       while ((nl = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, nl).trimEnd();
         buf = buf.slice(nl + 1);
         if (!line.startsWith('data:')) continue;
         const data = line.slice(5).trim();
-        if (data === '[DONE]') return;
-        let frame: { choices?: { delta?: { content?: string | null } }[]; usage?: { total_tokens?: number; prompt_tokens?: number; completion_tokens?: number } | null };
+        if (data === '[DONE]') {
+          onFinish?.({ truncated: finish === 'length' });
+          return;
+        }
+        let frame: { choices?: { delta?: { content?: string | null }; finish_reason?: string | null }[]; usage?: { total_tokens?: number; prompt_tokens?: number; completion_tokens?: number } | null };
         try {
           frame = JSON.parse(data);
         } catch {
           continue; // a partial or malformed frame; the next one carries on
         }
         if (frame.usage) onCounts?.({ total: frame.usage.total_tokens, prompt: frame.usage.prompt_tokens, completion: frame.usage.completion_tokens });
+        const reason = frame.choices?.[0]?.finish_reason;
+        if (reason) finish = reason;
         const piece = frame.choices?.[0]?.delta?.content;
         if (piece) yield piece;
+      }
+      if (done) {
+        if (finish === null) throw new AiUpstreamError(AI_MESSAGE.stopped, `${config.ai.model} ended its stream before [DONE] or a finish reason`);
+        onFinish?.({ truncated: finish === 'length' });
+        return;
       }
     }
   } finally {
@@ -874,7 +1013,7 @@ export async function* readOpenAiStream(body: ReadableStream<Uint8Array>, onCoun
 <!-- /gen -->
 
 1. `cleanAnswer` takes out a `<think>` block that a reasoning model may send, normalises line breaks, and removes a last sentence that is only a habitual sign-off, such as "For more details, check the Problems page" or its Indonesian form. It looks at the last sentence alone, and only when it is 160 characters or fewer and matches one of the two patterns, so a page that is named because the snapshot lacked the data survives.
-2. `readOpenAiStream` turns an OpenAI-style event stream into pieces of text. Each frame is `data: {json}` and the stream ends with `data: [DONE]`. A partial or malformed frame is skipped, and the next one carries on. A reasoning frame with empty content is dropped, so only what the reader should see is yielded. A frame that carries `usage`, which a model outside the network is asked for, goes to `onCounts` and is not text. The reader is cancelled when the loop ends.
+2. `readOpenAiStream` turns an OpenAI-style event stream into pieces of text. Each frame is `data: {json}` and the stream ends with `data: [DONE]`. A partial or malformed frame is skipped, and the next one carries on. A reasoning frame with empty content is dropped, so only what the reader should see is yielded. A frame that carries `usage`, which a model outside the network is asked for, goes to `onCounts` and is not text. A last line with no newline after it is read as a line, since a server may close the connection right after `data: [DONE]`. The reason a model gives for stopping is kept: `length` is an answer cut at the token limit and is reported through `onFinish`, and a stream that ends with neither a reason nor `[DONE]` was cut short, so it fails with a sentence that says so instead of passing for a whole answer (BK-91). The reader is cancelled when the loop ends.
 
 Tests: `chat.test.ts`.
 
@@ -883,7 +1022,7 @@ Tests: `chat.test.ts`.
 `server/src/services/chat.ts`. The turns of a conversation in, and the model made ready before the first question.
 
 <!-- gen:snippet server/src/services/chat.ts#claimWarmSlot sha=17558c40274a -->
-`server/src/services/chat.ts:39-43`
+`server/src/services/chat.ts:40-44`
 
 ```ts
 export function claimWarmSlot(now = Date.now()): boolean {
@@ -894,11 +1033,13 @@ export function claimWarmSlot(now = Date.now()): boolean {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/services/chat.ts#warmAndPrefill sha=1b66b235ed16 -->
-`server/src/services/chat.ts:67-85`
+<!-- gen:snippet server/src/services/chat.ts#warmAndPrefill sha=4b5220da6cdb -->
+`server/src/services/chat.ts:68-88`
 
 ```ts
 export async function warmAndPrefill(log: FastifyBaseLogger, load: boolean): Promise<void> {
+  // The list of busiest hosts answers the CPU or memory of a site and takes tens of seconds when cold: start it now and do not wait for it.
+  void topHostsView().catch(() => undefined);
   try {
     let [, snapshot] = await Promise.all([load ? warmModel(log) : undefined, getSnapshot()]);
     // One built while the derived SLA was still computing is never reused, so
@@ -921,7 +1062,7 @@ export async function warmAndPrefill(log: FastifyBaseLogger, load: boolean): Pro
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/chat.ts#parseTurns sha=3c869750990a -->
-`server/src/services/chat.ts:96-121`
+`server/src/services/chat.ts:99-124`
 
 ```ts
 export function parseTurns(body: unknown): ChatTurn[] | null {
@@ -962,8 +1103,8 @@ export function parseTurns(body: unknown): ChatTurn[] | null {
 
 `server/src/routes/chat.ts`. The answer is a `text/event-stream`, in the same framing as `/api/stream`, so it appears as it is generated and the page does not sit through a long silence.
 
-<!-- gen:snippet server/src/routes/chat.ts#chatRoutes lines=29-57 sha=c3ce83ad05b8 -->
-`server/src/routes/chat.ts:39-67` (lines 29 to 57 of chatRoutes)
+<!-- gen:snippet server/src/routes/chat.ts#chatRoutes lines=29-57 sha=c8a0c872bd7a -->
+`server/src/routes/chat.ts:41-69` (lines 29 to 57 of chatRoutes)
 
 ```ts
 // We write the raw stream ourselves; tell Fastify not to send a reply.
@@ -991,23 +1132,53 @@ const send = (event: string, data: unknown) => {
 // because a bodiless GET is never read, so it never finishes.) The
 // response's 'close' also fires after our own `end()`, which is harmless.
 const ac = new AbortController();
-reply.raw.on('close', () => {
-  closed = true;
-  ac.abort();
-});
+// The places this question takes in the lines of the slow reports: each is freed by the read it was taken for, when that ends (BK-88).
+const caller = callerOf(req);
+const taken: (() => void)[] = [];
+const place = (grab: (who: string) => (() => void) | null) => () => {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/routes/chat.ts#chatRoutes lines=59-108 sha=c3ce83ad05b8 -->
-`server/src/routes/chat.ts:69-118` (lines 59 to 108 of chatRoutes)
+<!-- gen:snippet server/src/routes/chat.ts#chatRoutes lines=59-108 sha=c8a0c872bd7a -->
+`server/src/routes/chat.ts:71-120` (lines 59 to 108 of chatRoutes)
 
 ```ts
+  if (release) taken.push(release);
+  return release;
+};
+reply.raw.on('close', () => {
+  closed = true;
+  // A reader who left stops what was begun for them and frees their places at once. An answer that was given whole leaves its reads to finish into the cache, where the next question finds them
+  // (a cold report queued behind the gate would otherwise lose its only reader and never run), and each frees its own place when it ends.
+  if (reply.raw.writableFinished) return;
+  ac.abort();
+  for (const release of taken.splice(0)) release();
+});
+
 const use = aiUse(req, 'chat');
 try {
   const snapStarted = Date.now();
-  const { text, meta, sizes, frozen } = await getSnapshot();
-  // A focus is garnish: without one the snapshot still answers the question.
-  const focus = await buildFocus(turns[turns.length - 1].content).catch(() => null);
+  // The model is shown what this user's own pages show them, and no more (ADR-0017): an administrator, and a portal with sign-in off, see the whole of it.
+  const modules = roleOf(req) === 'admin' ? null : modulesOf(req);
+  // The first question after a quiet spell waits for the slow views it needs, which the portal keeps for ten minutes.
+  await warmFor(turns[turns.length - 1].content, modules);
+  // A reader who left during that wait gets nothing more built for them: no snapshot and no detail reads (BK-91).
+  if (ac.signal.aborted) return void use.done('aborted');
+  const shown = modules ? sectionsFor(modules) : undefined;
+  const { text, meta, sizes, frozen } = await getSnapshot(shown);
+  if (ac.signal.aborted) return void use.done('aborted');
+  const previous = turns.slice(0, -1).reverse().find((t) => t.role === 'user')?.content;
+  // A focus is garnish: without one the snapshot still answers the question. A failure is logged, the error and not the question, so that a broken reader does not pass for a question that named nothing.
+  const focus = await buildFocus(turns[turns.length - 1].content, modules, {
+    operator: roleAllows(roleOf(req), 'operator'),
+    previous,
+    signal: ac.signal,
+    places: { heavy: place(takeHeavyPlace), sla: place(takeSliPlace) },
+  }).catch((err: unknown) => {
+    if (!ac.signal.aborted) req.log.warn({ err }, 'chat focus failed');
+    return null;
+  });
+  if (ac.signal.aborted) return void use.done('aborted');
   const snapshotMs = Date.now() - snapStarted;
   send('context', meta);
 
@@ -1015,50 +1186,20 @@ try {
   let firstTokenMs: number | null = null;
   let stats: OllamaStats = {};
   let answer = '';
-  const options = { focus: focus?.text, onStats: (s: OllamaStats) => (stats = s), onUsage: use.onUsage };
-  for await (const piece of streamAnswer(turns, text, ac.signal, options)) {
-    if (firstTokenMs === null) {
-      firstTokenMs = Date.now() - started;
-      // The model has read the whole prompt, snapshot included.
-      noteModelRead(systemText(text));
-    }
-    answer += piece;
-    send('token', { t: piece });
-  }
-  const ms = Date.now() - started;
-  use.done('answered');
-  send('done', { ms, text: cleanAnswer(answer), firstTokenMs });
-  req.log.info(
-    {
-      snapshotMs,
-      snapshotSizes: sizes,
-      frozen,
-      focus: focus && [...focus.sites, ...focus.hosts],
-      firstTokenMs,
-      ms,
-      turns: turns.length,
-      ...stats,
-    },
-    'chat answered',
-  );
-} catch (err) {
-  use.done(ac.signal.aborted ? 'aborted' : 'failed');
-  if (!ac.signal.aborted) {
-    const detail =
-      err instanceof AiUpstreamError || err instanceof ZabbixApiError || err instanceof ZabbixTimeoutError
-        ? err.detail
-        : undefined;
-    req.log.error({ err, detail }, 'chat failed');
-    send('error', { message: publicMessage(err) });
-  }
-} finally {
+  let truncated = false;
+  const options = {
+    focus: focus?.text,
+    onStats: (s: OllamaStats) => (stats = s),
+    onUsage: use.onUsage,
+    language: languageOf(req),
+    // Two lines of the same kind: the parts of the estate the pages do not show, and what this question asked for beyond the snapshot and was not given.
 ```
 <!-- /gen -->
 
 1. The route is a POST, because the conversation travels in the body, but it writes nothing: the model is read-only by construction. It runs behind `aiGuard('chat')`, and an answer from the hosted API or from a model outside the network is charged to the daily token budget through `aiUse`, which also logs one `ai_call` line when the answer ends: who asked, from where, `chat`, how it ended (`answered`, `failed` or `aborted`) and the tokens billed, and never the question or the answer.
-2. It writes the raw stream itself (`reply.hijack()`), and sends four kinds of event. `context` says what the model was shown. `token` is one piece of the answer, to be joined in order. `done` says the answer is finished, with the model's time, the wait for its first token, and the cleaned text that the page should keep in place of the raw tokens. `error` says the model failed part-way, or was busy with another question.
-3. A reader who navigates away must not leave the model generating for nobody. The abort listens on the response and not on the request: by the time the handler runs, Fastify has consumed the JSON body, so the request's `close` has already fired and would abort every answer before the first token.
-4. The snapshot comes from `getSnapshot` and the focus from `buildFocus`. A focus is garnish: when it fails, the snapshot still answers the question. When the first token arrives, `noteModelRead` records that the model has read the whole prompt, snapshot included.
-5. The log line says how long the snapshot took, the size of each section, whether the snapshot was reused (`frozen`), the sites and hosts focused, the time to the first token, and Ollama's own token counts. Errors go to the page as `publicMessage`, and the detail goes only to the log.
+2. It writes the raw stream itself (`reply.hijack()`), and sends four kinds of event. `context` says what the model was shown. `token` is one piece of the answer, to be joined in order. `done` says the answer is finished, with the model's time, the wait for its first token, the cleaned text that the page should keep in place of the raw tokens, `truncated` (the model stopped at its length limit), `remembered` (how many turns of the conversation the model was given, the question included, so that the page can show where its memory ends) and `language` (the one the answer was asked in). `error` says the model failed part-way, or was busy with another question.
+3. A reader who navigates away must not leave the model generating for nobody. The abort listens on the response and not on the request: by the time the handler runs, Fastify has consumed the JSON body, so the request's `close` has already fired and would abort every answer before the first token. It fires only when the response did not finish: an answer that was given whole leaves its slow reads to finish into the cache, where the next question finds them (a cold report queued behind the gate would otherwise lose its only reader and never run), and each read frees its own place in the person's lines when it ends. A reader who left frees their places at once (BK-88).
+4. Before the snapshot is built, `warmFor` waits for the slow views the question needs (the internet gauges, the list of busiest hosts), for at most 50 seconds, so that the first question after a quiet spell is not answered as if they were not there. The snapshot comes from `getSnapshot`, cut to the sections of the person's own pages unless they are an administrator, and the focus from `buildFocus`, which is given the same pages and reads the site and host blocks, the internet links and the details a question asks for only as far as those pages show them. The person's chosen language (`languageOf`) goes to `streamAnswer`. A reader who leaves during the wait gets nothing more built for them, no snapshot and no detail reads (BK-91). The focus is also given what the person is (an operator or not, for the names of those who acknowledged), the question before this one (for a follow-up), the abort signal and the places the slow reads take in the person's lines (BK-88). The system text gets two lines of what the person was not given (`withheld`): the parts of the estate their pages do not show, and what this question asked for beyond the snapshot and was not given. A focus is garnish: when it fails, the error is logged and the snapshot still answers the question. When the first token arrives, `noteModelRead` records that the model has read the whole prompt, snapshot included.
+5. The log line says how long the snapshot took, the size of each section, whether the snapshot was reused (`frozen`), the sites and hosts focused, which details were read beyond them (`detail`: past, values, details), the time to the first token, and Ollama's own token counts. Errors go to the page as `publicMessage`, and the detail goes only to the log.
 
 Tests: `chat-route.test.ts`, `chat.test.ts`, `ai-limits.test.ts` and `ai-errors.test.ts`.

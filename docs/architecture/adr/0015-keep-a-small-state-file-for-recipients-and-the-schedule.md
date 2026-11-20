@@ -3,7 +3,8 @@
 * Status: accepted
 * Deciders: HCML internship project; the owner asked on 4 November 2026 for the report to go by itself on the first day of each month at midnight, to the people the sender chooses, and for the manual send to stay
 * Date: 2026-11-04
-* Amended: 2026-11-16, by [ADR-0016](0016-keep-the-web-check-figures-of-closed-months.md): a second file, `closed-months.json`, beside `portal-state.json`, and `hcml-portal-ollama` mounts the volume too, for that file alone
+* Amended: 2026-11-16, by [ADR-0016](0016-keep-the-web-check-figures-of-closed-months.md): a second file, `closed-months.json`, beside `portal-state.json`, and `hcml-portal-ollama` mounts the volume too, for that file at first and, since the mail settings reached it on 16 November (FR-56) and its users on 17 November (ADR-0017), for all of them
+* Amended: 2026-11-17, by [ADR-0017](0017-keep-the-portals-users-in-a-file-of-their-own.md): a third file, `users.json`, beside `portal-state.json`, that holds the users and the hashes of their passwords
 * Amends: [ADR-0003](0003-no-database.md), the claim that the portal keeps nothing of its own, and [ADR-0014](0014-email-the-sla-report-through-smtp.md), the rule that a report goes only to the people in `MAIL_TO`
 
 ## Context and Problem Statement
@@ -24,7 +25,7 @@ What is the least the portal can keep, where, and what must it refuse to keep?
 * It has to survive a restart and a rebuild, and move to HCML's server with the portal.
 * A mistake in the file must not stop the portal from showing monitoring data.
 * The schedule has to be provable without waiting a month.
-* `hcml-portal-ollama` exists so that nothing leaves the machine. It has no mail settings, and it must not gain a place to keep a schedule it will never run (since 16 November it mounts the volume for the closed months' web figures only, ADR-0016).
+* `hcml-portal-ollama` first had no mail settings and no place to keep a schedule. Since 16 November it mounts the volume (ADR-0016) and passes the mail settings (FR-56, the owner's word), so its saved list and schedule are kept there too.
 * A stolen administrator session must not be able to send the estate anywhere without limit.
 
 ## Considered Options
@@ -43,7 +44,7 @@ Chosen: **one JSON file, `portal-state.json`, in the folder `PORTAL_STATE_DIR`, 
 * **What it holds.** The saved recipients (at most ten). The schedule: on or off, the day (1 to 28), the time, the file kinds, the style, up to three people to tell when a send fails, who set it and when. A record of the last 24 sends: the month, how it was sent, how many people it reached, how large, how many tries, and a word for why it failed. **Never** an address in a record, a figure from Zabbix, a report, or a password.
 * **How it is written.** The whole file to a temporary file in the same folder, synced, then renamed into place, with mode 0600, one change at a time in the order asked. A change that would leave the state unusable is refused before anything is written.
 * **How it is read.** At start. A file that cannot be read is put aside as `portal-state.json.broken-<time>`, never deleted, and the portal starts empty and says so. A part that is wrong (an address that is not an address, a day of 31) is dropped with a line in the log, and the schedule with a wrong field is dropped whole rather than guessed at.
-* **Without the folder.** The portal keeps the same in memory and says that it is not kept. It then refuses to save a schedule, since one that would not survive a restart must not look as if it would. `hcml-portal-ollama` had no volume and passed no `PORTAL_STATE_DIR` when this was decided; ADR-0016 gives it both, for one file of its own.
+* **Without the folder.** The portal keeps the same in memory and says that it is not kept. It then refuses to save a schedule, since one that would not survive a restart must not look as if it would. `hcml-portal-ollama` had no volume and passed no `PORTAL_STATE_DIR` when this was decided; ADR-0016 gives it both.
 * **The scheduler.** Inside the BFF, once a minute. A pure planner decides what is due from the clock, the schedule and the record: the report of a month goes on day D of the month after it, at the chosen time in the report's zone, ten minutes later so that Zabbix has the last values. A slot that came before the schedule was turned on, or before its day or time was changed, is never sent late. A send that fails is tried again after 15 minutes, an hour, then every four hours, until a week after the slot; the people who asked are told once after the third failed try and once when the portal gives up, once if the portal was not running for the whole week, and once when the mail server refused some of the addresses of a send that went (BK-38). Each step is written before the next, so a restart carries on, and a month is sent **at least once**, not exactly once: a crash between the mail server taking the message and the record being saved sends that month again, which is the better mistake.
 * **One copy only.** `MAIL_SCHEDULE=off` keeps the monthly send from running on a machine. Two copies of the portal that both read the same Zabbix would both send, so the copy that is not the one to send is switched off.
 * **Who a report may go to (amends ADR-0014).** An administrator, to the addresses they type, one to ten of them, each in `MAIL_ALLOWED_DOMAINS` when that list is set, five sends an hour for each person. `MAIL_TO` is only the list the portal starts with. The log line names the number of recipients and their domains and never an address.

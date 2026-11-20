@@ -11,11 +11,10 @@ from Zabbix, green derived by the portal, amber local to it.
 If you only want to read it, start with [`ERD-Domains.md`](vanilla/ERD-Domains.md): the same schema split
 into a one-screen domain map plus one detail diagram per domain. Forty-odd entities in a single
 picture is a lot to take in; that file is the readable form, and nothing in it differs from the
-`.mmd`. Pre-rendered copies of the single diagram sit alongside it:
+`.mmd`. A pre-rendered copy of the single diagram sits alongside it:
 
 - [`ERD-Mermaid.pdf`](vanilla/ERD-Mermaid.pdf): vector; zoom to any attribute and it stays sharp, and the
   text is searchable. The one to read.
-- [`ERD-Mermaid.png`](vanilla/ERD-Mermaid.png): 5168 px wide, rendered at 2× scale, for slides and documents.
 
 The tables underneath are in [`ERD-Database.md`](database/ERD-Database.md). This diagram is the portal's
 model: what it reads through the Zabbix API and what it derives. `ERD-Database.md`, with its own
@@ -100,12 +99,12 @@ what actually matters when working on this codebase is a two-layer domain model:
 
 | Layer | What it is | Where it lives |
 |---|---|---|
-| Zabbix entities | The objects the portal reads, and *only the fields it actually asks for* | Zabbix's MySQL database, reached via 14 read methods and 1 write |
+| Zabbix entities | The objects the portal reads, and *only the fields it actually asks for* | Zabbix's MySQL database, reached via 15 read methods and 1 write |
 | Portal entities | Objects the portal computes that Zabbix has no equivalent for | Nowhere: built per request, cached briefly, never stored |
 
 The tables do exist; they are Zabbix's. Since 15 September the dev stack runs Zabbix 7.0.30 on MySQL
 8.0, restored from HCML's own backup, and [`ERD-Database.md`](database/ERD-Database.md) draws 45 of its
-203 tables: the ones the portal's 15 API methods read or write, apart from the maintenance and dashboard tables
+203 tables: the ones the portal's 16 API methods read or write, apart from the maintenance and dashboard tables
 `maintenance.get` and `dashboard.get` read. Every column, key and foreign key there
 was taken from the live schema, which is identical to stock Zabbix 7.0.30. Each blue entity below
 names its table in its header; [`ERD-DatabaseSchema.md`](database-schema/ERD-DatabaseSchema.md) lists them all.
@@ -122,7 +121,7 @@ How Zabbix objects become portal objects. Each arrow is labelled with the deriva
 
 ```mermaid
 flowchart LR
-    subgraph ZBX["Zabbix: 14 read methods, 1 write"]
+    subgraph ZBX["Zabbix: 15 read methods, 1 write"]
         direction TB
         HOST[["host<br/>+ tags, groups,<br/>interfaces, inventory"]]
         ITEM[[item]]
@@ -333,7 +332,7 @@ This bounds the blast radius of a Zabbix upgrade:
 - Whole entities never touched: `user`, `usergroup`, `template`, `action`, `mediatype`,
   `script`, `httptest`, `valuemap`, `proxy`, `correlation`,
   `discoveryrule`. A web scenario is seen only through its result item, `web.test.fail[<scenario>]`, as
-  the Hosts view's web monitoring reads it. Portal authentication is entirely local (`PORTAL_USERS` in the environment), not
+  the Hosts view's web monitoring reads it. Portal authentication is entirely local (`PORTAL_USERS` in the environment and the portal's own users file), not
   Zabbix users, although every Zabbix call runs *as* the Zabbix user that owns the API token, and
   that user's role and host-group rights decide what `host.get` returns
   ([API token & permissions](database/ERD-Database.md#api-token--permissions)).
@@ -548,7 +547,7 @@ Where each derived entity is built, and from what.
 ### How a site is resolved
 
 `Site` has no Zabbix equivalent at all, so its definition lives entirely in code:
-`resolveSite()` in [`services/sites.ts`](../../server/src/services/sites.ts). First match wins:
+`resolveSite()` in [`domain/siteOf.ts`](../../server/src/domain/siteOf.ts), which the Sites page, the SLA reading and the Assistant all use (BK-103). First match wins:
 
 1. Host tag named by `SITE_TAG` (default `site`) → `source: 'tag'`
 2. The host's own name, parsed by `siteFromHostName()` in
@@ -649,7 +648,7 @@ Portal-defined enums, which exist only in this codebase:
 | `MeterLevel` (the zone of a meter) | `none` · `low` · `ok` · `warn` · `critical` |
 | `MeterLink` | `up` · `down` · `unknown` |
 | `DeviceKind` | `switch` · `firewall` · `access-point` · `repeater` · `server` · `wan-link` · `web` · `other` |
-| `Role` | `viewer` · `operator` · `admin` |
+| `Role` | `guest` · `operator` · `admin` |
 
 **A note on severity 2.** The reporting default floor is Warning, not Average. HCML's estate fires
 almost everything at severity 2, so a floor of 3 makes the availability report open empty. Zabbix has
@@ -718,7 +717,7 @@ Things a reader would otherwise get wrong.
 ## The two portals
 
 `myown/hcml-portal` and `myown/hcml-portal-ollama` share one source tree; the running portals differ
-only in `.env`, the compose file and the published port (`:8081` answers with hosted Claude, `:8082` with a local `qwen3:8b`). The data
+only in `.env`, the compose file and the published port (`:8081` answers with hosted Claude, `:8082` with a local model). The data
 model below therefore describes both, `CHAT_SNAPSHOT` included. The database diagram,
 [`database/ERD-Database.md`](database/ERD-Database.md), is unaffected either way: the assistant reads through the same API
 calls as the pages, so it touches no extra table.

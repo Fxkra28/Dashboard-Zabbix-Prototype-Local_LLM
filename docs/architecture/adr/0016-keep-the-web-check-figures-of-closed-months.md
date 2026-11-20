@@ -3,6 +3,7 @@
 * Status: accepted
 * Deciders: HCML internship project; the owner chose this on 16 November 2026, when asked whether a closed month's web check answers should be kept as they were, and so lifted for this one file the rule of 29 October that nothing of HCML's is kept on disk
 * Date: 2026-11-16
+* Amended: 2026-11-17, by [ADR-0017](0017-keep-the-portals-users-in-a-file-of-their-own.md): the rule that a file on the state volume holds nothing that identifies a person or a secret is kept for this file, and not for the third file beside it that holds the users
 * Amends: [ADR-0003](0003-no-database.md) and [ADR-0015](0015-keep-a-small-state-file-for-recipients-and-the-schedule.md), which say that the state holds no figure from Zabbix, and [ADR-0004](0004-derive-the-sla-in-the-portal.md), where a closed month was derived afresh every time
 
 ## Context and Problem Statement
@@ -39,7 +40,7 @@ Chosen: **a second small file, `closed-months.json`, in `PORTAL_STATE_DIR` (`/da
 * **A file of its own, not a part of `portal-state.json`.** The state file says in its header that it never holds a figure from Zabbix, and an older image that read a newer state file might take it for a file to put aside, and with it the recipients and the schedule. The new file is one an older image does not know and so does not touch.
 * **How it is written and read.** As the state is: the whole file to a temporary file in the same folder, synced, then renamed into place, mode 0600, one change at a time. At start a file that cannot be read, or is of another version, is put aside as `closed-months.json.broken-<time>`, never deleted, and the portal starts empty and says so. A month that is wrong is dropped and the rest are kept.
 * **Without a folder, or with one that takes no writes.** Nothing is kept, the page keeps its older sentence, and the log says so once. Figures kept only in memory would not outlive a restart, so they are not kept at all. A write that fails leaves the report as it came and is tried again at the next read.
-* **Both copies.** `hcml-portal-ollama` has no mail and so no schedule, but it reports the same months, so it now mounts the volume `portal-state` at `/data` as well, and holds only this file in it.
+* **Both copies.** `hcml-portal-ollama` reports the same months, so it mounts the volume `portal-state` at `/data` as well. It first held only this file there; since 16 November (FR-56) it keeps its saved list and schedule in it too.
 
 ### Positive Consequences
 

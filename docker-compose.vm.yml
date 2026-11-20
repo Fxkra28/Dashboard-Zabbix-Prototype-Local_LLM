@@ -1,0 +1,68 @@
+# The local model on the machine that hosts the portal: Ollama as one more service of the same project, on the portal's own network. Used on top of the portal's file:
+#
+#   docker compose -f docker-compose.yml [-f docker-compose.override.yml] -f docker-compose.vm.yml [-f docker-compose.vm-gpu.yml] up -d
+#
+# Written once, as COMPOSE_FILE in the machine's .env, so that every plain `docker compose` command, deploy/rebuild.sh and the restore use these same files and Ollama is never left an orphan
+# (docs/operations/vm-runbook.md step 5):
+#
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose.vm.yml[:docker-compose.vm-gpu.yml]
+#
+# Nothing here has run on a machine yet: it is not ours (docs/operations/vm-runbook.md says, step by step, what ran on a stand-in).
+#
+# Ollama listens inside the project's network, where portal-bff asks it at http://ollama:11434/v1. That name has no dot, which the local-only rule of hcml-portal-ollama counts as this machine's
+# own network (core/localHost.ts). Its port is published on the machine's loopback and nowhere else, so that deploy/model-speed.py, run on the machine, reaches it at its default address; nothing
+# off the machine can. The portal's address for it is written here and not as a setting: a line in .env, or in .env.example, must not be able to point the portal somewhere else (IN-99). The
+# monitoring pages do not wait for it: portal-bff has no depends_on here, and a model that is down shows the Assistant's offline notice, nothing else.
+#
+# The model is not in the image. Pull it once into the volume, then write its digest in the runbook:
+#   docker compose exec ollama ollama pull <model>          and set AI_MODEL=<model> in .env
+# The image tag is pinned, never "latest"; it is the Ollama our tests were run against, and the digest it resolves to is recorded when the machine first pulls it.
+#
+# Not hardened as the portal's own containers are (read-only root, no capabilities): that is untested with a card handed through and with the model files, and a first start that
+# fails for a reason of ours is worse than a container that is a little less shut. Tighten it once a start has worked.
+
+services:
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:0.33.3}
+    init: true
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      # One question at a time on the card; the next waits in Ollama's queue. Raising it multiplies the cache the card must hold.
+      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      # A model named ...-cloud is run by ollama.com once Ollama is signed in: the question and the estate would leave the machine. The portal refuses such a name under AI_LOCAL_ONLY, and this
+      # switches the service's own way to it off. A release of Ollama that does not know the setting ignores it.
+      OLLAMA_NO_CLOUD: "1"
+    expose:
+      - "11434"
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    # The model sits on the card; this keeps a model that falls back to the processor from taking the machine's memory from the portal.
+    mem_limit: ${OLLAMA_MEM_LIMIT:-16g}
+    memswap_limit: ${OLLAMA_MEM_LIMIT:-16g}
+    pids_limit: 512
+    restart: unless-stopped
+    # An anchor does not reach across files, so the rotation of the portal's own file is written out again.
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+  portal-bff:
+    environment:
+      AI_BASE_URL: http://ollama:11434/v1
+
+# The models, which outlive a rebuild. `docker compose down -v` deletes them, and the next pull is several gigabytes.
+volumes:
+  ollama-models:

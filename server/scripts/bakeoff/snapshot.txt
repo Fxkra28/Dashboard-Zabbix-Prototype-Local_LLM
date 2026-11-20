@@ -1,0 +1,70 @@
+SNAPSHOT taken Tue, 17 Nov 2026, 12:00 WIB (Asia/Jakarta)
+ESTATE: 24 hosts at 6 sites; 17 reachable, 5 unreachable, 1 SNMP silent without a ping alarm, 1 with no availability data.
+Open problems: 22 (Disaster 1, High 4, Average 5, Warning 8, Information 4, Not classified 0); 14 not acknowledged.
+
+ALL 22 OPEN PROBLEMS, COUNTED:
+- Hosts with no open problem: 2 of 24 monitored
+- Hosts with the most open problems: 1.1 ALPHA-FW01 1, 1.2.1 ALPHA-SW01 1, 1.2.2 ALPHA-SW02 1, 1.3 ALPHA-AP01 1, 2.1 BRAVO-FW01 1
+- Oldest open: [Information] 3.1 CHARLIE-FW01: Version of Zabbix agent has changed; open since 5 Nov 2026
+- 2nd oldest open: [Warning] 6.1 FOXTROT-FW01: Zabbix agent is not available; open since 10 Nov 2026
+- 3rd oldest open: [Warning] 2.1 BRAVO-FW01: Disk space is low; open since 14 Nov 2026
+
+SITES (6, worst first: highest open severity, then most hosts down):
+- Most open problems: FPSO KAS3 & BD-WHP 6, Jakarta 4, Surabaya 4
+- Most unreachable hosts: FPSO KAS3 & BD-WHP 3, Surabaya 1, SSB / Sampang 1
+- Jakarta: 4 hosts, 4 problems, worst Average
+- Surabaya: 5 hosts, 1 unreachable, 4 problems, 1 High/Disaster, worst High
+- SSB / Sampang: 4 hosts, 1 unreachable, 3 problems, 1 High/Disaster, worst High
+- FPSO KAS3 & BD-WHP: 6 hosts, 3 unreachable, 1 SNMP silent (no ping alarm), 6 problems, 3 High/Disaster, worst Disaster
+- Pasuruan / GMS: 2 hosts, 2 problems, worst Warning
+- Sumenep: 3 hosts, 1 no data, 3 problems, worst Warning
+
+NEW IN LAST 24 H: 17 problems opened (Disaster 1, High 3, Average 5, Warning 5, Information 3), newest first:
+- [Information] 5.1 ECHO-FW01: System uptime is less than 10 minutes; open 8 min, not acked
+- [Warning] 6.2.1 FOXTROT-SW01: High memory utilization; open 15 min, not acked
+- [Warning] 4.1 DELTA-FW01: High ICMP ping loss; open 25 min, not acked
+- [Disaster] 4.2.1 DELTA-SW01: Unavailable by ICMP ping; open 30 min, not acked
+- [High] 4.3.1 DELTA-AP01: Unavailable by ICMP ping; open 45 min, not acked
+- …and 12 older ones from the last 24 h
+
+UNREACHABLE HOSTS (5, by site; how long down in brackets):
+- FPSO KAS3 & BD-WHP (3): 4.2.1 DELTA-SW01 (30 min), 4.3.1 DELTA-AP01 (45 min), 4.3.2 DELTA-AP02 (45 min)
+- SSB / Sampang (1): INET : SAMPANG WAN 2 (2d)
+- Surabaya (1): 2.2.1 BRAVO-SW01 (5h)
+- Not down, SNMP silent, no ping alarm (1): 4.4 DELTA-RADIO01
+
+SLA:
+Derived SLA (target 99%, from ICMP triggers, not from Zabbix's own SLAs):
+- 2026-10: 98.42% strict, missed (23/24 devices with data)
+- 2026-10 by HCML's report method: 99.41% (ignores devices fully down)
+- 1 devices never measured (no ICMP data ever collected); HCML's method counts them as 100%
+- 2026-11 so far: 97.80% strict
+- All 3 sites below target 2026-10: FPSO KAS3 & BD-WHP 95.10%, Surabaya 97.90%, SSB / Sampang 98.50%
+- Worst devices 2026-10: 4.3.2 DELTA-AP02 91.20%, 4.2.1 DELTA-SW01 94.80%, INET : SAMPANG WAN 2 96.00%
+
+DEGRADED SERVICES:
+- Voice path: 96.20% this month; now: Unavailable by ICMP ping
+- Internet access: 98.10% this month; now: Unavailable by ICMP ping
+
+OPEN PROBLEMS (22, worst first; only the worst 20 are listed):
+- [Disaster] 4.2.1 DELTA-SW01: Unavailable by ICMP ping; open 30 min, not acked
+- [High] 4.3.1 DELTA-AP01: Unavailable by ICMP ping; open 45 min, not acked
+- [High] 4.3.2 DELTA-AP02: Unavailable by ICMP ping; open 45 min, not acked
+- [High] 2.2.1 BRAVO-SW01: Unavailable by ICMP ping; open 5h, acked
+- [High] INET : SAMPANG WAN 2: Unavailable by ICMP ping; open 2d, acked
+- [Average] 4.3.3 DELTA-AP03: Interface Gi0/1: Link down; open 55 min, not acked
+- [Average] 2.3.1 BRAVO-AP01: High ICMP ping loss; open 2h, not acked
+- [Average] 1.2.1 ALPHA-SW01: Interface Gi1/0/12: Link down; open 2h, not acked
+- [Average] 4.4 DELTA-RADIO01: High ICMP ping loss; open 4h, not acked
+- [Average] 1.2.2 ALPHA-SW02: High CPU utilization; open 10h, acked
+- [Warning] 6.2.1 FOXTROT-SW01: High memory utilization; open 15 min, not acked
+- [Warning] 4.1 DELTA-FW01: High ICMP ping loss; open 25 min, not acked
+- [Warning] 6.3 FOXTROT-AP01: No data from the device for 30 minutes; open 2h, not acked
+- [Warning] 1.1 ALPHA-FW01: High memory utilization; open 3h, not acked
+- [Warning] 3.2.1 CHARLIE-SW01: Interface Gi1/0/3: High error rate; open 1d, acked
+- [Warning] 5.2.1 ECHO-SW01: Interface Gi1/0/8: Link down; open 3d, acked
+- [Warning] 2.1 BRAVO-FW01: Disk space is low; open 3d 11h, acked
+- [Warning] 6.1 FOXTROT-FW01: Zabbix agent is not available; open 7d, acked
+- [Information] 5.1 ECHO-FW01: System uptime is less than 10 minutes; open 8 min, not acked
+- [Information] 2.3.2 BRAVO-AP02: Number of clients is high; open 1h, not acked
+- …and 2 more not listed (of those: Information 2)

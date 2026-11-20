@@ -71,6 +71,7 @@ describe('a read that never answers (tracker FR-11)', () => {
       Promise.resolve({
         ok: true,
         status: 200,
+        headers: new Headers(),
         json: () =>
           new Promise((_resolve, reject) => init.signal?.addEventListener('abort', () => reject(aborted()))),
       }),

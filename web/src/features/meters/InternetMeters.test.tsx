@@ -3,7 +3,7 @@ import { render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { api } from '../../api';
 import { resetAuthProbe } from '../../shared/hooks/useAuth';
-import type { Role } from '../../types';
+import { meFor, type Kind } from '../../__tests__/accounts';
 import InternetMeters from './InternetMeters';
 import { useMeters } from './useMeters';
 import { meter, response, without } from '../../__tests__/meters';
@@ -13,9 +13,9 @@ import { meter, response, without } from '../../__tests__/meters';
 afterEach(() => vi.restoreAllMocks());
 
 /** Who is signed in: the role decides whether a setting's name is shown (UX-53). */
-const signedInAs = (role: Role) => {
+const signedInAs = (role: Kind) => {
   resetAuthProbe();
-  vi.spyOn(api, 'me').mockResolvedValue({ authEnabled: true, user: { name: 'x', role }, expiresIn: 3600 });
+  vi.spyOn(api, 'me').mockResolvedValue(meFor(role));
 };
 
 /** The Dashboard holds the request (useMeters.ts) and hands it to the section; so does this. */
@@ -84,7 +84,7 @@ describe('InternetMeters', () => {
   });
 
   // A wall screen or an operator cannot set a server setting, so the page tells them whom to ask and keeps the name out of their sight.
-  it.each<Role>(['wall', 'operator'])('tells %s to ask the portal admin, and shows no setting name', async (role) => {
+  it.each<Kind>(['wall', 'operator'])('tells %s to ask the portal admin, and shows no setting name', async (role) => {
     signedInAs(role);
     vi.spyOn(api, 'netMeters').mockResolvedValue(response([], { found: false, dashboard: 'Global view' }));
     show();

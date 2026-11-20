@@ -108,6 +108,14 @@ export const IconShield = ({ size }: P) => (
   </svg>
 );
 
+export const IconUsers = ({ size }: P) => (
+  <svg {...base(size)}>
+    <circle cx="9" cy="8" r="3.2" />
+    <path d="M3 19c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
+    <path d="M16 5.2a3 3 0 0 1 0 5.6M18 14c1.8.6 3 2.2 3 5" />
+  </svg>
+);
+
 export const IconService = ({ size }: P) => (
   <svg {...base(size)}>
     <rect x="9" y="3" width="6" height="5" rx="1.5" />

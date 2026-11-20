@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { requiredRole, roleAllows, setupAuth, tokenClaims } from '../security/auth.js';
+import { MODULE_IDS, accessOf, grantable, judge, presetFor, refusalText, roleFromName, ruleFor } from '../security/modules.js';
 import { registerErrorHandler } from '../http/errors.js';
 import { sliExportRoutes } from '../routes/sliExport.js';
 import { sampleSliReports } from './helpers/sliReportFixture.js';
@@ -19,35 +20,37 @@ vi.mock('../services/sli.js', async (importOriginal) => {
 });
 
 /**
- * The route rules are an ordered regex list where the first match wins and
- * anything unmatched falls back to `viewer`. A typo in one pattern silently
- * downgrades an endpoint, no error, no log line, just an admin report served
- * to any signed-in user. This table is the only thing that would catch it.
+ * The routes are an ordered regex table where the first match wins and anything unmatched is closed to everyone but administrators (modules.ts). A typo in one pattern
+ * silently moves an endpoint, no error, no log line, just an admin report served to any signed-in user. This table is the only thing that would catch it.
  */
 describe('requiredRole', () => {
   const cases: [string, ReturnType<typeof requiredRole>][] = [
     ['/api/reports/inventory', 'admin'],
-    ['/api/links', 'wall'],
-    ['/api/net/devices', 'wall'],
-    ['/api/net/interfaces', 'wall'],
-    ['/api/net/meters', 'wall'],
+    ['/api/users', 'admin'],
+    ['/api/users/:name', 'admin'],
+    ['/api/users/:name/password', 'admin'],
+    ['/api/links', 'guest'],
+    ['/api/net/devices', 'guest'],
+    ['/api/net/interfaces', 'guest'],
+    ['/api/net/meters', 'guest'],
     ['/api/sli/email', 'admin'],
     ['/api/sli/schedule', 'admin'],
     ['/api/sli/recipients', 'admin'],
     ['/api/problems/acknowledge', 'operator'],
     ['/api/problems/close', 'operator'],
-    ['/api/hosts', 'viewer'],
-    ['/api/devices', 'viewer'],
-    ['/api/reports/top-hosts', 'viewer'],
-    ['/api/reports/web-monitoring', 'viewer'],
-    ['/api/problems', 'viewer'],
-    ['/api/reports/availability', 'viewer'],
-    ['/api/reports/noise', 'viewer'],
-    ['/api/sla', 'viewer'],
-    ['/api/sli', 'viewer'],
-    ['/api/sli/export', 'viewer'],
-    ['/api/explain/problem', 'viewer'],
-    ['/api/chat', 'viewer'],
+    ['/api/hosts', 'guest'],
+    ['/api/devices', 'guest'],
+    ['/api/reports/top-hosts', 'guest'],
+    ['/api/reports/web-monitoring', 'guest'],
+    ['/api/problems', 'guest'],
+    ['/api/reports/availability', 'guest'],
+    ['/api/reports/noise', 'guest'],
+    ['/api/sla', 'guest'],
+    ['/api/sli', 'guest'],
+    ['/api/sli/export', 'guest'],
+    ['/api/explain/problem', 'guest'],
+    ['/api/chat', 'guest'],
+    ['/api/auth/password', 'guest'],
   ];
 
   it.each(cases)('%s requires %s', (url, role) => {
@@ -55,59 +58,124 @@ describe('requiredRole', () => {
   });
 
   it('fails closed on an unknown route', () => {
-    // A route added without a rule must still demand a login, never be public.
-    expect(requiredRole('/api/something-invented-later')).toBe('viewer');
+    // A route added without a row must still demand a login, and then an administrator, never be open.
+    expect(requiredRole('/api/something-invented-later')).toBe('admin');
+    expect(ruleFor('/api/something-invented-later')).toBeUndefined();
   });
 
-  it('keeps the item, latest-data and map-detail routes at viewer: a viewer is kept from interface data inside them (SC-20)', () => {
-    // Not by a route rule: these three serve the Graphs, Latest data and Maps pages. viewerPolicy.ts cuts the
-    // net.if items and the network hosts for a viewer; viewer-network.test.ts pins that. A rule here would
-    // lock the viewer out of the whole page instead.
+  it('gives the item, latest-data and map-detail routes to the pages that use them, and the network routes to the Network module alone (SC-20)', () => {
+    // Not by a route rule on the role: these routes serve the Graphs, Latest data and Maps pages. viewerPolicy.ts cuts the
+    // net.if items and the network hosts for an account without the Network module; viewer-network.test.ts pins that.
     for (const url of ['/api/items', '/api/latest', '/api/maps/detail', '/api/maps', '/api/graph']) {
-      expect(requiredRole(url), url).toBe('viewer');
+      expect(requiredRole(url), url).toBe('guest');
+      expect(ruleFor(url)!.modules, url).not.toContain('network');
     }
+    for (const url of ['/api/net/devices', '/api/net/interfaces', '/api/net/meters']) expect(ruleFor(url)!.modules, url).toEqual(['network']);
   });
 
-  it('keeps the SLA download at viewer, whatever else shares its prefix', () => {
+  it('keeps the SLA download at guest, whatever else shares its prefix', () => {
     // /api/sli/export must not inherit a stricter rule from a neighbour, nor be left public by one.
-    expect(requiredRole('/api/sli/export')).toBe('viewer');
-    expect(requiredRole('/api/sli/export/anything')).toBe('viewer');
+    expect(requiredRole('/api/sli/export')).toBe('guest');
+    expect(requiredRole('/api/sli/export/anything')).toBe('guest');
+    expect(ruleFor('/api/sli/export')!.modules).toEqual(['sla']);
   });
 
   it('does not let a prefix collision leak the admin report', () => {
     // `/api/reports/inventory` is admin; its siblings must not inherit that,
     // and nothing else may accidentally match the inventory pattern.
-    expect(requiredRole('/api/reports/aging')).toBe('viewer');
-    expect(requiredRole('/api/reports/capacity')).toBe('viewer');
+    expect(requiredRole('/api/reports/aging')).toBe('guest');
+    expect(requiredRole('/api/reports/capacity')).toBe('guest');
+    expect(ruleFor('/api/reports/inventory')!.modules).toEqual(['inventory']);
+  });
+
+  it('knows the roles an older .env or session names', () => {
+    expect(roleFromName('viewer')).toBe('guest');
+    expect(roleFromName('wall')).toBe('guest');
+    expect(roleFromName('guest')).toBe('guest');
+    expect(roleFromName('operator')).toBe('operator');
+    expect(roleFromName('superuser')).toBeUndefined();
+    expect(roleFromName(7)).toBeUndefined();
+  });
+
+  it.each(['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__', 'isPrototypeOf'])('reads the name of an object property, %s, as no role (BK-101)', (name) => {
+    expect(roleFromName(name)).toBeUndefined();
   });
 });
 
 describe('roleAllows', () => {
   it('permits equal or higher rank only', () => {
-    expect(roleAllows('admin', 'viewer')).toBe(true);
+    expect(roleAllows('admin', 'guest')).toBe(true);
     expect(roleAllows('admin', 'operator')).toBe(true);
     expect(roleAllows('admin', 'admin')).toBe(true);
-    expect(roleAllows('operator', 'viewer')).toBe(true);
+    expect(roleAllows('operator', 'guest')).toBe(true);
     expect(roleAllows('operator', 'operator')).toBe(true);
-    expect(roleAllows('operator', 'wall')).toBe(true);
-    expect(roleAllows('wall', 'wall')).toBe(true);
-    expect(roleAllows('wall', 'viewer')).toBe(true);
-    expect(roleAllows('viewer', 'viewer')).toBe(true);
+    expect(roleAllows('guest', 'guest')).toBe(true);
   });
 
   it('refuses to escalate', () => {
-    expect(roleAllows('viewer', 'operator')).toBe(false);
-    expect(roleAllows('viewer', 'wall')).toBe(false);
-    expect(roleAllows('viewer', 'admin')).toBe(false);
+    expect(roleAllows('guest', 'operator')).toBe(false);
+    expect(roleAllows('guest', 'admin')).toBe(false);
     expect(roleAllows('operator', 'admin')).toBe(false);
   });
+});
 
-  it('keeps a wall screen read-only: it reads the network pages and can never acknowledge or close (MT-06)', () => {
-    expect(roleAllows('wall', requiredRole('/api/net/meters'))).toBe(true);
-    expect(roleAllows('wall', requiredRole('/api/links'))).toBe(true);
-    expect(roleAllows('wall', requiredRole('/api/problems/acknowledge'))).toBe(false);
-    expect(roleAllows('wall', requiredRole('/api/problems/close'))).toBe(false);
-    expect(roleAllows('wall', requiredRole('/api/reports/inventory'))).toBe(false);
+describe('judge: the role and then the modules', () => {
+  const guest = accessOf('guest', ['dashboard', 'problems']);
+  const operator = accessOf('operator', ['problems']);
+  const admin = accessOf('admin', []);
+
+  it('lets in a user who holds one of the modules that own the route, and refuses the rest', () => {
+    expect(judge(guest, '/api/problems')).toEqual({ ok: true });
+    expect(judge(guest, '/api/stats')).toEqual({ ok: true });
+    expect(judge(guest, '/api/sla')).toEqual({ ok: false, why: 'module', modules: ['sla', 'services'] });
+    expect(judge(guest, '/api/net/devices')).toEqual({ ok: false, why: 'module', modules: ['network'] });
+  });
+
+  it('asks for the role first, so a module cannot stand in for one', () => {
+    expect(judge(guest, '/api/problems/acknowledge')).toEqual({ ok: false, why: 'role', needs: 'operator' });
+    expect(judge(operator, '/api/problems/acknowledge')).toEqual({ ok: true });
+    // Holding the module is not holding the role, and the other way round.
+    expect(judge(accessOf('operator', ['sla']), '/api/problems/acknowledge')).toEqual({ ok: false, why: 'module', modules: ['problems'] });
+  });
+
+  it('keeps an admin-only route for administrators, whatever the grants say', () => {
+    expect(judge(accessOf('guest', ['sla', 'inventory', 'users']), '/api/sli/email')).toEqual({ ok: false, why: 'role', needs: 'admin' });
+    expect(judge(accessOf('operator', ['inventory']), '/api/reports/inventory')).toEqual({ ok: false, why: 'role', needs: 'admin' });
+    expect(judge(accessOf('operator', ['users']), '/api/users')).toEqual({ ok: false, why: 'role', needs: 'admin' });
+    expect(judge(admin, '/api/users')).toEqual({ ok: true });
+    expect(judge(admin, '/api/sli/email')).toEqual({ ok: true });
+  });
+
+  it('closes a route with no row to everyone but administrators', () => {
+    expect(judge(guest, '/api/invented')).toEqual({ ok: false, why: 'closed' });
+    expect(judge(operator, '/api/invented')).toEqual({ ok: false, why: 'closed' });
+    expect(judge(admin, '/api/invented')).toEqual({ ok: true });
+  });
+
+  it('leaves the routes every signed-in user needs to everyone', () => {
+    expect(judge(accessOf('guest', []), '/api/auth/refresh')).toEqual({ ok: true });
+    expect(judge(accessOf('guest', []), '/api/auth/password')).toEqual({ ok: true });
+  });
+
+  it('never gives a role a module whose page it cannot reach: an administrator\'s pages are the administrator\'s', () => {
+    expect([...accessOf('guest', ['inventory', 'users', 'sla']).modules]).toEqual(['sla']);
+    expect([...accessOf('operator', ['users', 'network']).modules]).toEqual(['network']);
+    expect(accessOf('admin', []).modules.size).toBe(MODULE_IDS.length);
+  });
+
+  it('says why in words', () => {
+    expect(refusalText({ ok: false, why: 'role', needs: 'operator' }, 'guest')).toBe('This view needs the "operator" role; you are signed in as "guest".');
+    expect(refusalText({ ok: false, why: 'module', modules: ['sla', 'services'] }, 'guest')).toBe('Your account does not have SLA or Services. Ask an administrator for access.');
+    expect(refusalText({ ok: false, why: 'closed' }, 'guest')).toBe('This view is for administrators.');
+  });
+
+  it('starts a new user of each role from the pages that role is meant for', () => {
+    expect(presetFor('guest')).not.toContain('network');
+    expect(presetFor('operator')).toEqual(expect.arrayContaining(['network', 'links', 'sla']));
+    expect(presetFor('operator')).not.toContain('inventory');
+    expect(presetFor('admin')).toEqual([...MODULE_IDS]);
+    expect(grantable('guest')).not.toContain('users');
+    expect(grantable('admin')).toContain('users');
   });
 });
 
@@ -199,7 +267,7 @@ describe('GET /api/sli/export behind the guard', () => {
     // The guard takes the header and pays the junk no mind; the route then turns the stray parameter away.
     const stray = await app.inject({ url: `${url}&token=junk`, headers: bearer(token) });
     expect(stray.statusCode).toBe(400);
-    expect(stray.json()).toMatchObject({ message: 'Only month, format, decimal, date and separator are accepted.' });
+    expect(stray.json()).toMatchObject({ message: 'Only month, from, to, dayHours, days, format, decimal, date and separator are accepted.' });
   });
 
   it('takes the session cookie, which is how a browser download arrives', async () => {

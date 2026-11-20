@@ -1,8 +1,10 @@
 import { zbx } from '../clients/zabbix.js';
 import { cached, SLOW_VIEW } from '../core/cache.js';
 import { config } from '../core/config.js';
-import { naturalCompare, siteFromHostName } from '../domain/naming.js';
+import { naturalCompare } from '../domain/naming.js';
 import { getIcmpByHost, isFresh } from '../domain/reachability.js';
+import { SITE_SIGNALS, withSite } from './sites.js';
+import type { ZHostMeta } from '../domain/queries.js';
 
 export type OperStatus =
   | 'up'
@@ -34,6 +36,8 @@ export interface ZIfItem {
   value_type: string;
   state: string;
   status: string;
+  /** The update interval, so that freshness is judged by the item's own and not by 60 s (BK-95). */
+  delay?: string;
 }
 
 export interface InterfaceRow {
@@ -160,6 +164,7 @@ export function getNetDevices() {
     const hostParams: Record<string, unknown> = {
       output: ['hostid', 'name', 'status'],
       selectInterfaces: ['ip', 'type'],
+      ...SITE_SIGNALS,
       sortfield: 'name',
     };
     if (config.netGroupIds.length) hostParams.groupids = config.netGroupIds;
@@ -168,19 +173,15 @@ export function getNetDevices() {
     // every monitored host and shared with Sites and Hosts. A value is only believed while fresh:
     // collected, supported and recent. `lastclock '0'` (never polled / no recent data) is
     // `unknown`, not `lastvalue ''` read as "down", and so is a value hours old.
-    const [hosts, icmp] = await Promise.all([
-      zbx<{ hostid: string; name: string; status: string }[]>('host.get', hostParams),
-      getIcmpByHost(),
-    ]);
+    const [hosts, icmp] = await Promise.all([zbx<ZHostMeta[]>('host.get', hostParams), getIcmpByHost()]);
 
     return hosts
       .map((h) => {
         const r = icmp.get(h.hostid);
-        // Loss and latency stay on this route, which starts at the wall role; the viewer
-        // routes (Sites, Hosts) carry only the derived state.
+        // Loss and latency stay on this route, which needs the Network page; the routes of
+        // Sites and Hosts carry only the derived state.
         return {
-          ...h,
-          site: siteFromHostName(h.name),
+          ...withSite(h),
           icmp: r ? { up: r.up, loss: r.loss, latency: r.latency, state: r.state } : null,
         };
       })
@@ -211,7 +212,7 @@ export async function getInterfacePage({ hostid, search, status: wanted, page, p
           hostids: [hostid],
           search: { key_: 'net.if.' },
           startSearch: true,
-          output: ['itemid', 'name', 'key_', 'lastvalue', 'lastclock', 'units', 'value_type', 'state', 'status'],
+          output: ['itemid', 'name', 'key_', 'lastvalue', 'lastclock', 'units', 'value_type', 'state', 'status', 'delay'],
         }),
       ),
     { ...SLOW_VIEW, typed: true },

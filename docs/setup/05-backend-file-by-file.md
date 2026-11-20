@@ -46,14 +46,14 @@ This part keeps the layers above and the endpoint reference below.
 |---|---|---|
 | `GET /api/health` | `{ ok, ts, ai, aiProvider, aiExternal, writeBack, defaults, ready }` for anyone (`ready` is a plain `true` or `false`), plus `version, startedAt, build, streams, logFile` and `ready` as an object for a signed-in caller: capability flags (the UI hides actions that aren't configured), the build, whether Zabbix answers, and the screens streaming. Public; 200 even when Zabbix is down | `ready` 15 s |
 | `GET /api/ready` | the same facts as a signed-in `/api/health`, plus `ok`; answers 503 while the portal cannot read Zabbix, so a monitor that holds a token needs only the status code. Guarded like any route | `ready` 15 s |
-| `GET /api/hosts` | hosts + interfaces (ip/type/available) | 30 s |
-| `GET /api/hosts/overview` | hosts + per-host problem severity counts | 15 s |
+| `GET /api/hosts` | hosts + interfaces (ip/type/available) + `site`, by the four signals of the Sites page | 30 s |
+| `GET /api/hosts/overview` | hosts + per-host problem severity counts, reachability and `site` | 15 s |
 | `GET /api/hostgroups` | host groups (real hosts only) | 60 s |
 | `GET /api/items?hostid=&search=` | items of a host | 30 s |
 | `GET /api/latest?hostid=\|groupid=&search=` | items + last value/time/prev | 15 s |
 | `GET /api/problems` | enriched current problems | 15 s |
 | `GET /api/net/devices` | network hosts + ICMP up/loss/latency | 30 s |
-| `GET /api/net/meters` | the gauge widgets of a Zabbix dashboard as meters: item, capacity, colour zones, last value (wall role or above) | 30 s, the dashboard 2 min |
+| `GET /api/net/meters` | the gauge widgets of a Zabbix dashboard as meters: item, capacity, colour zones, last value (for an account that has the Network page) | 30 s, the dashboard 2 min |
 | `GET /api/devices` | every host with its kind of device and template, as the Hosts page lists it | 30 s |
 | `GET /api/reports/top-hosts?limit=` | the hosts with the highest CPU and memory use now, 10 each unless asked (up to 20) | 30 s |
 | `GET /api/reports/web-monitoring?limit=` | web scenarios that pass, fail or have no current result, and the failed ones (10 unless asked, up to 50) | 30 s |
@@ -66,28 +66,38 @@ This part keeps the layers above and the endpoint reference below.
 | `GET /api/sites` | sites + rolled-up health + hosts, worst first | 15 s |
 | `GET /api/sla` | configured SLAs (name, SLO, period) | 60 s |
 | `GET /api/sla/sli?slaid=&serviceid=` | current-period SLI per service | 60 s |
-| `GET /api/services` | service tree + roll-up status, root causes, SLA | 30 s |
+| `GET /api/services` | service tree + roll-up status, root causes, SLA; cut at 5,000 nodes, and then `truncated` | 30 s |
 | `GET /api/links` | ICMP link health, loss/latency/jitter, redundant paths | 20 s |
 | `GET /api/reports/inventory` | standardisation scorecard + gap list *(admin)* | 60 s |
 | `GET /api/reports/availability?days=&severity=` | per-host uptime over a window | 120 s |
 | `GET /api/reports/aging` | unacknowledged problems by age | 15 s |
-| `GET /api/reports/capacity?days=&top=` | CPU / memory / filesystem trends, and the busiest interfaces | 1 h, then served up to 23 h stale while it is read again |
+| `GET /api/reports/capacity?days=&top=` | CPU / memory / filesystem trends, and the interfaces busiest when the report was built (`generatedAt`) | 1 h, then served up to 23 h stale while it is read again |
 | `GET /api/reports/noise?days=&severity=` | flapping / unactioned / chronic triggers | 120 s |
 | `POST /api/problems/acknowledge` | acknowledge and/or close (operator) | writes |
 | `GET /api/explain/problem?eventid=` | plain-language summary + tag glossary | 1 h |
 | `GET /api/explain/sla?slaid=&serviceid=` | plain-language SLA standing | 5 min |
 | `POST /api/chat` | SSE assistant answer: `context` → `token`… → `done` / `error`. See [§24](24-assistant.md#24-assistant-chat) | snapshot reads share the page caches |
-| `GET /api/stream` | SSE live problems | live |
+| `GET /api/stream` | SSE live problems; it ends with the session or the account, and the page reconnects (§7) | live |
 | `POST /api/auth/login` | `{ user, expiresIn }`; the token goes into the httpOnly session cookie, never the body (§8) | none |
-| `GET /api/auth/me` | `{ authEnabled, user: { name, role }, expiresIn }`, drives the sidebar's role filter and times renewal | none |
+| `GET /api/auth/me` | `{ authEnabled, user: { name, role, displayName, source }, expiresIn, pages, modules }`, drives the sidebar (only the pages the account has) and times renewal, says `mustChange` for a temporary password, and `source` tells an account of `.env` from one of the users file; the page asks again when a tab is shown and every ten minutes | none |
 | `POST /api/auth/refresh` | a fresh cookie and `{ user, expiresIn }` for a still-valid session, so an open portal stays signed in (§8) | none |
 | `POST /api/auth/logout` | clears the session cookie; public, so an expired session can still sign out | none |
+| `POST /api/auth/password` | a person's own change of password: the current one and a new one; ends their older sessions and answers with a fresh cookie, and is refused for an account kept in `.env` (§19) | none |
+| `GET /api/users` | the users, the modules and presets to choose from, and whether the users can be changed; administrators only | none |
+| `POST /api/users` | adds a user with a temporary password; administrators only | none |
+| `PATCH /api/users/{name}` | changes a user's role, pages, name shown, language, expiry or disabled state; administrators only | none |
+| `POST /api/users/{name}/password` | resets a user's password, which they must change at the next sign-in; administrators only | none |
+| `GET /api/auth/request` | whether the sign-in page offers a request for an account, and the pages it may ask for; public, and `enabled: false` unless `ACCOUNT_REQUESTS` is on (§19) | none |
+| `POST /api/auth/request` | leaves a request for an account: a name, the pages wanted and a reason; public, capped per address and in all, and the answer is the same whether it was kept or was a copy (§19) | none: it writes the requests file |
+| `GET /api/users/requests` | the requests waiting, the oldest first; administrators only (§19) | none |
+| `POST /api/users/requests/{id}/approve` | makes the account the administrator types, with a temporary password, and takes the request off the list; administrators only (§19) | none: it writes the users file |
+| `POST /api/users/requests/{id}/refuse` | takes the request off the list; administrators only (§19) | none: it writes the requests file |
 | `GET /api/graph` | chart-ready series for 1 to 4 numeric items over a pinned window | 15 s for a window that ends now, 10 min for one that does not |
 | `GET /api/net/interfaces?hostid=` | SNMP interfaces with oper/admin status, speed, utilisation | 15 s |
 | `GET /api/sli?month=&profile=` | the derived monthly SLA (§25) | 24 h for a closed month, 5 min for the current one |
-| `GET /api/sli/export?month=&format=` | the monthly SLA report as a PDF, an Excel file or a zip of CSV files, not JSON, in the number and date style asked for (§18) | none of its own beyond ten seconds of reuse: it reads the cached reports `/api/sli` fills |
+| `GET /api/sli/export?month=&format=` (or `from=&to=&dayHours=&days=`) | the SLA report for a month or a range as a PDF, an Excel file or a zip of CSV files, not JSON, in the number and date style asked for (§18) | none of its own beyond ten seconds of reuse: it reads the cached reports `/api/sli` fills |
 | `GET /api/sli/email` | whether the report can be emailed, from which address, to whom by default and how far a list may go, for administrators (§18) | none: it reads the settings and the saved list |
-| `POST /api/sli/email` | emails one month's report, in one to three formats, to the addresses given (or the saved list), in the style given; administrators only (§18) | none of its own: it reads the cached reports `/api/sli` fills |
+| `POST /api/sli/email` | emails the report of a month, or of a `window` and its hours, in one to three formats, to the addresses given (or the saved list), in the style given; administrators only (§18) | none of its own: it reads the cached reports `/api/sli` fills |
 | `GET /api/sli/schedule` | the monthly send: whether it can run, how it is set, when it goes next, and the last twelve sends; administrators only (§18) | none: it reads the state file |
 | `PUT /api/sli/schedule` | sets the monthly send and the saved recipients; administrators only (§18) | none |
 | `PUT /api/sli/recipients` | saves the list of recipients (up to ten, each inside the allowed domains) without sending anything; administrators only (§18) | none: it writes the state file |

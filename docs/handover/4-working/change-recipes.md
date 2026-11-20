@@ -2,7 +2,7 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Developers | about 9 min | [Deploy, rebuild and roll back](deploy-rebuild-rollback.md) | [Troubleshooting](troubleshooting.md) |
+| Developers | about 10 min | [Deploy, rebuild and roll back](deploy-rebuild-rollback.md) | [Troubleshooting](troubleshooting.md) |
 
 Eleven changes that come up, each as the list of places to touch and the check that fails if one is forgotten. The portal is arranged so that most checks fail loudly. A recipe is therefore short, and the tests are the proof that it is complete. Run `npm run verify` after each, in both copies, as the last step of every recipe.
 
@@ -12,7 +12,7 @@ Every existing page is an instance of this pattern.
 
 1. The service. Add a function to `server/src/services/<area>.ts` that calls `zbx('<method>', {...})`, shapes the answer, and takes plain arguments. It knows nothing of Fastify's request and reply, so a test calls it directly. Wrap what is costly in `cached` with a lifetime. Ask for a stale window (`staleReport`, or `SLOW_VIEW` for a slow view) only where an old copy is honest, and never for problem state.
 2. The route. Add `server/src/routes/<area>.ts`, a registrar that names the path, checks the query with `singleValues`, `requireId` and `intParam`, and calls the service. Register it in `server/src/index.ts`, after `setupAuth`. A route imports services and never another route, and `layering.test.ts` fails if it does.
-3. The contract. Add the path to `docs/api/openapi.yaml`. `npm run check:api` fails on a route that is registered and not described. If the page is in the sidebar, add it to `PAGE_API` in `server/src/security/pageAccess.ts`, so that the menu and the guard agree on who may open it. Add its row to the endpoint table of `docs/setup/05-backend-file-by-file.md`, which `facts.check` compares with the routes.
+3. The contract. Add the path to `docs/api/openapi.yaml`. `npm run check:api` fails on a route that is registered and not described. Give the route a row in `ROUTES` in `server/src/security/modules.ts`, which `surface.test.ts` requires, and, if the page is in the sidebar, a module for it in `MODULES`, so that the menu and the guard agree on who may open it. Add its row to the endpoint table of `docs/setup/05-backend-file-by-file.md`, which `facts.check` compares with the routes.
 4. The types. Add the shape to the file of its feature in `web/src/types/` and export it from `types/index.ts`. Describe the same answer in the YAML, and run `npm run gen:api` in `web/`. The typecheck fails where the file promises less than the type needs.
 5. The guard and the call. Add a guard to `web/src/guards/`, a method to the file of its feature in `web/src/api/`, and its path with its type to the table at the top of `web/src/__tests__/openapiTypes.test.ts`, which fails for a data call that is not in it.
 6. The page. Put it in `web/src/features/<feature>/` with its test beside it. A new feature is a new folder and a line in the table of `web/src/__tests__/layering.test.ts`. Build it with `useAsync` and `Async`, and reuse what is in `shared/`.
@@ -20,10 +20,10 @@ Every existing page is an instance of this pattern.
 
 ## 2. Change who may call a route
 
-1. Edit `ROUTE_RULES` in `server/src/security/auth.ts`. A pattern and the lowest role for it. A route that matches none needs a viewer.
+1. Edit the row of the route in `ROUTES` in `server/src/security/modules.ts`: a pattern, the pages that own the route, and the lowest role for it. A route that matches no row is for administrators only.
 2. Update `surface.test.ts`, which pins every route and its role. A change to who may call what has to be made on purpose, in two places.
-3. If it is a menu page, `pageRoles` follows by itself, since it runs `requiredRole` over the route that fills each page. Update the description of the route in `docs/api/openapi.yaml`, and the roles table in `docs/handover/0-everyone/who-can-do-what.md`.
-4. Confirm with a signed-in account of the lower role that the page now says "This page is for ..." and the call is a 403.
+3. If it is a menu page, the menu follows by itself, since `pagesOf` reads the same table. Update the description of the route in `docs/api/openapi.yaml`, and the roles table in `docs/handover/0-everyone/who-can-do-what.md`.
+4. Confirm with a signed-in account of the lower role, or without the page, that the page now says it is not available to them and the call is a 403.
 
 ## 3. Add a setting
 
@@ -35,11 +35,13 @@ Every existing page is an instance of this pattern.
 
 ## 4. Add a user, a role or a password
 
-Users come from the environment, in `PORTAL_USERS` as `name:password:role`. A role is `viewer`, `wall`, `operator` or `admin`.
+Everyone but the first administrator is added by an administrator on the Users page. Choose to add a person, type a name, a role (`guest`, `operator` or `admin`), the pages and a temporary password, and pass the password on: the person must choose their own at the first sign-in. The same page changes a role or the pages, resets a password, and ends someone's access with Disable. Each applies at the person's next request, and nobody is deleted. Taking a name out of `PORTAL_USERS` ends nothing for a person who was imported from it.
 
-1. To store a password as a hash and not as text, run `server/scripts/hash-password.ts`. It prints a salted hash that begins `scrypt.`, which goes in the setting in place of the password.
-2. Edit the setting in the copy's `.env`, then recreate the server container (`docker compose up -d`). A user removed from the list is refused, and a changed role applies, on their next request.
-3. Make a new encrypted copy of the `.env` files.
+The first administrator is the exception. It is kept in `.env`, in `PORTAL_USERS` as `name:password:role` (or in `PORTAL_USER` and `PORTAL_PASS`), and it is changed there. The older role names `viewer` and `wall` still read in that setting.
+
+1. To store the password as a hash and not as text, run `server/scripts/hash-password.ts`. It prints a salted hash that begins `argon2id.`, which goes in the setting in place of the password.
+2. Edit the setting in the copy's `.env`, then recreate the server container (`docker compose up -d`).
+3. Make a new encrypted copy of the `.env` files and of the `portal-state` volume together (`deploy/backup-state.sh --env`), since the people added on the Users page exist only in the volume.
 4. Sign in with the account and check what the sidebar shows. The menu follows the server's answer.
 
 ## 5. Change a threshold
@@ -48,7 +50,7 @@ The thresholds are settings: `LINK_LOSS_WARN` and `LINK_LOSS_CRIT` for the Links
 
 ## 6. Add a Zabbix method
 
-1. Call it only through `zbx` for a read, or `zbxWrite` for the one write. A new write is a decision for the owner, and an ADR: [the decisions](../5-reference/decisions.md) say why there is only one.
+1. Call it only through `zbx` for a read, or `zbxWrite` for the one write. A new write is a decision for us, and an ADR: [the decisions](../5-reference/decisions.md) say why there is only one.
 2. Add the method to the table of Zabbix calls in `docs/erd/database/ERD-Database.md`, which `facts.check` compares with the lines of the code that name each method, and to every document that states how many methods the portal calls.
 3. Ask only for the fields you need. The expensive ones are listed in [the traps](traps.md): `lastvalue` costs a query for each item, and `opdata` one for each problem.
 4. Test it with `vi.mock` of `server/src/clients/zabbix.ts`, which keeps the real error classes, and with a fixture whose every field is a string.

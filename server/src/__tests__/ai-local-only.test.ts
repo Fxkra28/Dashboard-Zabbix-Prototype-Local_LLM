@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
  * refuses to start with a model outside this machine's own network, unless AI_ALLOW_REMOTE says the owner means it.
  * config.ts reads the environment once at import, so each case re-imports it.
  */
-const NAMES = ['AI_PROVIDER', 'AI_API_KEY', 'ANTHROPIC_API_KEY', 'AI_BASE_URL', 'AI_LOCAL_ONLY', 'AI_ALLOW_REMOTE'];
+const NAMES = ['AI_PROVIDER', 'AI_API_KEY', 'ANTHROPIC_API_KEY', 'AI_BASE_URL', 'AI_LOCAL_ONLY', 'AI_ALLOW_REMOTE', 'AI_MODEL'];
 const base = { AUTH_ENABLED: 'false', ZABBIX_API_TOKEN: 't', ZABBIX_WRITE_TOKEN: 't' };
 
 async function start(env: Record<string, string>) {
@@ -67,5 +67,34 @@ describe('AI_LOCAL_ONLY', () => {
     expect((await start({ AI_LOCAL_ONLY: 'true', AI_PROVIDER: 'openai-compatible' })).run).not.toThrow(); // no AI_BASE_URL: the AI is off
     expect((await start({ AI_PROVIDER: 'openai-compatible', AI_BASE_URL: 'https://gateway.example.com/v1' })).run).not.toThrow();
     expect((await start({ AI_PROVIDER: 'anthropic', ANTHROPIC_API_KEY: 'sk-ant-test-key-not-real' })).run).not.toThrow();
+  });
+});
+
+describe('a cloud model behind a local address (SC-70)', () => {
+  const LOCAL_ADDRESS = { ...LOCAL_COPY, AI_BASE_URL: 'http://ollama:11434/v1' };
+
+  it.each(['gpt-oss:120b-cloud', 'qwen3-coder:480b-cloud', 'kimi-k2:cloud', 'DeepSeek-V3.1:671b-CLOUD'])('refuses %s, which Ollama sends to ollama.com whatever address it is asked at', async (AI_MODEL) => {
+    const { run, config } = await start({ ...LOCAL_ADDRESS, AI_MODEL });
+    expect(config.ai.external).toBe(true);
+    expect(run).toThrow(/ollama\.com/);
+    expect(run).toThrow(/AI_ALLOW_REMOTE/);
+  });
+
+  it.each(['qwen3:8b', 'gemma4:12b', 'cloudy-bert:7b', 'mycloud'])('keeps %s, a model that runs on this machine', async (AI_MODEL) => {
+    const { run, config } = await start({ ...LOCAL_ADDRESS, AI_MODEL });
+    expect(config.ai.external).toBe(false);
+    expect(run, AI_MODEL).not.toThrow();
+  });
+
+  it('starts with a cloud model when AI_ALLOW_REMOTE=true, and says so in a warning', async () => {
+    const { run, warnings } = await start({ ...LOCAL_ADDRESS, AI_MODEL: 'gpt-oss:120b-cloud', AI_ALLOW_REMOTE: 'true' });
+    expect(run).not.toThrow();
+    expect(warnings.some((w) => /AI_ALLOW_REMOTE=true/.test(w))).toBe(true);
+  });
+
+  it('counts a cloud model as outside in a copy that is not local-only too, so the outside-model rules apply to it', async () => {
+    const { config, run } = await start({ AI_PROVIDER: 'openai-compatible', AI_BASE_URL: 'http://ollama:11434/v1', AI_MODEL: 'gpt-oss:120b-cloud' });
+    expect(config.ai.external).toBe(true);
+    expect(run).not.toThrow();
   });
 });

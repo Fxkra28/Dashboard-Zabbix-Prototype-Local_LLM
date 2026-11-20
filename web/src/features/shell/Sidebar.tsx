@@ -23,6 +23,7 @@ import {
   IconShield,
   IconChat,
   IconChevron,
+  IconUsers,
 } from '../../shared/components/icons';
 
 type Item = {
@@ -65,10 +66,15 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    // The one section with no Zabbix equivalent. Viewer role on purpose: the
-    // assistant is only ever shown what a viewer can already see.
+    // The one section with no Zabbix equivalent. A guest's module on purpose: the
+    // assistant is only ever shown what the user's own pages show them (ADR-0017).
     title: 'Assistant',
     items: [{ to: '/assistant', label: 'Assistant', icon: IconChat }],
+  },
+  {
+    // For administrators: who may sign in, with which role and which pages.
+    title: 'Administration',
+    items: [{ to: '/users', label: 'Users and access', icon: IconUsers }],
   },
 ];
 

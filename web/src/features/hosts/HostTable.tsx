@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { PageLink } from '../../shared/components/PageLink';
 import type { HostOverview, SiteHost, SiteSource } from '../../types';
 import { HostStatePill, SeverityCounts } from '../../shared/components/StatusBadge';
 import { NoData } from '../../shared/components/NoData';
@@ -93,17 +93,17 @@ export function HostTable({
                   {/* The one link a host has on the Hosts page and in a site stays as it was; the pair is the Devices page's. */}
                   {portsLink ? (
                     <span className="row-actions">
-                      <Link className="btn ghost sm" to={`/graphs?hostid=${h.hostid}`}>
+                      <PageLink className="btn ghost sm" to={`/graphs?hostid=${h.hostid}`} fallback={null}>
                         Graphs
-                      </Link>
-                      <Link className="btn ghost sm" to={`/network?hostid=${h.hostid}`}>
+                      </PageLink>
+                      <PageLink className="btn ghost sm" to={`/network?hostid=${h.hostid}`} fallback={null}>
                         Ports
-                      </Link>
+                      </PageLink>
                     </span>
                   ) : (
-                    <Link className="btn ghost sm" to={`/graphs?hostid=${h.hostid}`}>
+                    <PageLink className="btn ghost sm" to={`/graphs?hostid=${h.hostid}`} fallback={null}>
                       Graphs
-                    </Link>
+                    </PageLink>
                   )}
                 </td>
               </tr>

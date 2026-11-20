@@ -4,54 +4,32 @@ import cookie from '@fastify/cookie';
 import jwt from '@fastify/jwt';
 import { normalizeIP } from '@fastify/rate-limit';
 import { config, SESSION_EPOCH_DEFAULT } from '../core/config.js';
-import { pageRoles } from './pageAccess.js';
-import { loginBody, noBody } from '../core/schemas.js';
-import { decoyVerify, isCommon, isGuessable, isTooShort, MIN_PASSWORD_LENGTH, parseStoredPassword, verifyPassword, type StoredPassword } from './passwords.js';
+import { changePasswordBody, loginBody, noBody } from '../core/schemas.js';
+import { accessOfAccount, createDirectory, parseEnvUsers, readEnvUsers, usable, type Account, type Directory } from './accounts.js';
+import { auditUser } from './audit.js';
+import { MODULE_IDS, judge, pagesOf, refusalText, roleFromName, ruleFor, type Access, type ModuleId, type Role } from './modules.js';
+import { decoyVerify, isCommon, isGuessable, isHash, isTooShort, MIN_PASSWORD_LENGTH, verifyPassword } from './passwords.js';
 
 /**
  * Portal auth and RBAC. Every source slide in HCML's review is stamped Private and Confidential, so
- * an open portal is not deployable: a JWT and four roles gate the portal's own routes. The Zabbix
- * token is never exposed either way; RBAC decides who sees which portal view, not what the BFF may
+ * an open portal is not deployable: a JWT, three roles and a list of modules for each user gate the portal's own routes.
+ * The Zabbix token is never exposed either way; RBAC decides who sees which portal view, not what the BFF may
  * ask Zabbix.
  *
- * Roles divide by sensitivity and cost, not by write access:
- *
- *   viewer:   all monitoring, plus the plain-language "Explain" actions. The AI layer exists for
- *             non-engineers, so gating it above this role would defeat its purpose.
- *   wall:     + the engineering surfaces (network, links, the meters), to read only: the account
- *             of a NOC screen, which never acknowledges or closes (tracker MT-06).
- *   operator: + acknowledge/close.
- *   admin:    + governance (the inventory scorecard) and what leaves the portal: the emailed report and the monthly send.
+ * A role says what a user may do (modules.ts): a guest reads, an operator also acknowledges and closes, an admin also
+ * manages users and sends the report out. The modules say what they may see. Who the users are, and how they are kept, is in accounts.ts (ADR-0017).
  */
 
-export const ROLES = ['viewer', 'wall', 'operator', 'admin'] as const;
-export type Role = (typeof ROLES)[number];
+export { ROLES, isRole, roleAllows, type Role } from './modules.js';
+export { parseEnvUsers } from './accounts.js';
 
-const RANK: Record<Role, number> = { viewer: 1, wall: 2, operator: 3, admin: 4 };
-
-export const isRole = (v: unknown): v is Role => ROLES.includes(v as Role);
-
-/**
- * Minimum role per route, first match wins. Anything unmatched needs `viewer`,
- * so a new route is protected by default rather than accidentally public.
- */
-const ROUTE_RULES: { pattern: RegExp; role: Role }[] = [
-  { pattern: /^\/api\/reports\/inventory/, role: 'admin' },
-  // Sends a file out of the portal, and sets who gets it and when.
-  { pattern: /^\/api\/sli\/(email|schedule|recipients)/, role: 'admin' },
-  { pattern: /^\/api\/(links|net)\b/, role: 'wall' },
-  // The acknowledge/close write-back.
-  { pattern: /^\/api\/problems\/(acknowledge|close)/, role: 'operator' },
-];
-
+/** The role a route needs: the role of its row in the table of routes, and administrator for a route that has none (modules.ts). */
 export function requiredRole(url: string): Role {
-  return ROUTE_RULES.find((r) => r.pattern.test(url))?.role ?? 'viewer';
+  return ruleFor(url)?.role ?? 'admin';
 }
 
-export const roleAllows = (has: Role, needs: Role) => RANK[has] >= RANK[needs];
-
 /** Reachable without a token. Matched exactly, so a route added under these paths is not public by accident. */
-const PUBLIC_ROUTES = new Set(['/api/health', '/api/auth/login', '/api/auth/me', '/api/auth/logout']);
+export const PUBLIC_ROUTES = new Set(['/api/health', '/api/auth/login', '/api/auth/me', '/api/auth/logout', '/api/auth/request']);
 
 /**
  * The header every cookie-authenticated POST must carry.
@@ -62,8 +40,8 @@ export const CSRF_HEADER = 'x-hcml-csrf';
 
 const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
-/** Public, but they set or clear the session cookie, so they are checked like any cookie POST. */
-const COOKIE_ROUTES = new Set(['/api/auth/login', '/api/auth/logout']);
+/** Public, but they set or clear the session cookie, or write a request to disk, so they are checked like any cookie POST. */
+const COOKIE_ROUTES = new Set(['/api/auth/login', '/api/auth/logout', '/api/auth/request']);
 
 /** Sign-in attempts per minute per account and client address, on top of the global limit. */
 export const LOGIN_ATTEMPTS_PER_MINUTE = 10;
@@ -86,6 +64,15 @@ export const LOGIN_LOCK_MAX_MS = 5 * 60_000;
 /** Failures older than this are forgotten; at most this many keys are remembered. */
 const LOGIN_FAIL_TTL_MS = 60 * 60_000;
 const LOGIN_FAIL_KEYS = 10_000;
+
+/**
+ * A password spray: one common password tried once against each of many names, which the lock of each name never sees (SC-61). From this many failed sign-ins from one address inside
+ * the window, spread over at least this many names, the address is locked like a name is, for as long and with the same doubling and cap. A person who mistypes their own password
+ * is on one name and is stopped by that name's lock; the names condition keeps an office behind one address from being locked by a few of them at once.
+ */
+export const SPRAY_FAILURES = 30;
+export const SPRAY_NAMES = 10;
+const SPRAY_WINDOW_MS = 15 * 60_000;
 
 /**
  * How long one token lasts: SESSION_HOURS, twelve unless set. An open portal renews its
@@ -163,78 +150,6 @@ export function routeOf(req: FastifyRequest): string {
   }
 }
 
-interface PortalUser {
-  name: string;
-  /** As written in the env: plain text or an scrypt hash. Never logged. */
-  pass: string;
-  /** `pass` ready to compare with a sign-in (passwords.ts). */
-  check: StoredPassword;
-  role: Role;
-}
-
-/**
- * Users come from env: there is no database yet (that phase was deferred).
- * `PORTAL_USERS` is `name:password:role` triples, comma-separated;
- * `PORTAL_USER` / `PORTAL_PASS` remain as the single-admin shorthand.
- * A password is plain text or an scrypt hash (passwords.ts).
- */
-function loadUsers(warn: (m: string) => void): PortalUser[] {
-  const raw = (process.env.PORTAL_USERS ?? '').trim();
-  const users = raw ? parseUsers(raw, warn) : [];
-  const { user: name, pass } = config.auth;
-  return users.length ? users : [{ name, pass, check: parseStoredPassword(pass), role: 'admin' }];
-}
-
-/**
- * One entry as name, password and role: the name is what comes before the
- * first ':', the role what comes after the last, so the password in between
- * may hold ':' too. An entry with a single ':' has no role.
- */
-function splitEntry(entry: string): { name: string; pass: string; role?: string } {
-  const first = entry.indexOf(':');
-  if (first < 0) return { name: entry.trim(), pass: '' };
-  const last = entry.lastIndexOf(':');
-  const name = entry.slice(0, first).trim();
-  if (last === first) return { name, pass: entry.slice(first + 1).trim() };
-  return { name, pass: entry.slice(first + 1, last).trim(), role: entry.slice(last + 1).trim() };
-}
-
-/**
- * The valid `PORTAL_USERS` triples. Warnings name an entry by its position,
- * never its text: a malformed entry, or a role that is really the rest of a
- * password, would otherwise put a password in the log.
- */
-function parseUsers(raw: string, warn: (m: string) => void): PortalUser[] {
-  const entries = raw.split(',');
-  const users: PortalUser[] = [];
-  entries.forEach((entry, i) => {
-    const { name, pass, role } = splitEntry(entry);
-    if (!name || !pass) {
-      warn(`PORTAL_USERS entry ${i + 1} of ${entries.length} is not name:password:role. Skipped.`);
-      return;
-    }
-    const check = parseStoredPassword(pass);
-    if (check.kind === 'invalid') {
-      warn(`PORTAL_USERS entry ${i + 1} of ${entries.length} starts with "scrypt." but is not a usable hash (scrypt.N.r.p.salt.hash). Skipped.`);
-      return;
-    }
-    if (role && !isRole(role)) warn(`PORTAL_USERS entry for "${name}" has an unknown role; it gets viewer.`);
-    // A token names its user, not which of two same-named entries signed in,
-    // so a renewal cannot tell them apart (POST /api/auth/refresh refuses it).
-    // With auth off there are no sessions to warn about.
-    if (config.auth.enabled && users.some((u) => u.name === name)) {
-      warn(`PORTAL_USERS names "${name}" more than once. Each entry can sign in, but its sessions are not renewed: they end an hour before their ${config.auth.sessionHours} hours. Give each entry its own name.`);
-    } else if (config.auth.enabled && users.some((u) => sameName(u.name, name))) {
-      warn(`PORTAL_USERS has names that differ only by case, including "${name}". Sign-in ignores case, so give each entry a name that differs by more than that.`);
-    }
-    users.push({ name, pass, check, role: isRole(role) ? role : 'viewer' });
-  });
-  return users;
-}
-
-/** Sign-in compares names without regard to case; the name as written in the env is kept. */
-const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
-
 /**
  * Refuse to start with a password anyone can guess: empty (what copying
  * .env.example gave) or the built-in "admin", and a plain password under MIN_PASSWORD_LENGTH characters. Passwords on a short list are
@@ -245,13 +160,13 @@ export function assertUsers(warn: (message: string) => void = () => undefined): 
   // Falling back to PORTAL_USER/PORTAL_PASS here would blame a user nobody configured.
   const raw = (process.env.PORTAL_USERS ?? '').trim();
   const notes: string[] = [];
-  if (raw && !parseUsers(raw, (m) => notes.push(m)).length) {
+  if (raw && !parseEnvUsers(raw, (m) => notes.push(m)).length) {
     throw new Error(`AUTH_ENABLED=true but no PORTAL_USERS entry is a valid name:password:role triple. ${notes.join(' ')}`);
   }
-  const loaded = loadUsers(() => undefined);
+  const loaded = readEnvUsers(() => undefined);
   // Only the PORTAL_USER/PORTAL_PASS pair can get here with a broken hash: a PORTAL_USERS entry like that is skipped above.
   if (loaded.some((u) => u.check.kind === 'invalid')) {
-    throw new Error('AUTH_ENABLED=true but PORTAL_PASS starts with "scrypt." and is not a usable hash (scrypt.N.r.p.salt.hash).');
+    throw new Error('AUTH_ENABLED=true but PORTAL_PASS starts with "scrypt." or "argon2id." and is not a usable hash.');
   }
   const weak = loaded.filter((u) => isGuessable(u.pass));
   if (weak.length) {
@@ -283,9 +198,24 @@ export function assertUsers(warn: (message: string) => void = () => undefined): 
 /** The role attached to a request. With auth off everyone is admin. */
 export function roleOf(req: FastifyRequest): Role {
   if (!config.auth.enabled) return 'admin';
-  const user = req.user as { role?: unknown } | undefined;
-  return isRole(user?.role) ? user.role : 'viewer';
+  return roleFromName((req.user as { role?: unknown } | undefined)?.role) ?? 'guest';
 }
+
+/** The modules of the user of a request, as the guard found them. With auth off everyone has every one. */
+export function modulesOf(req: FastifyRequest): ReadonlySet<ModuleId> {
+  if (!config.auth.enabled) return new Set(MODULE_IDS);
+  const modules = (req.user as { modules?: unknown } | undefined)?.modules;
+  return new Set(Array.isArray(modules) ? (modules as ModuleId[]) : []);
+}
+
+/** The language the user chose for the Assistant and Explain, or null. */
+export function languageOf(req: FastifyRequest): 'en' | 'id' | null {
+  const language = (req.user as { language?: unknown } | undefined)?.language;
+  return language === 'en' || language === 'id' ? language : null;
+}
+
+/** Whether the user of a request holds one of these modules: an administrator holds all. */
+export const hasModule = (req: FastifyRequest, ...ids: ModuleId[]): boolean => roleOf(req) === 'admin' || ids.some((id) => modulesOf(req).has(id));
 
 /**
  * The session a token belongs to: its sid, else its jti (tokens from before sessions had one), else a hash of what it says.
@@ -316,7 +246,11 @@ const signedInRequests = new WeakSet<FastifyRequest>();
  */
 export const isSignedIn = (req: FastifyRequest): boolean => !config.auth.enabled || signedInRequests.has(req);
 
-export async function setupAuth(app: FastifyInstance): Promise<void> {
+/** What a route's guard may let through for an account that must change its password first: choosing the new one, and ending or renewing the session. */
+const MUST_CHANGE_OK = new Set(['/api/auth/password', '/api/auth/refresh', '/api/auth/me', '/api/auth/logout']);
+
+/** `directory` is who can sign in. Left out, it is the users of `.env` alone, which is what a portal with no data folder runs on. */
+export async function setupAuth(app: FastifyInstance, directory: Directory = createDirectory(readEnvUsers((m) => app.log.warn(m)))): Promise<void> {
   const cookieName = config.auth.sessionCookie;
   // The token lives in an httpOnly cookie that page scripts cannot read.
   // A Bearer header still works, for scripts and tests.
@@ -328,29 +262,28 @@ export async function setupAuth(app: FastifyInstance): Promise<void> {
     // requiredClaims: without it a token with no iss or aud passes the allowed* checks unexamined.
     verify: { allowedIss: claimsOfThisPortal.iss, allowedAud: claimsOfThisPortal.aud, requiredClaims: ['iss', 'aud'] },
   });
-  const users = loadUsers((m) => app.log.warn(m));
-  const hashed = users.some((u) => u.check.kind === 'scrypt');
+  const nowSeconds = () => Math.floor(Date.now() / 1000);
 
   // Sessions signed out before their tokens expire, with the time the last of those tokens could still be valid.
   // In memory, so a restart of the BFF forgets them; SESSION_EPOCH still ends every session at once.
   const signedOut = new Map<string, number>();
 
   /**
-   * The configured user a token belongs to, or undefined when that user is gone. A name
-   * listed twice cannot say which entry signed in, so the token's role must still be one of theirs.
+   * The account a token belongs to, or undefined when that user is gone. A name
+   * listed twice in `.env` cannot say which entry signed in, so the token's role must still be one of theirs.
    */
-  const currentUser = (sub: unknown, tokenRole: unknown): PortalUser | undefined => {
-    const named = users.filter((u) => u.name === sub);
-    return named.length === 1 ? named[0] : named.find((u) => u.role === tokenRole);
+  const currentUser = (sub: unknown, tokenRole: unknown): Account | undefined => {
+    const named = directory.accounts().filter((a) => a.name === sub);
+    return named.length === 1 ? named[0] : named.find((a) => a.role === roleFromName(tokenRole));
   };
 
   /**
-   * Check the token, then look its user up again: a user removed from PORTAL_USERS is refused, and
-   * the role in force is the one configured now, not the one the token was signed with. Null when
-   * either fails. req.user carries that current role from here on (roleOf reads it).
+   * Check the token, then look its user up again: a user removed, disabled or past their expiry is refused, a password changed since the token was made voids it,
+   * and the role and modules in force are those of now, not those the token was signed with. Null when any of that fails. req.user carries them from here on
+   * (roleOf and modulesOf read it).
    */
   const authenticate = async (req: FastifyRequest) => {
-    let claims: { sub?: unknown; role?: unknown; exp?: number; ep?: unknown };
+    let claims: { sub?: unknown; role?: unknown; exp?: number; iat?: number; ep?: unknown };
     try {
       claims = (await req.jwtVerify()) as typeof claims;
     } catch {
@@ -361,9 +294,11 @@ export async function setupAuth(app: FastifyInstance): Promise<void> {
     const session = sessionIdOf(claims);
     if (session && signedOut.has(session)) return null;
     const user = currentUser(claims.sub, claims.role);
-    if (!user) return null;
-    req.user = { ...claims, role: user.role };
-    return { claims, user };
+    if (!user || !usable(user, nowSeconds())) return null;
+    if (user.notBefore > 0 && (claims.iat ?? 0) < user.notBefore) return null;
+    const access = accessOfAccount(user);
+    req.user = { ...claims, role: user.role, modules: [...access.modules], language: user.language, expires: user.expires };
+    return { claims, user, access };
   };
 
   // Secure only over HTTPS: a browser drops a Secure cookie sent over plain
@@ -381,23 +316,30 @@ export async function setupAuth(app: FastifyInstance): Promise<void> {
    * of that name is checked and the one spelled as typed wins, so "Ana" and "ana" listed apart each
    * keep their own. A name nobody holds still costs one hash check where hashes are in use.
    */
-  const findUser = async (username: string, password: string): Promise<PortalUser | undefined> => {
-    const named = users.filter((u) => sameName(u.name, username));
-    if (!named.length && hashed) await decoyVerify(password);
-    const matches: PortalUser[] = [];
-    for (const u of named) if (await verifyPassword(u.check, password)) matches.push(u);
-    return matches.find((u) => u.name === username) ?? matches[0];
+  const findUser = async (username: string, password: string): Promise<Account | undefined> => {
+    const named = directory.named(username);
+    // Where hashes are in use a hash check is what a name costs, so the time of a wrong password does not say which names exist (SC-60): an unknown name pays one as a decoy, and so does
+    // a user whose password is plain text in `.env`, the break-glass one among them, which would answer in a tenth of a millisecond.
+    const hashesInUse = directory.accounts().some((a) => isHash(a.check));
+    if (!named.length && hashesInUse) await decoyVerify(password);
+    const matches: Account[] = [];
+    // A disabled or expired account is checked like any other and then refused with the same words, so the answer does not say that the name exists.
+    for (const a of named) {
+      if (hashesInUse && !isHash(a.check)) await decoyVerify(password);
+      if ((await verifyPassword(a.check, password)) && usable(a, nowSeconds())) matches.push(a);
+    }
+    return matches.find((a) => a.name === username) ?? matches[0];
   };
 
   /**
    * Sign a token for `u` into the session cookie; the body carries its lifetime, never the token. A renewal keeps the sid,
    * so signing out ends every token of the chain; the jti keeps two tokens of one second apart.
    */
-  const issue = (u: PortalUser, req: FastifyRequest, reply: FastifyReply, sid: string = randomUUID()) => {
+  const issue = (u: Account, req: FastifyRequest, reply: FastifyReply, sid: string = randomUUID()) => {
     const token = app.jwt.sign({ sub: u.name, role: u.role, ep: config.auth.sessionEpoch, jti: randomUUID(), sid }, { expiresIn: tokenLifetime(), ...claimsOfThisPortal });
     const { iat, exp } = app.jwt.decode(token) as { iat: number; exp: number };
     reply.setCookie(cookieName, token, { ...cookieOptions(req), maxAge: exp - iat });
-    return { user: { name: u.name, role: u.role }, expiresIn: exp - iat };
+    return { user: { name: u.name, role: u.role }, expiresIn: exp - iat, ...(u.mustChange ? { mustChange: true } : {}) };
   };
 
   // Before the guard, and with auth off too: login and logout set cookies either way.
@@ -413,11 +355,11 @@ export async function setupAuth(app: FastifyInstance): Promise<void> {
   // plugin runs one limiter per request and the global one has already run. The name is lower-cased
   // (sign-in ignores case) and hashed to a fixed size; the address is grouped as the global limit
   // groups it (an IPv6 /64).
-  const loginKey = (req: FastifyRequest) => {
+  const nameDigest = (req: FastifyRequest) => {
     const { username } = (req.body ?? {}) as { username?: unknown };
-    const name = createHash('sha256').update(typeof username === 'string' ? username.toLowerCase() : '').digest('base64url');
-    return `login|${normalizeIP(req.ip)}|${name}`;
+    return createHash('sha256').update(typeof username === 'string' ? username.toLowerCase() : '').digest('base64url');
   };
+  const loginKey = (req: FastifyRequest) => `login|${normalizeIP(req.ip)}|${nameDigest(req)}`;
   const loginCheck = app.hasDecorator('createRateLimit')
     ? app.createRateLimit({ max: LOGIN_ATTEMPTS_PER_MINUTE, timeWindow: '1 minute', keyGenerator: loginKey })
     : null;
@@ -436,15 +378,43 @@ export async function setupAuth(app: FastifyInstance): Promise<void> {
   // A name no account holds is logged as unknown with its length: a password typed into the name box must not stay in a log that lasts (SC-52).
   const loggedName = (req: FastifyRequest) => {
     const typed = typedName(req);
-    if (typed && users.some((u) => sameName(u.name, typed))) return { user: typed };
+    if (typed && directory.named(typed).length) return { user: typed };
     const { username } = (req.body ?? {}) as { username?: unknown };
     return { user: 'unknown', nameLength: typeof username === 'string' ? username.length : 0 };
   };
   const logAttempt = (req: FastifyRequest, outcome: 'success' | 'failure' | 'locked' | 'rate_limited') =>
     req.log.info({ event: 'sign_in', ...loggedName(req), outcome, ip: req.ip }, `sign-in ${outcome}`);
-  const loginLimit = async (req: FastifyRequest, reply: FastifyReply) => {
-    const locked = failures.get(loginKey(req));
+  // Failures per address across names, for the spray check. Oldest dropped first, like `failures`.
+  const sprays = new Map<string, { start: number; failures: number; names: Set<string>; until: number; locks: number; lastLock: number }>();
+  const noteSpray = (req: FastifyRequest) => {
+    const key = normalizeIP(req.ip);
     const now = Date.now();
+    const spray = sprays.get(key) ?? { start: now, failures: 0, names: new Set<string>(), until: 0, locks: 0, lastLock: 0 };
+    if (now - spray.start > SPRAY_WINDOW_MS) Object.assign(spray, { start: now, failures: 0, names: new Set<string>() });
+    spray.failures += 1;
+    spray.names.add(nameDigest(req));
+    if (spray.failures >= SPRAY_FAILURES && spray.names.size >= SPRAY_NAMES) {
+      const locks = (spray.lastLock && now - spray.lastLock < LOGIN_FAIL_TTL_MS ? spray.locks : 0) + 1;
+      const seconds = Math.min(LOGIN_LOCK_BASE_MS * 2 ** (locks - 1), LOGIN_LOCK_MAX_MS) / 1000;
+      req.log.warn(
+        { event: 'sign_in_spray', failures: spray.failures, names: spray.names.size, ip: req.ip, lockedSeconds: seconds },
+        'failed sign-ins from one address across many names: the address is locked',
+      );
+      Object.assign(spray, { until: now + seconds * 1000, locks, lastLock: now, start: now, failures: 0, names: new Set<string>() });
+    }
+    sprays.delete(key);
+    sprays.set(key, spray);
+    if (sprays.size > LOGIN_FAIL_KEYS) sprays.delete(sprays.keys().next().value as string);
+  };
+  const loginLimit = async (req: FastifyRequest, reply: FastifyReply) => {
+    const now = Date.now();
+    const sprayed = sprays.get(normalizeIP(req.ip));
+    if (sprayed && sprayed.until > now) {
+      const seconds = Math.ceil((sprayed.until - now) / 1000);
+      logAttempt(req, 'locked');
+      refuse(reply, seconds, `Too many failed sign-ins from this address. Retry in ${seconds} s.`);
+    }
+    const locked = failures.get(loginKey(req));
     if (locked && locked.until > now) {
       const seconds = Math.ceil((locked.until - now) / 1000);
       logAttempt(req, 'locked');
@@ -486,6 +456,7 @@ export async function setupAuth(app: FastifyInstance): Promise<void> {
     const found = typeof username === 'string' && typeof password === 'string' ? await findUser(username, password) : undefined;
     if (!found) {
       recordFailure(loginKey(req));
+      noteSpray(req);
       logAttempt(req, 'failure');
       warnOnRepeats(req);
       return reply.code(401).send({ error: 'invalid_credentials', message: 'Invalid username or password.' });
@@ -494,24 +465,32 @@ export async function setupAuth(app: FastifyInstance): Promise<void> {
     failures.delete(loginKey(req));
     nameFailures.delete(typedName(req).toLowerCase());
     logAttempt(req, 'success');
+    // Records the sign-in, and rewrites a hash that is weaker than the portal's now. It never fails the sign-in.
+    await directory.signedIn(found.name, password as string);
     return issue(found, req, reply);
   });
 
   app.get('/api/auth/me', async (req, reply) => {
     // With auth off the UI still needs a role so it knows what to render.
     if (!config.auth.enabled) {
-      return { authEnabled: false, user: { name: 'anonymous', role: 'admin' as Role }, expiresIn: null, pages: pageRoles(requiredRole) };
+      // No accounts, so no page to manage them: everything else is open.
+      const open: Access = { role: 'admin', modules: new Set(MODULE_IDS.filter((m) => m !== 'users')) };
+      return { authEnabled: false, user: { name: 'anonymous', role: 'admin' as Role }, expiresIn: null, pages: pagesOf(open), modules: [...open.modules] };
     }
     const session = await authenticate(req);
     if (!session) return reply.code(401).send({ error: 'unauthorized', message: 'Your session has expired. Sign in again.' });
+    const { user, access } = session;
     return {
       authEnabled: true,
-      // The role configured now, so a demoted user sees the menus the BFF will serve.
-      user: { name: session.user.name, role: session.user.role },
+      // The role and the modules configured now, so a demoted user sees the menus the BFF will serve.
+      // `source` says where the account is kept: one of `.env` cannot change its password on the Account page (FR-73).
+      user: { name: user.name, role: user.role, displayName: user.displayName, source: user.source, ...(user.language ? { language: user.language } : {}) },
       // Relative, so the page times its renewal without trusting its own clock.
-      expiresIn: Math.max(0, (session.claims.exp ?? 0) - Math.floor(Date.now() / 1000)),
-      // The role each menu page needs, from the rules that guard its route, so the sidebar keeps no copy.
-      pages: pageRoles(requiredRole),
+      expiresIn: Math.max(0, (session.claims.exp ?? 0) - nowSeconds()),
+      // The pages this user has, each with the role it needs, from the table of routes (modules.ts), so the sidebar keeps no copy.
+      pages: pagesOf(access),
+      modules: [...access.modules],
+      ...(user.mustChange ? { mustChange: true } : {}),
     };
   });
 
@@ -547,18 +526,35 @@ export async function setupAuth(app: FastifyInstance): Promise<void> {
     }
     if (PUBLIC_ROUTES.has(route)) return;
 
-    // A removed user gets the same 401 as a bad token; the role is the current one, not the token's.
+    // A removed or disabled user gets the same 401 as a bad token; the role and modules are the current ones, not the token's.
     const session = await authenticate(req);
     if (!session) return reply.code(401).send({ error: 'unauthorized', message: 'Sign in to continue.' });
 
-    const has = session.user.role;
-    const needs = requiredRole(route);
-    if (!roleAllows(has, needs)) {
-      return reply.code(403).send({
-        error: 'forbidden',
-        message: `This view needs the "${needs}" role; you are signed in as "${has}".`,
-      });
+    // A temporary password is for choosing a new one, and nothing else.
+    if (session.user.mustChange && !MUST_CHANGE_OK.has(route)) {
+      return reply.code(403).send({ error: 'password_change_required', message: 'Choose a new password before you continue.' });
     }
+    const verdict = judge(session.access, route);
+    if (!verdict.ok) return reply.code(403).send({ error: 'forbidden', message: refusalText(verdict, session.user.role) });
+  });
+
+  // The person's own change of password. The current one is asked for, and tried at most as often as a sign-in is; a change ends the older sessions of the person and renews this one.
+  const passwordCheck = app.hasDecorator('createRateLimit')
+    ? app.createRateLimit({ max: LOGIN_ATTEMPTS_PER_MINUTE, timeWindow: '1 minute', keyGenerator: (req) => `password|${String((req.user as { sub?: unknown } | undefined)?.sub)}` })
+    : null;
+  const passwordLimit = async (req: FastifyRequest, reply: FastifyReply) => {
+    const limit = await passwordCheck?.(req);
+    if (!limit || limit.isAllowed || !limit.isExceeded) return;
+    refuse(reply, limit.ttlInSeconds, `Too many tries to change the password. Retry in ${limit.ttlInSeconds} s.`);
+  };
+  app.post('/api/auth/password', { schema: { body: changePasswordBody }, bodyLimit: LOGIN_BODY_LIMIT, preHandler: passwordLimit }, async (req, reply) => {
+    const { current, password } = req.body as { current: string; password: string };
+    const { sub } = (req.user ?? {}) as { sub?: unknown };
+    const account = directory.accounts().find((a) => a.name === sub);
+    if (!account) return reply.code(401).send({ error: 'unauthorized', message: 'Your session has expired. Sign in again.' });
+    const changed = await directory.changeOwnPassword(account.name, current, password);
+    auditUser(req, 'password_changed', changed.name);
+    return { ok: true, ...issue(changed, req, reply, sessionIdOf(req.user)) };
   });
 
   // An open portal swaps its token for a fresh one before it runs out, for every user. The guard
@@ -568,7 +564,7 @@ export async function setupAuth(app: FastifyInstance): Promise<void> {
   // role.
   app.post('/api/auth/refresh', { schema: { body: noBody } }, async (req, reply) => {
     const { sub } = (req.user ?? {}) as { sub?: unknown };
-    const matches = users.filter((u) => u.name === sub);
+    const matches = directory.accounts().filter((a) => a.name === sub);
     const found = matches.length === 1 ? matches[0] : undefined;
     if (!found) {
       return reply.code(401).send({ error: 'unauthorized', message: 'Your session has expired. Sign in again.' });

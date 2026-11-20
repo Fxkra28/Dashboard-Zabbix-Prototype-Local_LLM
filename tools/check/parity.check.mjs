@@ -13,7 +13,7 @@
  * The list names each file. A folder is not on it: a one-sided edit to a diagram or a PDF
  * that is meant to match, next to one that is meant to differ, would otherwise go unseen.
  * A file on the list must exist in both copies, so deleting one from a copy is reported too.
- * docs/contributing.md and both READMEs count the list (18 files, 22 with the four `.env*`
+ * docs/contributing.md and both READMEs count the list (17 files, 21 with the four `.env*`
  * files); a test keeps those numbers equal to the ones below.
  *
  * One folder is skipped whole: `pic/` at the root, the screenshots each copy's running portal
@@ -36,7 +36,6 @@ const skipFile = (name) => name === '.DS_Store' || name === '.test-counts.json' 
 
 /** Files meant to differ between the copies, each in both: the copy's own configuration and perspective. */
 export const PER_COPY_FILES = [
-  'AUDIT_REPORT.md',
   'README.md',
   'docker-compose.yml',
   'docs/api/openapi.yaml',

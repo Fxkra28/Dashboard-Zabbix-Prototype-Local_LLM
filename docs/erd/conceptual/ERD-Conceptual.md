@@ -6,7 +6,7 @@ The level below it, [`../vanilla/ERD-Domains.md`](../vanilla/ERD-Domains.md), an
 read and derive*; the one below that, [`../database/ERD-Database.md`](../database/ERD-Database.md), answers
 *what does MySQL store*. The index of all three is in [`../../../erd.md`](../erd.md).
 
-The single diagram is [`ERD-Conceptual.mmd`](ERD-Conceptual.mmd), pre-rendered as [`ERD-Conceptual.pdf`](ERD-Conceptual.pdf) (vector, the one to read) and [`ERD-Conceptual.png`](ERD-Conceptual.png).
+The single diagram is [`ERD-Conceptual.mmd`](ERD-Conceptual.mmd), pre-rendered as [`ERD-Conceptual.pdf`](ERD-Conceptual.pdf) (vector, the one to read). A PNG can be made from the `.mmd` with the command below; it is not kept in the repository.
 
 **Where it comes from.** Not from a schema: a conceptual entity is a judgement, not a generated artefact.
 Each one here was read out of the code and the two lower models together, and every cardinality is either
@@ -140,7 +140,7 @@ carry. No existing ERD covers it.
 ***stations* carries the site signal, and that is why it is an association and not a foreign key.** A
 device's site is resolved from four signals in order: its `site` tag, then its own name parsed against
 HCML's `<site>.<class>.<seq>` convention, then inventory `site_city`/`location`, then its host group
-(`server/src/services/sites.ts:23,83-104`). Which signal answered belongs to neither Device nor Site; it is a
+(`server/src/domain/siteOf.ts:11,23-45`). Which signal answered belongs to neither Device nor Site; it is a
 property of *this device being placed at this site*, and it is the only reason the coverage counters can
 exist. It also decides governance: the scorecard counts a site resolved from the group as a failure to
 declare one, so R2's signal is what makes R28 true or false.
@@ -466,9 +466,9 @@ flowchart TB
 ***summarises* is where the assistant's limits become part of the model.** The snapshot is the whole of what
 the assistant knows: it has no tools and cannot query anything, so a device absent from the snapshot does
 not exist as far as any answer is concerned. The association therefore carries each section's character
-budget and whether that section was cut: the snapshot is capped at 5,500 characters overall, with a budget
+budget and whether that section was cut: the snapshot is capped at 6,200 characters overall, with a budget
 per section and at most 20 problems, and the page says *partial view* when a cap fired
-(`server/src/services/assistantSnapshot.ts:53-67`). A snapshot is frozen for five minutes and so answers several turns, and a
+(`server/src/services/assistantSnapshot.ts:53-67`). A question can also have the portal read more for it: up to 2,800 characters of detail blocks (past problems, a device's latest values, the SLA of a window and the like) that sit beside the snapshot and are not part of it ([ADR-0019](../../architecture/adr/0019-let-the-portal-read-what-a-question-needs.md)). A snapshot is frozen for five minutes and so answers several turns, and a
 host-state change must hold for a minute before it forces a rebuild, which is why *answers from* is
 `(0,n)` on the snapshot leg.
 
@@ -536,7 +536,7 @@ the physical model where a foreign key backs the cardinality, and the code where
 | | Left | | Verb | | Right | Evidence |
 |---|---|---|---|---|---|---|
 | R1 | Device | (1,n) | belongs to | (0,n) | Device Group | M:N: a link table with a key on both sides |
-| R2 | Site | (1,n) | stations | (1,1) | Device | carries the signal · conceptual only, `services/sites.ts:83-104` |
+| R2 | Site | (1,n) | stations | (1,1) | Device | carries the signal · conceptual only, `domain/siteOf.ts:23-45` |
 | R3 | Device Class | (0,n) | classes | (1,1) | Device | conceptual only, `naming.ts`, total, defaults to *other* |
 | R4 | Device | (1,1) | reaches | (1,1) | Host State | conceptual only, `reachability.ts:255-278`, total, disabled devices included |
 | R5 | Device | (0,n) | carries | (1,1) | Measurement | a NOT NULL foreign key |
@@ -588,7 +588,7 @@ So, concretely: a change to any of these obliges a change here.
 
 | If this changes | Revisit |
 |---|---|
-| `server/src/services/sites.ts`: the site signals | R2, and the coverage properties on Site |
+| `server/src/domain/siteOf.ts`: the site signals | R2, and the coverage properties on Site |
 | `server/src/domain/reachability.ts`, states or reasons | Host State |
 | `server/src/sli/engine.ts`: the profiles, or what a result carries | Availability Period, Availability Result, R23 to R25 |
 | `server/src/sli/tree.ts`: the node kinds | Derived Service Node, R26, R27 |

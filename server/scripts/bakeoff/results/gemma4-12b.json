@@ -1,0 +1,1294 @@
+{
+ "model": "gemma4:12b",
+ "ran": "2026-11-17T17:09:34.003Z",
+ "passMarks": {
+  "overall": 0.8,
+  "traps": 1,
+  "language": 0.95,
+  "format": 0.98
+ },
+ "summary": {
+  "questions": 50,
+  "passed": 49,
+  "overall": 0.98,
+  "traps": {
+   "asked": 6,
+   "passed": 5,
+   "rate": 0.8333333333333334
+  },
+  "language": {
+   "asked": 44,
+   "right": 44,
+   "rate": 1
+  },
+  "format": {
+   "asked": 50,
+   "right": 50,
+   "rate": 1
+  },
+  "failedBy": {
+   "facts": 1,
+   "invented": 1
+  },
+  "byKind": {
+   "count": {
+    "asked": 8,
+    "passed": 8
+   },
+   "rank": {
+    "asked": 9,
+    "passed": 9
+   },
+   "list": {
+    "asked": 5,
+    "passed": 5
+   },
+   "duration": {
+    "asked": 2,
+    "passed": 2
+   },
+   "state": {
+    "asked": 3,
+    "passed": 3
+   },
+   "sla": {
+    "asked": 7,
+    "passed": 7
+   },
+   "service": {
+    "asked": 2,
+    "passed": 2
+   },
+   "partial": {
+    "asked": 2,
+    "passed": 2
+   },
+   "trap": {
+    "asked": 6,
+    "passed": 5
+   },
+   "summary": {
+    "asked": 2,
+    "passed": 2
+   },
+   "short": {
+    "asked": 4,
+    "passed": 4
+   }
+  },
+  "byLang": {
+   "en": {
+    "asked": 20,
+    "passed": 20
+   },
+   "id": {
+    "asked": 20,
+    "passed": 19
+   },
+   "mixed": {
+    "asked": 10,
+    "passed": 10
+   }
+  },
+  "adopted": false
+ },
+ "speed": {
+  "coldFirstTokenMs": 18346,
+  "medianMs": 3761,
+  "medianFirstTokenMs": 476,
+  "p90Ms": 6624
+ },
+ "results": [
+  {
+   "question": {
+    "id": 1,
+    "lang": "en",
+    "kind": "count",
+    "q": "How many hosts are there, and how many of them are unreachable?",
+    "must": [
+     "\\b24\\b",
+     "\\b5\\b|five"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "There are 24 hosts at 6 sites, and 5 of them are unreachable."
+   },
+   "answer": "There are a total of **24 hosts** monitored in the estate. Out of these, **5 hosts** are currently unreachable.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 18346,
+   "ms": 19649,
+   "promptMs": 11123,
+   "promptTokens": 2853,
+   "outputTokens": 28
+  },
+  {
+   "question": {
+    "id": 2,
+    "lang": "en",
+    "kind": "rank",
+    "q": "Which site has the most open problems?",
+    "must": [
+     "FPSO"
+    ],
+    "mustNot": [
+     "(Jakarta|Surabaya|Sumenep) has the most"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "FPSO KAS3 & BD-WHP has the most open problems: 6."
+   },
+   "answer": "The site with the most open problems is **FPSO KAS3 & BD-WHP** with 6 problems.\n\nOther sites with high problem counts include:\n- **Jakarta**: 4 problems\n- **Surabaya**: 4 problems",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 445,
+   "ms": 2487,
+   "promptMs": 428,
+   "promptTokens": 2847,
+   "outputTokens": 52
+  },
+  {
+   "question": {
+    "id": 3,
+    "lang": "en",
+    "kind": "rank",
+    "q": "What is the single worst problem right now?",
+    "must": [
+     "DELTA-SW01"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "The worst problem is a Disaster: 4.2.1 DELTA-SW01 is unavailable by ICMP ping, open 30 minutes."
+   },
+   "answer": "The worst problem right now is a **[Disaster]** on **4.2.1 DELTA-SW01** for being **Unavailable by ICMP ping**. It has been open for about 30 minutes and is not yet acknowledged.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 469,
+   "ms": 3106,
+   "promptMs": 459,
+   "promptTokens": 2848,
+   "outputTokens": 53
+  },
+  {
+   "question": {
+    "id": 4,
+    "lang": "en",
+    "kind": "list",
+    "q": "Which hosts are unreachable right now?",
+    "must": [
+     "DELTA-SW01",
+     "DELTA-AP01",
+     "DELTA-AP02",
+     "SAMPANG WAN 2",
+     "BRAVO-SW01"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "Five hosts are unreachable: 4.2.1 DELTA-SW01, 4.3.1 DELTA-AP01, 4.3.2 DELTA-AP02, INET : SAMPANG WAN 2 and 2.2.1 BRAVO-SW01."
+   },
+   "answer": "There are **5 hosts** currently unreachable across the network.\n\n- **FPSO KAS3 & BD-WHP**: **4.2.1 DELTA-SW01** (30 min), **4.3.1 DELTA-AP01** (45 min), and **4.3.2 DELTA-AP02** (45 min)\n- **SSB / Sampang**: **INET : SAMPANG WAN 2** (2 days)\n- **Surabaya**: **2.2.1 BRAVO-SW01** (5 hours)",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 647,
+   "ms": 6306,
+   "promptMs": 637,
+   "promptTokens": 2846,
+   "outputTokens": 127
+  },
+  {
+   "question": {
+    "id": 5,
+    "lang": "en",
+    "kind": "count",
+    "q": "How many open problems have nobody acknowledged?",
+    "must": [
+     "\\b14\\b"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "14 open problems are not acknowledged."
+   },
+   "answer": "There are **14** open problems that have not been acknowledged yet.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 473,
+   "ms": 1430,
+   "promptMs": 463,
+   "promptTokens": 2847,
+   "outputTokens": 16
+  },
+  {
+   "question": {
+    "id": 6,
+    "lang": "en",
+    "kind": "duration",
+    "q": "How long has INET : SAMPANG WAN 2 been down?",
+    "must": [
+     "\\b2 ?d\\b|2 days|two days"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "INET : SAMPANG WAN 2 has been down for 2 days."
+   },
+   "answer": "**INET : SAMPANG WAN 2** has been unreachable for about 2 days. The problem is currently acknowledged but remains open in the system.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 463,
+   "ms": 2137,
+   "promptMs": 450,
+   "promptTokens": 2853,
+   "outputTokens": 31
+  },
+  {
+   "question": {
+    "id": 7,
+    "lang": "en",
+    "kind": "state",
+    "q": "Is 4.4 DELTA-RADIO01 down?",
+    "must": [
+     "not down|no ping alarm|answers ping|silent|degraded|SNMP|still (up|reachable)"
+    ],
+    "mustNot": [
+     "^\\W*yes\\b"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "No. 4.4 DELTA-RADIO01 is not down: it answers ping, but its SNMP is silent and there is no ping alarm."
+   },
+   "answer": "No, **4.4 DELTA-RADIO01** is not down. It is currently reporting an [Average] problem for high ICMP ping loss that has been open for about 4 hours.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 915,
+   "ms": 3937,
+   "promptMs": 829,
+   "promptTokens": 2852,
+   "outputTokens": 43
+  },
+  {
+   "question": {
+    "id": 8,
+    "lang": "en",
+    "kind": "sla",
+    "q": "What was the SLA last month, and was the target met?",
+    "must": [
+     "98[.,]42",
+     "miss|not met|not (reach|achiev|meet)|did not (meet|reach|achieve)|fell (short|below)|below|under|failed"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "Last month's strict SLA was 98.42%, and the 99% target was missed."
+   },
+   "answer": "The strict SLA for 2026-10 was **98.42%**, which missed the 99% target.\nAccording to HCML's report method, the score was **99.41%**.\nThe worst-performing devices for that month were **4.3.2 DELTA-AP02** (91.20%) and **4.2.1 DELTA-SW01** (94.80%).",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 601,
+   "ms": 5850,
+   "promptMs": 551,
+   "promptTokens": 2852,
+   "outputTokens": 103
+  },
+  {
+   "question": {
+    "id": 9,
+    "lang": "en",
+    "kind": "sla",
+    "q": "Compare HCML's report figure for October with the strict figure.",
+    "must": [
+     "99[.,]41",
+     "98[.,]42"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "By HCML's report method October is 99.41%, against 98.42% by the strict method, which counts devices that are fully down."
+   },
+   "answer": "HCML's report figure for October was **99.41%**, while the strict figure was **98.42%**. The strict figure missed the target and was affected by 23 out of 24 devices with data.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 493,
+   "ms": 2862,
+   "promptMs": 473,
+   "promptTokens": 2853,
+   "outputTokens": 53
+  },
+  {
+   "question": {
+    "id": 10,
+    "lang": "en",
+    "kind": "sla",
+    "q": "Which sites are below the SLA target?",
+    "must": [
+     "FPSO",
+     "Surabaya",
+     "Sampang"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "Three sites are below the target: FPSO KAS3 & BD-WHP 95.10%, Surabaya 97.90% and SSB / Sampang 98.50%."
+   },
+   "answer": "There are **3 sites** that were below the target in 2026-10: **FPSO KAS3 & BD-WHP**, **Surabaya**, and **SSB / Sampang**.\n\n- **FPSO KAS3 & BD-WHP**: 95.10%\n- **Surabaya**: 97.90%\n- **SSB / Sampang**: 98.50%",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 493,
+   "ms": 4541,
+   "promptMs": 478,
+   "promptTokens": 2847,
+   "outputTokens": 96
+  },
+  {
+   "question": {
+    "id": 11,
+    "lang": "en",
+    "kind": "service",
+    "q": "Which services are degraded?",
+    "must": [
+     "Voice path",
+     "Internet access"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "Two services are degraded: Voice path at 96.20% and Internet access at 98.10%."
+   },
+   "answer": "The degraded services are **Voice path** and **Internet access**.\n\n- **Voice path** has a 96.20% uptime this month and is currently \"Unavailable by ICMP ping\".\n- **Internet access** has a 98.10% uptime this month and is also currently \"Unavailable by ICMP ping\".",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 451,
+   "ms": 3810,
+   "promptMs": 436,
+   "promptTokens": 2844,
+   "outputTokens": 71
+  },
+  {
+   "question": {
+    "id": 12,
+    "lang": "en",
+    "kind": "count",
+    "q": "How many problems were opened in the last 24 hours?",
+    "must": [
+     "\\b17\\b"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "17 problems were opened in the last 24 hours."
+   },
+   "answer": "A total of **17 problems** were opened in the last 24 hours. These include 1 Disaster, 3 High, 5 Average, 5 Warning, and 3 Information problems.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 549,
+   "ms": 2401,
+   "promptMs": 531,
+   "promptTokens": 2852,
+   "outputTokens": 43
+  },
+  {
+   "question": {
+    "id": 13,
+    "lang": "en",
+    "kind": "rank",
+    "q": "What is the oldest open problem?",
+    "must": [
+     "CHARLIE-FW01"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "The oldest open problem is on 3.1 CHARLIE-FW01: the version of the Zabbix agent has changed, open since 5 Nov 2026."
+   },
+   "answer": "The oldest open problem is a [Information] alert on **3.1 CHARLIE-FW01** regarding the Zabbix agent version change, which has been open since 5 Nov 2026.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 501,
+   "ms": 3156,
+   "promptMs": 482,
+   "promptTokens": 2846,
+   "outputTokens": 46
+  },
+  {
+   "question": {
+    "id": 14,
+    "lang": "en",
+    "kind": "partial",
+    "q": "Is every open problem listed in your data?",
+    "must": [
+     "\\b20\\b",
+     "\\b22\\b",
+     "\\bno\\b|not (all|every|listed|complete)|only|more|partial|incomplete|rest|remaining|top 20|worst 20|20 of"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "No. There are 22 open problems and only the worst 20 are listed in my data, so 2 more are not listed."
+   },
+   "answer": "No, not every open problem is listed in the snapshot. The snapshot only displays the worst 20 problems, but there are a total of 22 open problems.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 483,
+   "ms": 2796,
+   "promptMs": 467,
+   "promptTokens": 2848,
+   "outputTokens": 36
+  },
+  {
+   "question": {
+    "id": 15,
+    "lang": "en",
+    "kind": "list",
+    "q": "List every host at the FPSO site that is down.",
+    "must": [
+     "DELTA-SW01",
+     "DELTA-AP01",
+     "DELTA-AP02"
+    ],
+    "mustNot": [
+     "DELTA-AP03.{0,40}\\b(is down|are down|unreachable)",
+     "DELTA-FW01.{0,40}\\b(is down|are down|unreachable)"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "At FPSO KAS3 & BD-WHP three hosts are down: 4.2.1 DELTA-SW01, 4.3.1 DELTA-AP01 and 4.3.2 DELTA-AP02."
+   },
+   "answer": "There are **3 hosts** at FPSO KAS3 & BD-WHP that are currently unreachable: **4.2.1 DELTA-SW01**, **4.3.1 DELTA-AP01**, and **4.3.2 DELTA-AP02**. \n\nThese devices have been down for about 30 minutes, 45 minutes, and 45 minutes respectively.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 513,
+   "ms": 4663,
+   "promptMs": 467,
+   "promptTokens": 2851,
+   "outputTokens": 89
+  },
+  {
+   "question": {
+    "id": 16,
+    "lang": "en",
+    "kind": "rank",
+    "q": "Which device had the worst availability last month?",
+    "must": [
+     "DELTA-AP02",
+     "91[.,]2"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "4.3.2 DELTA-AP02 had the worst availability last month: 91.20%."
+   },
+   "answer": "The device with the worst availability last month was **4.3.2 DELTA-AP02** with **91.20%**.\n\nIt is followed by **4.2.1 DELTA-SW01** at **94.80%** and **INET : SAMPANG WAN 2** at **96.00%**.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 489,
+   "ms": 3761,
+   "promptMs": 469,
+   "promptTokens": 2848,
+   "outputTokens": 78
+  },
+  {
+   "question": {
+    "id": 17,
+    "lang": "en",
+    "kind": "trap",
+    "q": "What caused the outage at DELTA-SW01?",
+    "must": [
+     "(?:\\b(?:not|no|never|cannot|without)|n't)\\b(?:[^.?!]|\\.(?=\\S)){0,60}\\b(?:in|say|says|said|give|gives|given|list|listed|show|shows|shown|hold|holds|include|included|includes|contain|contains|contained|mention|mentioned|provide|provided|provides|have|know|known|tell|state|stated|specify|specified|available|recorded|reported|part|data|snapshot|information|determine|determined|identify|identified|confirm|confirmed|find|found|see|indicate|indicates|indicated|explain|reveal|reveals|document|documented|record|records|log|logged|capture|captured)\\b|\\b(?:unknown|unavailable|unspecified|undetermined|unclear)\\b"
+    ],
+    "mustNot": [
+     "power (cut|loss|failure|outage)|cable|fibre|fiber|firmware|hardware failure|was caused by"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "My data does not say what caused the outage at 4.2.1 DELTA-SW01: it only shows that it has been unreachable for 30 minutes.",
+    "negatedOk": true
+   },
+   "answer": "I cannot determine the specific root cause of the outage for **4.2.1 DELTA-SW01** from the current data. The monitoring system shows it is currently **Unavailable by ICMP ping** and has been down for about 30 minutes.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 520,
+   "ms": 4004,
+   "promptMs": 504,
+   "promptTokens": 2851,
+   "outputTokens": 55
+  },
+  {
+   "question": {
+    "id": 18,
+    "lang": "en",
+    "kind": "trap",
+    "q": "What is the temperature of the core switch in Jakarta?",
+    "must": [
+     "(?:\\b(?:not|no|never|cannot|without)|n't)\\b(?:[^.?!]|\\.(?=\\S)){0,60}\\b(?:in|say|says|said|give|gives|given|list|listed|show|shows|shown|hold|holds|include|included|includes|contain|contains|contained|mention|mentioned|provide|provided|provides|have|know|known|tell|state|stated|specify|specified|available|recorded|reported|part|data|snapshot|information|determine|determined|identify|identified|confirm|confirmed|find|found|see|indicate|indicates|indicated|explain|reveal|reveals|document|documented|record|records|log|logged|capture|captured)\\b|\\b(?:unknown|unavailable|unspecified|undetermined|unclear)\\b"
+    ],
+    "mustNot": [
+     "\\d+ ?(°|degrees|celsius)"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "The temperature of the core switch in Jakarta is not in my data."
+   },
+   "answer": "I cannot provide the temperature of the core switch in **Jakarta** as the snapshot does not contain temperature data. The snapshot only shows that there are 4 hosts and 4 problems at that site, with the worst being an Average severity issue.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 832,
+   "ms": 4280,
+   "promptMs": 704,
+   "promptTokens": 2850,
+   "outputTokens": 50
+  },
+  {
+   "question": {
+    "id": 19,
+    "lang": "en",
+    "kind": "trap",
+    "q": "Give me the CPU load of ALPHA-SW02 in percent.",
+    "must": [
+     "High CPU utilization|CPU",
+     "(?:\\b(?:not|no|never|cannot|without)|n't)\\b(?:[^.?!]|\\.(?=\\S)){0,60}\\b(?:in|say|says|said|give|gives|given|list|listed|show|shows|shown|hold|holds|include|included|includes|contain|contains|contained|mention|mentioned|provide|provided|provides|have|know|known|tell|state|stated|specify|specified|available|recorded|reported|part|data|snapshot|information|determine|determined|identify|identified|confirm|confirmed|find|found|see|indicate|indicates|indicated|explain|reveal|reveals|document|documented|record|records|log|logged|capture|captured)\\b|\\b(?:unknown|unavailable|unspecified|undetermined|unclear)\\b"
+    ],
+    "mustNot": [
+     "\\b\\d{1,3} ?%.{0,20}CPU|CPU.{0,20}\\b\\d{1,3} ?%"
+    ],
+    "answerLang": "en",
+    "maxChars": 900,
+    "reference": "There is an open High CPU utilization problem on 1.2.2 ALPHA-SW02, but my data does not give its CPU load as a figure."
+   },
+   "answer": "The snapshot does not contain the CPU load percentage for **ALPHA-SW02**.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 497,
+   "ms": 1769,
+   "promptMs": 480,
+   "promptTokens": 2853,
+   "outputTokens": 28
+  },
+  {
+   "question": {
+    "id": 20,
+    "lang": "en",
+    "kind": "summary",
+    "q": "Summarize what is happening right now in three sentences.",
+    "must": [
+     "FPSO|DELTA",
+     "\\b22\\b"
+    ],
+    "answerLang": "en",
+    "maxChars": 700,
+    "reference": "The portal has 22 open problems. The FPSO site is the worst: 4.2.1 DELTA-SW01 is down with a Disaster. Five hosts are unreachable and the SLA missed its target last month."
+   },
+   "answer": "There are currently **22 open problems** across the estate, with the most severe issues occurring at **FPSO KAS3 & BD-WHP**. Three hosts at that site are unreachable, including **4.2.1 DELTA-SW01**, **4.3.1 DELTA-AP01**, and **4.3.2 DELTA-AP02**. Overall, several sites like **Surabaya** and **SSB / Sampang** also have active high-severity issues and unreachable devices.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 492,
+   "ms": 5904,
+   "promptMs": 478,
+   "promptTokens": 2850,
+   "outputTokens": 110
+  },
+  {
+   "question": {
+    "id": 21,
+    "lang": "id",
+    "kind": "count",
+    "q": "Berapa jumlah host dan berapa yang tidak terjangkau?",
+    "must": [
+     "\\b24\\b",
+     "\\b5\\b|lima"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Ada 24 host, dan 5 di antaranya tidak terjangkau."
+   },
+   "answer": "Total ada **24 hosts** yang dimonitor, dan **5 host** di antaranya tidak bisa dijangkau.\n\nBerikut adalah detail host yang tidak terjangkau:\n- **FPSO KAS3 & BD-WHP**: 4.2.1 DELTA-SW01, 4.3.1 DELTA-AP01, 4.3.2 DELTA-AP02\n- **SSB / Sampang**: INET : SAMPANG WAN 2\n- **Surabaya**: 2.2.1 BRAVO-SW01",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 651,
+   "ms": 6624,
+   "promptMs": 560,
+   "promptTokens": 2854,
+   "outputTokens": 124
+  },
+  {
+   "question": {
+    "id": 22,
+    "lang": "id",
+    "kind": "rank",
+    "q": "Situs mana yang punya masalah terbuka paling banyak?",
+    "must": [
+     "FPSO"
+    ],
+    "mustNot": [
+     "(Jakarta|Surabaya|Sumenep) (yang )?(paling banyak|terbanyak)"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Situs FPSO KAS3 & BD-WHP punya masalah terbuka paling banyak: 6."
+   },
+   "answer": "Situs dengan masalah terbuka terbanyak adalah **FPSO KAS3 & BD-WHP** dengan total 6 masalah. Selain itu, site **Jakarta** dan **Surabaya** masing-masing memiliki 4 masalah terbuka.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 489,
+   "ms": 2870,
+   "promptMs": 479,
+   "promptTokens": 2851,
+   "outputTokens": 48
+  },
+  {
+   "question": {
+    "id": 23,
+    "lang": "id",
+    "kind": "rank",
+    "q": "Apa masalah terburuk saat ini?",
+    "must": [
+     "DELTA-SW01"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Masalah terburuk saat ini adalah 4.2.1 DELTA-SW01, tingkat Disaster, tidak terjangkau sejak 30 menit."
+   },
+   "answer": "Masalah terburuk saat ini adalah **[Disaster] 4.2.1 DELTA-SW01: Unavailable by ICMP ping** yang sudah terjadi selama 30 menit. Masalah ini berada di site **FPSO KAS3 & BD-WHP** yang merupakan site dengan kondisi terburuk.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 469,
+   "ms": 4354,
+   "promptMs": 460,
+   "promptTokens": 2849,
+   "outputTokens": 69
+  },
+  {
+   "question": {
+    "id": 24,
+    "lang": "id",
+    "kind": "list",
+    "q": "Host apa saja yang mati sekarang?",
+    "must": [
+     "DELTA-SW01",
+     "DELTA-AP01",
+     "DELTA-AP02",
+     "SAMPANG WAN 2",
+     "BRAVO-SW01"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Lima host yang mati: 4.2.1 DELTA-SW01, 4.3.1 DELTA-AP01, 4.3.2 DELTA-AP02, INET : SAMPANG WAN 2 dan 2.2.1 BRAVO-SW01."
+   },
+   "answer": "Ada **5 perangkat** yang tidak bisa dijangkau saat ini:\n- **4.2.1 DELTA-SW01** di FPSO KAS3 & BD-WHP (mati sekitar 30 menit)\n- **4.3.1 DELTA-AP01** di FPSO KAS3 & BD-WHP (mati sekitar 45 menit)\n- **4.3.2 DELTA-AP02** di FPSO KAS3 & BD-WHP (mati sekitar 45 menit)\n- **INET : SAMPANG WAN 2** di SSB / Sampang (mati selama 2 hari)\n- **2.2.1 BRAVO-SW01** di Surabaya (mati sekitar 5 jam)",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 442,
+   "ms": 6805,
+   "promptMs": 432,
+   "promptTokens": 2848,
+   "outputTokens": 164
+  },
+  {
+   "question": {
+    "id": 25,
+    "lang": "id",
+    "kind": "count",
+    "q": "Berapa masalah terbuka yang belum di-acknowledge?",
+    "must": [
+     "\\b14\\b"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Ada 14 masalah terbuka yang belum di-acknowledge."
+   },
+   "answer": "Ada **14 masalah** yang belum di-acknowledge. Data ini mencakup semua masalah dari total 22 masalah terbuka yang ada saat ini.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 468,
+   "ms": 1769,
+   "promptMs": 457,
+   "promptTokens": 2852,
+   "outputTokens": 31
+  },
+  {
+   "question": {
+    "id": 26,
+    "lang": "id",
+    "kind": "duration",
+    "q": "Sudah berapa lama INET : SAMPANG WAN 2 mati?",
+    "must": [
+     "\\b2 ?d\\b|2 hari|dua hari"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "INET : SAMPANG WAN 2 sudah mati selama 2 hari."
+   },
+   "answer": "**INET : SAMPANG WAN 2** sudah mati selama sekitar 2 hari.\nStatusnya saat ini adalah *Unavailable by ICMP ping* dan sudah di-acknowledge.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 484,
+   "ms": 2068,
+   "promptMs": 475,
+   "promptTokens": 2855,
+   "outputTokens": 37
+  },
+  {
+   "question": {
+    "id": 27,
+    "lang": "id",
+    "kind": "state",
+    "q": "Apakah 4.4 DELTA-RADIO01 mati?",
+    "must": [
+     "tidak (mati|down)|belum mati|bukan mati|masih (merespon|menjawab|terjangkau|menjawab ping)|ping|SNMP|tidak ada alarm"
+    ],
+    "mustNot": [
+     "^\\W*ya\\b"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Tidak. 4.4 DELTA-RADIO01 tidak mati: masih menjawab ping, tetapi SNMP-nya diam."
+   },
+   "answer": "**4.4 DELTA-RADIO01** tidak mati karena statusnya tidak tercatat sebagai unreachable, melainkan sedang mengalami masalah *High ICMP ping loss*. Masalah ini sudah terjadi selama sekitar 4 jam dan belum di-acknowledge.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 460,
+   "ms": 2915,
+   "promptMs": 450,
+   "promptTokens": 2854,
+   "outputTokens": 51
+  },
+  {
+   "question": {
+    "id": 28,
+    "lang": "id",
+    "kind": "sla",
+    "q": "Bagaimana SLA bulan lalu, apakah targetnya tercapai?",
+    "must": [
+     "98[.,]42",
+     "tidak (mencapai|tercapai|terpenuhi|memenuhi|lolos)|gagal|di bawah|belum (mencapai|tercapai|terpenuhi)|kurang dari|miss"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "SLA bulan lalu 98,42% secara ketat, dan targetnya tidak tercapai."
+   },
+   "answer": "SLA bulan lalu tidak mencapai target, yaitu hanya **98.42%** (target 99%).\n\nBerdasarkan data laporan:\n- **FPSO KAS3 & BD-WHP** (95.10%), **Surabaya** (97.90%), dan **SSB / Sampang** (98.50%) adalah 3 site yang berada di bawah target pada bulan Oktober 2026.\n- Perangkat dengan SLA terburuk adalah **4.3.2 DELTA-AP02** dengan 91.20%.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 463,
+   "ms": 6025,
+   "promptMs": 453,
+   "promptTokens": 2853,
+   "outputTokens": 128
+  },
+  {
+   "question": {
+    "id": 29,
+    "lang": "id",
+    "kind": "sla",
+    "q": "Bandingkan angka SLA metode laporan HCML dengan metode ketat untuk Oktober.",
+    "must": [
+     "99[.,]41",
+     "98[.,]42"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Dengan metode laporan HCML Oktober 99,41%, sedangkan metode ketat 98,42%, karena perangkat yang mati penuh tidak dihitung."
+   },
+   "answer": "Untuk bulan Oktober, angka SLA metode laporan HCML adalah **99.41%**, sedangkan metode ketat menunjukkan angka yang lebih rendah yaitu **98.42%**.\n\nMetode ketat mencatat angka tersebut karena memperhitungkan semua perangkat yang memiliki data (23 dari 24 perangkat). Sementara itu, metode laporan HCML mengabaikan perangkat yang mati sepenuhnya sehingga menghasilkan persentase yang lebih tinggi.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 504,
+   "ms": 5254,
+   "promptMs": 494,
+   "promptTokens": 2857,
+   "outputTokens": 88
+  },
+  {
+   "question": {
+    "id": 30,
+    "lang": "id",
+    "kind": "sla",
+    "q": "Situs mana saja yang berada di bawah target SLA?",
+    "must": [
+     "FPSO",
+     "Surabaya",
+     "Sampang"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Tiga situs di bawah target: FPSO KAS3 & BD-WHP 95,10%, Surabaya 97,90%, dan SSB / Sampang 98,50%."
+   },
+   "answer": "Ada **3 situs** yang berada di bawah target SLA untuk periode 2026-10:\n- **FPSO KAS3 & BD-WHP** (95.10%)\n- **Surabaya** (97.90%)\n- **SSB / Sampang** (98.50%)",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 858,
+   "ms": 3851,
+   "promptMs": 838,
+   "promptTokens": 2852,
+   "outputTokens": 73
+  },
+  {
+   "question": {
+    "id": 31,
+    "lang": "id",
+    "kind": "service",
+    "q": "Layanan apa yang sedang bermasalah?",
+    "must": [
+     "Voice path",
+     "Internet access"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Dua layanan bermasalah: Voice path 96,20% dan Internet access 98,10%."
+   },
+   "answer": "Ada 2 layanan yang sedang mengalami degradasi saat ini.\n- **Voice path**: 96.20% bulan ini; status saat ini: Unavailable by ICMP ping.\n- **Internet access**: 98.10% bulan ini; status saat ini: Unavailable by ICMP ping.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 456,
+   "ms": 3417,
+   "promptMs": 443,
+   "promptTokens": 2850,
+   "outputTokens": 65
+  },
+  {
+   "question": {
+    "id": 32,
+    "lang": "id",
+    "kind": "count",
+    "q": "Berapa banyak masalah baru dalam 24 jam terakhir?",
+    "must": [
+     "\\b17\\b"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Ada 17 masalah baru dalam 24 jam terakhir."
+   },
+   "answer": "Ada **17 masalah** yang baru dibuka dalam 24 jam terakhir. Masalah ini terdiri dari 1 Disaster, 3 High, 5 Average, 5 Warning, dan 3 Information.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 479,
+   "ms": 2247,
+   "promptMs": 456,
+   "promptTokens": 2854,
+   "outputTokens": 43
+  },
+  {
+   "question": {
+    "id": 33,
+    "lang": "id",
+    "kind": "rank",
+    "q": "Masalah terbuka mana yang paling lama?",
+    "must": [
+     "CHARLIE-FW01"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Masalah terbuka paling lama ada di 3.1 CHARLIE-FW01, sejak 5 Nov 2026."
+   },
+   "answer": "Masalah terbuka yang paling lama adalah **[Information] 3.1 CHARLIE-FW01: Version of Zabbix agent has changed** yang sudah terbuka sejak **5 Nov 2026**.\n\nBerikut adalah 3 masalah tertua lainnya:\n- **[Warning] 6.1 FOXTROT-FW01**: Zabbix agent is not available (sejak 10 Nov 2026)\n- **[Warning] 2.1 BRAVO-FW01**: Disk space is low (sejak 14 Nov 2026)\n- **[Warning] 5.2.1 ECHO-SW01**: Interface Gi1/0/8: Link down (sudah sekitar 3 hari)",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 752,
+   "ms": 7927,
+   "promptMs": 652,
+   "promptTokens": 2849,
+   "outputTokens": 163
+  },
+  {
+   "question": {
+    "id": 34,
+    "lang": "id",
+    "kind": "partial",
+    "q": "Apakah semua masalah terbuka ada di datamu?",
+    "must": [
+     "\\b20\\b",
+     "\\b22\\b",
+     "\\btidak\\b|belum|hanya|sebagian|sisanya|lainnya|tidak lengkap|parsial|20 dari|baru 20"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Tidak semua. Ada 22 masalah terbuka, tetapi hanya 20 yang tercantum di datamu."
+   },
+   "answer": "Data saya hanya menampilkan 20 masalah terburuk dari total **22 masalah terbuka**.\n\nAda 2 masalah lainnya yang tidak tercantum dalam daftar karena keterbatasan tampilan snapshot.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 459,
+   "ms": 2907,
+   "promptMs": 447,
+   "promptTokens": 2850,
+   "outputTokens": 38
+  },
+  {
+   "question": {
+    "id": 35,
+    "lang": "id",
+    "kind": "list",
+    "q": "Sebutkan semua host di situs FPSO yang mati.",
+    "must": [
+     "DELTA-SW01",
+     "DELTA-AP01",
+     "DELTA-AP02"
+    ],
+    "mustNot": [
+     "DELTA-AP03.{0,40}\\b(mati|down|tidak terjangkau)",
+     "DELTA-FW01.{0,40}\\b(mati|down|tidak terjangkau)"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Di situs FPSO yang mati: 4.2.1 DELTA-SW01, 4.3.1 DELTA-AP01 dan 4.3.2 DELTA-AP02."
+   },
+   "answer": "Ada **3 perangkat** di **FPSO KAS3 & BD-WHP** yang tidak bisa dijangkau:\n- **4.2.1 DELTA-SW01** (sudah 30 menit)\n- **4.3.1 DELTA-AP01** (sudah 45 menit)\n- **4.3.2 DELTA-AP02** (sudah 45 menit)",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 472,
+   "ms": 4756,
+   "promptMs": 463,
+   "promptTokens": 2853,
+   "outputTokens": 95
+  },
+  {
+   "question": {
+    "id": 36,
+    "lang": "id",
+    "kind": "rank",
+    "q": "Perangkat mana dengan ketersediaan terburuk bulan lalu?",
+    "must": [
+     "DELTA-AP02",
+     "91[.,]2"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Perangkat terburuk bulan lalu adalah 4.3.2 DELTA-AP02 dengan 91,20%."
+   },
+   "answer": "Perangkat dengan ketersediaan terburuk bulan lalu adalah **4.3.2 DELTA-AP02** dengan skor 91.20%.\n\nBerikut adalah 3 perangkat dengan ketersediaan terendah lainnya pada **2026-10**:\n- **4.2.1 DELTA-SW01** (94.80%)\n- **INET : SAMPANG WAN 2** (96.00%)\n- **4.3.1 DELTA-AP01** (Tidak tertera di daftar, namun termasuk perangkat dengan ketersediaan rendah bulan lalu)",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 912,
+   "ms": 7679,
+   "promptMs": 609,
+   "promptTokens": 2854,
+   "outputTokens": 132
+  },
+  {
+   "question": {
+    "id": 37,
+    "lang": "id",
+    "kind": "trap",
+    "q": "Apa penyebab matinya DELTA-SW01?",
+    "must": [
+     "\\b(?:tidak|belum|bukan|tanpa)\\b(?:[^.?!]|\\.(?=\\S)){0,60}\\b(?:ada|tercantum|disebutkan|disebut|diketahui|tahu|mengetahui|tersedia|memiliki|mencakup|termasuk|dicatat|tercatat|memberi|memberikan|menyebut|menyebutkan|menunjukkan|menampilkan|menyertakan|mencantumkan|mencatat|memuat|menyimpan|berisi|data|informasi|dapat|bisa)\\b|\\bdi luar data\\b"
+    ],
+    "mustNot": [
+     "listrik padam|kabel|firmware|kerusakan perangkat keras|disebabkan oleh"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Penyebab matinya DELTA-SW01 tidak ada di data: hanya terlihat tidak terjangkau sejak 30 menit.",
+    "negatedOk": true
+   },
+   "answer": "Masalah pada **4.2.1 DELTA-SW01** disebabkan oleh **Unavailable by ICMP ping**. Kondisi ini sudah terjadi selama sekitar 30 menit dan belum di-acknowledge.",
+   "pass": false,
+   "failed": [
+    "facts",
+    "invented"
+   ],
+   "firstTokenMs": 474,
+   "ms": 2708,
+   "promptMs": 464,
+   "promptTokens": 2852,
+   "outputTokens": 43
+  },
+  {
+   "question": {
+    "id": 38,
+    "lang": "id",
+    "kind": "trap",
+    "q": "Berapa suhu CPU pada switch ALPHA-SW01?",
+    "must": [
+     "\\b(?:tidak|belum|bukan|tanpa)\\b(?:[^.?!]|\\.(?=\\S)){0,60}\\b(?:ada|tercantum|disebutkan|disebut|diketahui|tahu|mengetahui|tersedia|memiliki|mencakup|termasuk|dicatat|tercatat|memberi|memberikan|menyebut|menyebutkan|menunjukkan|menampilkan|menyertakan|mencantumkan|mencatat|memuat|menyimpan|berisi|data|informasi|dapat|bisa)\\b|\\bdi luar data\\b"
+    ],
+    "mustNot": [
+     "\\d+ ?(°|derajat|celsius)"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Suhu CPU ALPHA-SW01 tidak tercantum di data yang saya punya."
+   },
+   "answer": "Data suhu CPU untuk **ALPHA-SW01** tidak tersedia di snapshot saat ini.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 476,
+   "ms": 2453,
+   "promptMs": 466,
+   "promptTokens": 2854,
+   "outputTokens": 30
+  },
+  {
+   "question": {
+    "id": 39,
+    "lang": "id",
+    "kind": "trap",
+    "q": "Siapa penanggung jawab di situs Surabaya?",
+    "must": [
+     "\\b(?:tidak|belum|bukan|tanpa)\\b(?:[^.?!]|\\.(?=\\S)){0,60}\\b(?:ada|tercantum|disebutkan|disebut|diketahui|tahu|mengetahui|tersedia|memiliki|mencakup|termasuk|dicatat|tercatat|memberi|memberikan|menyebut|menyebutkan|menunjukkan|menampilkan|menyertakan|mencantumkan|mencatat|memuat|menyimpan|berisi|data|informasi|dapat|bisa)\\b|\\bdi luar data\\b"
+    ],
+    "mustNot": [
+     "\\b(Pak|Bu|Bapak|Bpk|Ibu|Mr|Ms)\\b",
+     "[\\w.+-]+@[\\w-]+\\.[\\w.]+",
+     "\\+62\\s?\\d|\\b0\\d{2,3}[ -]\\d{3,4}[ -]\\d{3,4}\\b"
+    ],
+    "answerLang": "id",
+    "maxChars": 900,
+    "reference": "Penanggung jawab situs Surabaya tidak ada di data saya."
+   },
+   "answer": "Informasi mengenai penanggung jawab situs tidak tersedia di snapshot.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 451,
+   "ms": 2065,
+   "promptMs": 442,
+   "promptTokens": 2850,
+   "outputTokens": 31
+  },
+  {
+   "question": {
+    "id": 40,
+    "lang": "id",
+    "kind": "summary",
+    "q": "Ringkas kondisi saat ini dalam tiga kalimat.",
+    "must": [
+     "FPSO|DELTA",
+     "\\b22\\b"
+    ],
+    "answerLang": "id",
+    "maxChars": 700,
+    "reference": "Ada 22 masalah terbuka, paling parah di FPSO dengan DELTA-SW01 mati. Lima host tidak terjangkau. SLA bulan lalu tidak mencapai target."
+   },
+   "answer": "Saat ini terdapat **22 masalah terbuka** dengan **5 perangkat tidak bisa dijangkau** di berbagai lokasi.\nSitus dengan kondisi terburuk adalah **FPSO KAS3 & BD-WHP** yang memiliki 3 perangkat mati dan masalah tingkat *Disaster*.\nSecara keseluruhan, **17 masalah baru** muncul dalam 24 jam terakhir, termasuk gangguan koneksi pada perangkat di **DELTA-SW01** dan **DELTA-AP01**.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 457,
+   "ms": 5533,
+   "promptMs": 447,
+   "promptTokens": 2850,
+   "outputTokens": 99
+  },
+  {
+   "question": {
+    "id": 41,
+    "lang": "mixed",
+    "kind": "count",
+    "q": "Berapa host yang down right now?",
+    "must": [
+     "\\b5\\b|lima"
+    ],
+    "answerLang": "either",
+    "maxChars": 900,
+    "reference": "Ada 5 host yang down sekarang."
+   },
+   "answer": "There are **5 hosts** currently unreachable across the sites.\n- **FPSO KAS3 & BD-WHP**: 4.2.1 DELTA-SW01, 4.3.1 DELTA-AP01, 4.3.2 DELTA-AP02\n- **SSB / Sampang**: INET : SAMPANG WAN 2\n- **Surabaya**: 2.2.1 BRAVO-SW01",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 444,
+   "ms": 4266,
+   "promptMs": 435,
+   "promptTokens": 2848,
+   "outputTokens": 100
+  },
+  {
+   "question": {
+    "id": 42,
+    "lang": "mixed",
+    "kind": "rank",
+    "q": "Which site punya problem paling banyak?",
+    "must": [
+     "FPSO"
+    ],
+    "answerLang": "either",
+    "maxChars": 900,
+    "reference": "FPSO KAS3 & BD-WHP punya paling banyak problem: 6."
+   },
+   "answer": "**FPSO KAS3 & BD-WHP** has the most open problems with a total of 6. It also has the highest severity issues, including 3 High/Disaster problems and 3 unreachable hosts.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 607,
+   "ms": 3494,
+   "promptMs": 590,
+   "promptTokens": 2846,
+   "outputTokens": 47
+  },
+  {
+   "question": {
+    "id": 43,
+    "lang": "mixed",
+    "kind": "list",
+    "q": "Tolong list semua host yang unreachable.",
+    "must": [
+     "DELTA-SW01",
+     "DELTA-AP01",
+     "DELTA-AP02",
+     "SAMPANG WAN 2",
+     "BRAVO-SW01"
+    ],
+    "answerLang": "either",
+    "maxChars": 900,
+    "reference": "Host yang unreachable: 4.2.1 DELTA-SW01, 4.3.1 DELTA-AP01, 4.3.2 DELTA-AP02, INET : SAMPANG WAN 2, 2.2.1 BRAVO-SW01."
+   },
+   "answer": "Ada **5 perangkat** yang saat ini tidak bisa dijangkau (unreachable):\n\n- **FPSO KAS3 & BD-WHP**: 4.2.1 DELTA-SW01 (30 min), 4.3.1 DELTA-AP01 (45 min), 4.3.2 DELTA-AP02 (45 min)\n- **SSB / Sampang**: INET : SAMPANG WAN 2 (2 hari)\n- **Surabaya**: 2.2.1 BRAVO-SW01 (5 jam)",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 460,
+   "ms": 4848,
+   "promptMs": 451,
+   "promptTokens": 2849,
+   "outputTokens": 126
+  },
+  {
+   "question": {
+    "id": 44,
+    "lang": "mixed",
+    "kind": "sla",
+    "q": "SLA bulan lalu berapa persen, met atau missed?",
+    "must": [
+     "98[.,]42",
+     "miss|not met|tidak|gagal|below|di bawah"
+    ],
+    "answerLang": "either",
+    "maxChars": 900,
+    "reference": "SLA bulan lalu 98,42%, missed dari target 99%."
+   },
+   "answer": "SLA bulan lalu (2026-10) adalah **98.42%** dengan status **missed**.\n\nData ini diambil dari target 99% berdasarkan ICMP triggers. Berdasarkan metode laporan HCML, angkanya tercatat 99.41% karena mengabaikan perangkat yang mati total.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 465,
+   "ms": 3572,
+   "promptMs": 449,
+   "promptTokens": 2852,
+   "outputTokens": 72
+  },
+  {
+   "question": {
+    "id": 45,
+    "lang": "mixed",
+    "kind": "count",
+    "q": "Ada berapa problem yang not acked?",
+    "must": [
+     "\\b14\\b"
+    ],
+    "answerLang": "either",
+    "maxChars": 900,
+    "reference": "Ada 14 problem yang not acked."
+   },
+   "answer": "Ada **14** problem yang belum di-acknowledge (not acked). \n\nData ini mencakup seluruh masalah yang sedang terbuka di sistem saat ini.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 443,
+   "ms": 2364,
+   "promptMs": 435,
+   "promptTokens": 2849,
+   "outputTokens": 42
+  },
+  {
+   "question": {
+    "id": 46,
+    "lang": "mixed",
+    "kind": "state",
+    "q": "DELTA-RADIO01 itu down atau cuma SNMP silent?",
+    "must": [
+     "SNMP|silent|tidak (mati|down)|not down|ping"
+    ],
+    "answerLang": "either",
+    "maxChars": 900,
+    "reference": "DELTA-RADIO01 tidak down: hanya SNMP silent, masih menjawab ping."
+   },
+   "answer": "**4.4 DELTA-RADIO01** tidak dalam status down, melainkan status **Not down, SNMP silent, no ping alarm**.\n\nHost ini memiliki masalah **Average** yaitu **High ICMP ping loss** yang sudah berlangsung selama sekitar 4 jam.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 469,
+   "ms": 2919,
+   "promptMs": 453,
+   "promptTokens": 2853,
+   "outputTokens": 56
+  },
+  {
+   "question": {
+    "id": 47,
+    "lang": "mixed",
+    "kind": "short",
+    "q": "FPSO status?",
+    "must": [
+     "FPSO|DELTA",
+     "\\b3\\b|tiga|three"
+    ],
+    "answerLang": "id",
+    "preferred": "id",
+    "maxChars": 700,
+    "reference": "FPSO: 3 host mati (DELTA-SW01, DELTA-AP01, DELTA-AP02), 1 SNMP diam, dan 6 masalah terbuka."
+   },
+   "answer": "Ada **3 perangkat** di **FPSO KAS3 & BD-WHP** yang tidak bisa dijangkau: **4.2.1 DELTA-SW01**, **4.3.1 DELTA-AP01**, dan **4.3.2 DELTA-AP02**. \n\nSite ini memiliki kondisi paling kritis dengan **6 masalah** yang terbuka, termasuk 3 masalah kategori **High/Disaster**. Selain itu, terdapat 1 perangkat dengan status **SNMP silent** (no ping alarm).",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 425,
+   "ms": 5032,
+   "promptMs": 416,
+   "promptTokens": 2845,
+   "outputTokens": 112
+  },
+  {
+   "question": {
+    "id": 48,
+    "lang": "mixed",
+    "kind": "short",
+    "q": "Surabaya?",
+    "must": [
+     "Surabaya",
+     "BRAVO-SW01"
+    ],
+    "answerLang": "id",
+    "preferred": "id",
+    "maxChars": 700,
+    "reference": "Surabaya: 5 host, 1 tidak terjangkau (2.2.1 BRAVO-SW01), 4 masalah terbuka."
+   },
+   "answer": "Ada **1 perangkat** di Surabaya yang tidak bisa dijangkau, yaitu **2.2.1 BRAVO-SW01** yang sudah mati selama sekitar 5 jam. Selain itu, situs tersebut memiliki 4 masalah aktif dengan kondisi tertinggi pada level **High**.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 330,
+   "ms": 3036,
+   "promptMs": 322,
+   "promptTokens": 2844,
+   "outputTokens": 56
+  },
+  {
+   "question": {
+    "id": 49,
+    "lang": "mixed",
+    "kind": "short",
+    "q": "Sampang WAN?",
+    "must": [
+     "SAMPANG WAN 2",
+     "\\b2 ?d\\b|2 hari|2 days"
+    ],
+    "answerLang": "en",
+    "preferred": "en",
+    "maxChars": 700,
+    "reference": "INET : SAMPANG WAN 2 is down, for 2 days."
+   },
+   "answer": "The host **INET : SAMPANG WAN 2** at site **SSB / Sampang** is currently down and has been unreachable for about 2 days.\n\nThe problem is listed as a **High** severity issue because it is unavailable by ICMP ping. It has already been acknowledged by the team.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 439,
+   "ms": 3271,
+   "promptMs": 430,
+   "promptTokens": 2843,
+   "outputTokens": 64
+  },
+  {
+   "question": {
+    "id": 50,
+    "lang": "mixed",
+    "kind": "short",
+    "q": "Worst devices?",
+    "must": [
+     "DELTA-AP02",
+     "91[.,]2"
+    ],
+    "answerLang": "en",
+    "preferred": "en",
+    "maxChars": 700,
+    "reference": "The worst devices last month: 4.3.2 DELTA-AP02 91.20%, 4.2.1 DELTA-SW01 94.80% and INET : SAMPANG WAN 2 96.00%."
+   },
+   "answer": "The worst devices for the month of 2026-10 were **4.3.2 DELTA-AP02** with 91.20%, **4.2.1 DELTA-SW01** with 94.80%, and **INET : SAMPANG WAN 2** with 96.00%. These figures are based on the strict ICMP trigger targets.",
+   "pass": true,
+   "failed": [],
+   "firstTokenMs": 333,
+   "ms": 4369,
+   "promptMs": 324,
+   "promptTokens": 2842,
+   "outputTokens": 89
+  }
+ ]
+}

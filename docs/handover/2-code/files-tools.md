@@ -2,20 +2,80 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Developers | about 6 min | [Web app files, one card each](files-web.md) | [The A to Z index of names](symbols.md) |
+| Developers | about 7 min | [Web app files, one card each](files-web.md) | [The A to Z index of names](symbols.md) |
 
-Every file of the checkers, the handbook generator and the other tools has one card on this page, 26 in all, grouped by folder and in alphabetical order. A card is the file in a few lines. The sentence under its heading says what the file is for and where the handbook walks through it, and a person wrote it. The block below that sentence is written by `npm run handover:build` from the code, so it cannot drift: the file's size, its exports with the first sentence of each comment, what it imports, who imports it, and which tests import it.
+Every file of the checkers, the handbook generator and the other tools has one card on this page, 31 in all, grouped by folder and in alphabetical order. A card is the file in a few lines. The sentence under its heading says what the file is for and where the handbook walks through it, and a person wrote it. The block below that sentence is written by `npm run handover:build` from the code, so it cannot drift: the file's size, its exports with the first sentence of each comment, what it imports, who imports it, and which tests import it.
 
 Use the page when you know a file name and want to know what it is for and what would be hit if you changed it. The A to Z index of every name is [the symbols page](symbols.md). The same cards for the server and for the web app are [Server files](files-server.md) and [Web app files](files-web.md).
 
 ## `deploy`
+
+### `deploy/backup-state.sh`
+
+Makes one encrypted copy of the state and log volumes of a copy of the portal, without a plain file on the disk, reads it back before keeping it, and deletes the copies beyond the number to keep. No chapter walks through it, so this card and the comment at the top of the file are its account.
+
+<!-- gen:card deploy/backup-state.sh -->
+154 lines, 0 exports. Imported by 0 files.
+
+Imports: none
+
+Imported by: none
+<!-- /gen -->
+
+### `deploy/gpu-gate.sh`
+
+Reads the machine it runs on, the processor, memory, disk, Docker and any NVIDIA card, and says whether the local model can run there. It changes nothing. No chapter walks through it, so this card and the comment at the top of the file are its account.
+
+<!-- gen:card deploy/gpu-gate.sh -->
+125 lines, 0 exports. Imported by 0 files.
+
+Imports: none
+
+Imported by: none
+<!-- /gen -->
+
+### `deploy/model-speed.py`
+
+Times the real question on the Ollama of the machine it runs on, cold and warm and four at once, and says PASS or FAIL against a limit on the first word. No chapter walks through it, so this card and the comment at the top of the file are its account.
+
+<!-- gen:card deploy/model-speed.py -->
+173 lines, 0 exports. Imported by 0 files.
+
+Imports: none
+
+Imported by: none
+<!-- /gen -->
+
+### `deploy/portal-probe.sh`
+
+Gives HCML's Zabbix agent one value a call: whether the portal answers, whether its Zabbix does, the days left on the certificate, the card's temperature and memory, whether the model server answers, and the age of the newest backup. Every probe is cut off after two seconds. It prints `ZBX_NOTSUPPORTED` for what it cannot read, and it changes nothing. No chapter walks through it, so this card and the comment at the top of the file are its account.
+
+<!-- gen:card deploy/portal-probe.sh -->
+105 lines, 0 exports. Imported by 0 files.
+
+Imports: none
+
+Imported by: none
+<!-- /gen -->
 
 ### `deploy/rebuild.sh`
 
 Rebuilds both portals from the commit, checks their settings first, tags the old images, and checks the new ones. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card deploy/rebuild.sh -->
-403 lines, 0 exports. Imported by 0 files.
+468 lines, 0 exports. Imported by 0 files.
+
+Imports: none
+
+Imported by: none
+<!-- /gen -->
+
+### `deploy/restore-state.sh`
+
+Puts a copy made by `backup-state.sh` back into the volumes of a stopped stack; without `--apply` it only lists what the copy holds. No chapter walks through it, so this card and the comment at the top of the file are its account.
+
+<!-- gen:card deploy/restore-state.sh -->
+86 lines, 0 exports. Imported by 0 files.
 
 Imports: none
 
@@ -27,7 +87,7 @@ Imported by: none
 Checks that the portals and their containers answer and tells you when they do not; meant to run from a timer. No chapter walks through it, so this card and the comment at the top of the file are its account.
 
 <!-- gen:card deploy/watch.sh -->
-424 lines, 0 exports. Imported by 0 files.
+426 lines, 0 exports. Imported by 0 files.
 
 Imports: none
 
@@ -103,7 +163,7 @@ Imported by: none
 Fails when a count the documents state is not the count the code has. Walked through in [Tests and checkers](tests-and-checkers.md).
 
 <!-- gen:card tools/check/facts.check.mjs -->
-733 lines, 23 exports. Imported by 0 files.
+752 lines, 23 exports. Imported by 0 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -120,16 +180,16 @@ Fails when a count the documents state is not the count the code has. Walked thr
 | `countPages` | function | 214 | `function countPages(app)` | The pages App.tsx routes. |
 | `gatherFacts` | function | 221 | `function gatherFacts(root)` | Everything the code says, by name. |
 | `RULES` | constant | 262 | `const RULES` | The statements to look for. |
-| `checkText` | function | 336 | `function checkText(text, facts)` | The statements in `text` that the code contradicts, with their line numbers, how many were checked, and how many were left alone because their... |
-| `openapiEndpoints` | function | 373 | `function openapiEndpoints(text)` | Endpoints of docs/api/openapi.yaml as "METHOD /path", read the way openapi.check does: a path at two spaces, a method at four. |
-| `endpointTableRows` | function | 389 | `function endpointTableRows(text)` | Rows of the endpoint table of setup/05, as "METHOD /path" with the query string cut off. |
-| `citedLines` | function | 396 | `function citedLines(cell)` | "file:line" and ":line" tokens of one cell of the call table, as file -> [lines]. |
-| `checkCallTable` | function | 414 | `function checkCallTable(text, calls)` | The table of calls in ERD-Database.md against the lines of server/src: one problem for each method that differs. |
-| `checkTracker` | function | 441 | `function checkTracker(text)` | The rows of the tracker (a row is a table row whose first cell is a mark) and what is wrong with them. |
-| `checkOpenItemsTotals` | function | 472 | `function checkOpenItemsTotals(text, totals)` | The sentence at the head of the open-items page that gives the tracker's totals. |
-| `openItemOwners` | function | 480 | `function openItemOwners(text)` | The rows of the open-items page that only HCML, or only the owner, can close. |
-| `checkOpenProblems` | function | 493 | `function checkOpenProblems(page, items)` | A comment before each table of the open-problems page names its rows: they must be the ones the open-items page gives to HCML alone and to the... |
-| `checkFacts` | function | 513 | `function checkFacts(root)` |  |
+| `checkText` | function | 338 | `function checkText(text, facts)` | The statements in `text` that the code contradicts, with their line numbers, how many were checked, and how many were left alone because their... |
+| `openapiEndpoints` | function | 374 | `function openapiEndpoints(text)` | Endpoints of docs/api/openapi.yaml as "METHOD /path", read the way openapi.check does: a path at two spaces, a method at four. |
+| `endpointTableRows` | function | 390 | `function endpointTableRows(text)` | Rows of the endpoint table of setup/05, as "METHOD /path" with the query string cut off. |
+| `citedLines` | function | 397 | `function citedLines(cell)` | "file:line" and ":line" tokens of one cell of the call table, as file -> [lines]. |
+| `checkCallTable` | function | 415 | `function checkCallTable(text, calls)` | The table of calls in ERD-Database.md against the lines of server/src: one problem for each method that differs. |
+| `checkTracker` | function | 442 | `function checkTracker(text)` | The rows of the tracker (a row is a table row whose first cell is a mark) and what is wrong with them. |
+| `checkOpenItemsTotals` | function | 473 | `function checkOpenItemsTotals(text, totals)` | The sentence at the head of the open-items page that gives the tracker's totals. |
+| `openItemOwners` | function | 481 | `function openItemOwners(text)` | The rows of the open-items page that only HCML, or only we, can close. |
+| `checkOpenProblems` | function | 494 | `function checkOpenProblems(page, items)` | A comment before each table of the open-problems page names its rows: they must be the ones the open-items page gives to HCML alone and to us... |
+| `checkFacts` | function | 514 | `function checkFacts(root)` |  |
 
 Imports: none
 
@@ -143,29 +203,30 @@ Imported by: none
 Fails when the handbook is out of date with the code, incomplete, or carries something it should not. Walked through in [Tests and checkers](tests-and-checkers.md).
 
 <!-- gen:card tools/check/handover.check.mjs -->
-582 lines, 19 exports. Imported by 0 files.
+604 lines, 20 exports. Imported by 0 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `generatedProblems` | function | 48 | `function generatedProblems(inside, text)` | A generated page holds its block. |
 | `checkStyle` | function | 98 | `function checkStyle(text, { chars = true, words = true } = {})` | The problems in `text` for the style rule, as { line, message }. |
-| `checkSecrets` | function | 110 | `function checkSecrets(text)` | The problems in `text` for the secrets rule: an address, a mailbox, a token, a home folder. |
-| `checkBox` | function | 129 | `function checkBox(text)` |  |
-| `checkHeadings` | function | 141 | `function checkHeadings(text)` |  |
-| `checkEveryone` | function | 170 | `function checkEveryone(text)` | The part for people who do not read code: no fenced block and no inline code that is an identifier or a path. |
-| `checkSummary` | function | 198 | `function checkSummary(text)` | The Indonesian summary: a quote that opens with Ringkasan and holds five bullets, before the first section heading. |
-| `looksLikeName` | function | 229 | `function looksLikeName(token)` | Does this token look like a name worth looking up? |
-| `buildCorpus` | function | 236 | `function buildCorpus(root)` | Every word of the code and the settings, for looking a name up. |
-| `checkReferences` | function | 265 | `function checkReferences(text, corpus, root)` | Backticked names and paths in the hand-written text of a page that name nothing in the code. |
-| `readManifest` | function | 294 | `function readManifest(root)` |  |
-| `manifestProblems` | function | 303 | `function manifestProblems(manifest, pagesOnDisk)` | The parts that exist, in the manifest's order, with their pages as paths below docs/handover. |
-| `cardProblems` | function | 322 | `function cardProblems(pages, model)` | Cards: one per code file, each with a few words of hand-written text above its block. |
-| `folderProblems` | function | 342 | `function folderProblems(pages, root)` | Folder descriptions: `<!-- folder PATH -->` marks the paragraph that describes a folder. |
-| `snippetProblems` | function | 360 | `function snippetProblems(text)` | Quoted code is followed by words: a run of quotes may end in one explanation, and the last quote of a run needs 40 of them. |
-| `purposeProblems` | function | 376 | `function purposeProblems(text)` | The last column of every file table says something: at least three words. |
-| `perCopyProblems` | function | 390 | `function perCopyProblems(text, files = PER_COPY_FILES)` | The page about the two copies names every file that is meant to differ between them. |
-| `checkHandbook` | function | 397 | `function checkHandbook(root)` | Every problem under `root`, one { page, line, rule, message } each, and what was looked at. |
-| `selfTest` | function | 457 | `function selfTest()` |  |
+| `checkHomeFolders` | function | 112 | `function checkHomeFolders(text)` | The home-folder rule alone, for the setup pages and the tracker, which are public as the handbook is and which carry made-up addresses and package... |
+| `checkSecrets` | function | 121 | `function checkSecrets(text)` | The problems in `text` for the secrets rule: an address, a mailbox, a token, a home folder. |
+| `checkBox` | function | 140 | `function checkBox(text)` |  |
+| `checkHeadings` | function | 152 | `function checkHeadings(text)` |  |
+| `checkEveryone` | function | 181 | `function checkEveryone(text)` | The part for people who do not read code: no fenced block and no inline code that is an identifier or a path. |
+| `checkSummary` | function | 209 | `function checkSummary(text)` | The Indonesian summary: a quote that opens with Ringkasan and holds five bullets, before the first section heading. |
+| `looksLikeName` | function | 240 | `function looksLikeName(token)` | Does this token look like a name worth looking up? |
+| `buildCorpus` | function | 247 | `function buildCorpus(root)` | Every word of the code and the settings, for looking a name up. |
+| `checkReferences` | function | 276 | `function checkReferences(text, corpus, root)` | Backticked names and paths in the hand-written text of a page that name nothing in the code. |
+| `readManifest` | function | 305 | `function readManifest(root)` |  |
+| `manifestProblems` | function | 314 | `function manifestProblems(manifest, pagesOnDisk)` | The parts that exist, in the manifest's order, with their pages as paths below docs/handover. |
+| `cardProblems` | function | 333 | `function cardProblems(pages, model)` | Cards: one per code file, each with a few words of hand-written text above its block. |
+| `folderProblems` | function | 353 | `function folderProblems(pages, root)` | Folder descriptions: `<!-- folder PATH -->` marks the paragraph that describes a folder. |
+| `snippetProblems` | function | 371 | `function snippetProblems(text)` | Quoted code is followed by words: a run of quotes may end in one explanation, and the last quote of a run needs 40 of them. |
+| `purposeProblems` | function | 387 | `function purposeProblems(text)` | The last column of every file table says something: at least three words. |
+| `perCopyProblems` | function | 401 | `function perCopyProblems(text, files = PER_COPY_FILES)` | The page about the two copies names every file that is meant to differ between them. |
+| `checkHandbook` | function | 408 | `function checkHandbook(root)` | Every problem under `root`, one { page, line, rule, message } each, and what was looked at. |
+| `selfTest` | function | 476 | `function selfTest()` |  |
 
 Imports: `tools/check/parity.check.mjs`, `tools/handover/lib/blocks.mjs`, `tools/handover/lib/document.mjs`, `tools/handover/lib/model.mjs`, `tools/handover/lib/render.mjs`, `tools/handover/lib/scope.mjs`
 
@@ -214,7 +275,7 @@ Imported by: none
 Fails when the API description and the routes the server registers disagree. Walked through in [Tests and checkers](tests-and-checkers.md).
 
 <!-- gen:card tools/check/openapi.check.ts -->
-831 lines, 14 exports. Imported by 0 files.
+837 lines, 14 exports. Imported by 0 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
@@ -226,12 +287,12 @@ Fails when the API description and the routes the server registers disagree. Wal
 | `SpecOp` | interface | 128 | `interface SpecOp` |  |
 | `specOperations` | function | 222 | `function specOperations(yaml: string): SpecOp[]` | Every operation under `paths:`: its method, path, whether it opts out of security, the status codes it documents and the path parameters it declares. |
 | `cutDescriptions` | function | 252 | `function cutDescriptions(yaml: string): { line: number; entry: string }[]` | The lines where YAML cuts a description short. |
-| `Guard` | interface | 312 | `interface Guard` |  |
-| `guardIn` | function | 324 | `function guardIn(source: string): Guard \| null` | The guard's two tables, read out of the source that holds them (`PUBLIC_ROUTES` and `ROUTE_RULES` in auth.ts), or null when either is missing: a... |
-| `RoleEntry` | interface | 338 | `interface RoleEntry` | One entry of the Roles table: a path, with the method it names if it names one, and whether a star made it stand for everything below. |
-| `rolesTable` | function | 349 | `function rolesTable(yaml: string): Map<string, RoleEntry[]> \| null` | The `### Roles` table in the spec's description: for each role, the paths its row names in backticks (`/api/net/*` stands for everything below... |
-| `compareRoles` | function | 371 | `function compareRoles(table: Map<string, RoleEntry[]>, ops: SpecOp[], guard: Guard): string[]` | The Roles table against the guard's rules, both ways: every path the table names has the role of its row, and every operation the rules put above... |
-| `compare` | function | 395 | `function compare(routes: Route[], ops: SpecOp[], guard: Guard)` | Everything the registered routes and the spec must agree on, as a list of problems (empty when they agree), plus how many operations the guard... |
+| `Guard` | interface | 314 | `interface Guard` |  |
+| `guardIn` | function | 326 | `function guardIn(source: string): Guard \| null` | The guard's two tables, read out of the source that holds them (`PUBLIC_ROUTES` in auth.ts and `ROUTES` in modules.ts), or null when either is... |
+| `RoleEntry` | interface | 340 | `interface RoleEntry` | One entry of the Roles table: a path, with the method it names if it names one, and whether a star made it stand for everything below. |
+| `rolesTable` | function | 351 | `function rolesTable(yaml: string): Map<string, RoleEntry[]> \| null` | The `### Roles` table in the spec's description: for each role, the paths its row names in backticks (`/api/net/*` stands for everything below... |
+| `compareRoles` | function | 373 | `function compareRoles(table: Map<string, RoleEntry[]>, ops: SpecOp[], guard: Guard): string[]` | The Roles table against the guard's rules, both ways: every path the table names has the role of its row, and every operation the rules put above... |
+| `compare` | function | 398 | `function compare(routes: Route[], ops: SpecOp[], guard: Guard)` | Everything the registered routes and the spec must agree on, as a list of problems (empty when they agree), plus how many operations the guard... |
 
 Imports: none
 
@@ -245,18 +306,18 @@ Imported by: none
 Lists every file that differs between the two copies and is not on the list of files meant to differ. Walked through in [Tests and checkers](tests-and-checkers.md).
 
 <!-- gen:card tools/check/parity.check.mjs -->
-243 lines, 8 exports. Imported by 2 files.
+242 lines, 8 exports. Imported by 2 files.
 
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `OWN_ROOT_DIRS` | constant | 34 | `const OWN_ROOT_DIRS = new Set(['pic'])` | Folders skipped only when they sit at the root: each copy's own screenshots, which show real host names and are not committed. |
 | `PER_COPY_FILES` | constant | 38 | `const PER_COPY_FILES` | Files meant to differ between the copies, each in both: the copy's own configuration and perspective. |
-| `ENV_FILES` | constant | 59 | `const ENV_FILES` | The `.env*` files that differ by design. |
-| `ONE_COPY_ONLY` | constant | 61 | `const ONE_COPY_ONLY` | Files that belong to one copy only, by the name of its folder. |
-| `filesUnder` | function | 67 | `function filesUnder(root)` | Every file under `root`, as sorted paths relative to it with forward slashes. |
-| `compareTrees` | function | 86 | `function compareTrees(a, b)` | Differences between two trees that are not on the allowed list, one line each. |
-| `staleListEntries` | function | 111 | `function staleListEntries(root)` | Entries of the list of files meant to differ that are not in `root`: the list has gone stale, for example after a rename. |
-| `selfTest` | function | 121 | `function selfTest()` | Self-test on small trees made for the purpose, named like the real copies because the one-copy-only rule goes by the folder's name. |
+| `ENV_FILES` | constant | 58 | `const ENV_FILES` | The `.env*` files that differ by design. |
+| `ONE_COPY_ONLY` | constant | 60 | `const ONE_COPY_ONLY` | Files that belong to one copy only, by the name of its folder. |
+| `filesUnder` | function | 66 | `function filesUnder(root)` | Every file under `root`, as sorted paths relative to it with forward slashes. |
+| `compareTrees` | function | 85 | `function compareTrees(a, b)` | Differences between two trees that are not on the allowed list, one line each. |
+| `staleListEntries` | function | 110 | `function staleListEntries(root)` | Entries of the list of files meant to differ that are not in `root`: the list has gone stale, for example after a rename. |
+| `selfTest` | function | 120 | `function selfTest()` | Self-test on small trees made for the purpose, named like the real copies because the one-copy-only rule goes by the folder's name. |
 
 Imports: none
 
@@ -393,7 +454,7 @@ Decides which files get a card, which folders get a description, and what is nev
 | Name | Kind | Line | Signature | What its comment says |
 |---|---|---|---|---|
 | `SKIP_DIRS` | constant | 11 | `const SKIP_DIRS = new Set(['node_modules', 'dist', 'build', '.git', '.vite', '__pycache__'])` | Never entered or listed: dependencies, build output, version control, and each copy's own screenshots. |
-| `NEVER_LISTED` | constant | 14 | `const NEVER_LISTED = new Set(['.DS_Store', 'docker-compose.override.yml', 'api-timing.json', '.test-counts.json'])` | Files that exist in one working copy and not in the other, or hold an address or a secret: never listed. |
+| `NEVER_LISTED` | constant | 14 | `const NEVER_LISTED = new Set(['.DS_Store', 'docker-compose.override.yml', 'api-timing.json', '.test-counts.json'...` | Files that exist in one working copy and not in the other, or hold an address or a secret, or are kept outside the repository (the work log and... |
 | `isNeverListed` | function | 15 | `const isNeverListed = (name) =>` |  |
 | `OWN_ROOT_DIRS` | constant | 18 | `const OWN_ROOT_DIRS = new Set(['pic'])` | The folder at the root that holds each copy's own screenshots. |
 | `PER_COPY_FILES` | re-export | 21 | `from '../../check/parity.check.mjs'` |  |

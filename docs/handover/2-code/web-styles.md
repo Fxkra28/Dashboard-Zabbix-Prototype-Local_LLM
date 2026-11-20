@@ -4,12 +4,12 @@
 |---|---|---|---|
 | Developers | about 15 min | [Web app: the pages](web-features.md) | [Tests and checkers](tests-and-checkers.md) |
 
-The web app has no CSS framework and no styles written inside components. The look is one stylesheet in `web/src/styles/`, cut into 20 numbered parts that `index.css` imports in order. Every colour, space, size, weight, layer and duration in it comes from a token, and checks that run on every change fail a value that reaches past the tokens. This chapter says how the parts are ordered, what the tokens are, how dark mode works, and what is checked. How the interface is meant to look, and why, is in `DESIGN.md`, and the handoff for designers is in `docs/design-system/`.
+The web app has no CSS framework and no styles written inside components. The look is one stylesheet in `web/src/styles/`, cut into 21 numbered parts that `index.css` imports in order. Every colour, space, size, weight, layer and duration in it comes from a token, and checks that run on every change fail a value that reaches past the tokens. This chapter says how the parts are ordered, what the tokens are, how dark mode works, and what is checked. How the interface is meant to look, and why, is in `DESIGN.md`, and the handoff for designers is in `docs/design-system/`.
 
 ## The parts and the cascade
 
-<!-- gen:snippet web/src/styles/index.css#L9-28 sha=16a5e2d49aed -->
-`web/src/styles/index.css:9-28`
+<!-- gen:snippet web/src/styles/index.css#L9-29 sha=4db3bd0761f4 -->
+`web/src/styles/index.css:9-29`
 
 ```css
 @import './00-fonts.css';
@@ -32,6 +32,7 @@ The web app has no CSS framework and no styles written inside components. The lo
 @import './17-hosts-devices.css';
 @import './18-soft-depth.css';
 @import './19-touch.css';
+@import './20-print.css';
 ```
 <!-- /gen -->
 
@@ -60,6 +61,7 @@ The web app has no CSS framework and no styles written inside components. The lo
 | `17-hosts-devices.css` | The Dashboard's Hosts view |
 | `18-soft-depth.css` | The soft look of 26 October: raised and pressed surfaces, the 3:1 edges and the motion |
 | `19-touch.css` | Makes every control at least 44 pixels where the pointer is a finger |
+| `20-print.css` | Print and Save as PDF: the page in light colours, without the menu, the top bar and the buttons |
 
 ## The tokens
 
@@ -205,7 +207,7 @@ The web app has no CSS framework and no styles written inside components. The lo
 ```
 <!-- /gen -->
 
-<!-- gen:snippet web/src/styles/19-touch.css#L1-26 sha=b454908ecf15 -->
+<!-- gen:snippet web/src/styles/19-touch.css#L1-26 sha=444e0bcda0ed -->
 `web/src/styles/19-touch.css:1-26`
 
 ```css
@@ -220,8 +222,11 @@ The web app has no CSS framework and no styles written inside components. The lo
   .theme-pick select,
   input[type='text'],
   input[type='password'],
+  input[type='date'],
   input[type='datetime-local'],
+  input[type='time'],
   .seg button,
+  .link-button,
   .nav-link,
   .nav-section-title,
   .skip-link,
@@ -231,9 +236,6 @@ The web app has no CSS framework and no styles written inside components. The lo
   .check,
   .filter-check {
     min-height: var(--target-touch);
-  }
-  .seg button {
-    min-width: var(--target-touch);
   }
 ```
 <!-- /gen -->
@@ -257,7 +259,7 @@ The web app has no CSS framework and no styles written inside components. The lo
 <!-- /gen -->
 
 1. There is one focus ring for every control, drawn outside the element so a tight table cell cannot clip it. `:where` keeps its specificity at zero, so any rule can restyle it. A rule that sets `outline: none` with nothing in its place leaves a keyboard user unable to tell where they are, which is why the only one is for `main`, which takes focus only as the skip link's target. On the dark sidebar the brand-blue ring is 2.02:1, so there it is white, which clears 3:1 on both shades of the chrome.
-2. Where the pointer is a finger (`pointer: coarse`), no control is under 44 pixels, and desktops and the wall keep their density. A query adds no specificity, so each selector in the list is as specific as the rule that sized the control, and the list has to be extended when a new kind of control is added.
+2. Where the pointer is a finger (`pointer: coarse`), no control is under 44 pixels, and desktops and the wall keep their density. A query adds no specificity, so each selector in the list is as specific as the rule that sized the control, and the list has to be extended when a new kind of control is added. It now holds the time field and the button that looks like a link (UX-77).
 3. A person who asks the system to stop animating things is not asking for a shorter animation. The reduced-motion block makes every animation and transition effectively instant. The exceptions are state and not decoration, such as the spinner's turn and the live cursor, and are handled at their own rules. A smooth scroll written in code beats that CSS block, so the places that scroll smoothly, choosing a device on the Network page and `useReveal`, which brings the panel of a chosen site card or port into view, ask `useReducedMotion` and scroll at once when the person has asked for less motion (UX-52, UX-62).
 4. A control reached with the keyboard must not land under the sticky top bar. `html` keeps `scroll-padding-top` at the bar's own height plus a little air: `useTopBarHeight` in the shell writes the measured height of the bar into `--topbar-h` and takes it away in wall mode, and the stylesheet falls back to the bar's 64 pixel floor until it is measured. The bar wraps onto a second row on a narrow window and at 200 to 400 percent zoom, which a fixed 72 pixels did not allow for (UX-51; unit-tested, not yet tried at those zooms in a browser).
 5. Since 26 October 2026 the page and its cards are one soft plane, separated by depth and not by a colour step. What stands above the page is raised (`--neu-raised`), and what takes input or shows a choice is pressed in (`--neu-inset`). Controls keep their `--border-strong` edge anyway, because a shadow alone measured 1.20 to 1.59:1. `18-soft-depth.css` holds those rules.

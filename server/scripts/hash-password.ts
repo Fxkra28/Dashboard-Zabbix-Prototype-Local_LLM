@@ -1,5 +1,5 @@
 /**
- * Print an scrypt hash for a portal password, to paste into PORTAL_USERS as the password part
+ * Print an Argon2id hash (argon2id.m.t.p.salt.hash; scrypt on a Node without Argon2) for a portal password, to paste into PORTAL_USERS as the password part
  * (name:HASH:role) or into PORTAL_PASS.
  *
  *   npx tsx scripts/hash-password.ts                                                  (from server/; asks twice, hidden)

@@ -8,7 +8,7 @@ A route is where a request meets the code. In this server a route does three sma
 
 ## The pattern
 
-`server/src/routes/` holds 22 modules. Each exports one async function that takes the Fastify app, which Fastify calls a plugin, and `index.ts` registers them in a fixed order after the guard that checks every request (`setupAuth`). The smallest is this:
+`server/src/routes/` holds 26 modules. Each exports one async function that takes the Fastify app, which Fastify calls a plugin, and `index.ts` registers them in a fixed order after the guard that checks every request (`setupAuth`). The smallest is this:
 
 <!-- gen:snippet server/src/routes/problems.ts#problemRoutes sha=f8bac13d43db -->
 `server/src/routes/problems.ts:4-7`
@@ -22,16 +22,16 @@ export async function problemRoutes(app: FastifyInstance): Promise<void> {
 <!-- /gen -->
 
 1. The handler is a plain function that returns a value. Fastify turns the value into the JSON of the answer. A thrown error goes to the error handler (`registerErrorHandler`), which gives it its status and its one public sentence.
-2. The role a route needs is not written here. It is in `ROUTE_RULES` in `security/auth.ts`, matched by the path, and the guard enforces it before the handler runs. So a new route is open to every signed-in user until a rule says otherwise.
+2. The role and the pages a route needs are not written here. They are in the table of routes in `security/modules.ts`, matched by the path, and the guard enforces them before the handler runs. So a new route is closed to everyone but administrators until a row opens it, and `surface.test.ts` fails on a route with no row.
 3. The cache is not here either. `cachedProblems` holds the 15-second entry that this route, the live stream and the reports all share.
-4. The 22 modules hold 39 routes. The sign-in routes in `security/auth.ts` and the two health routes in `http/health.ts` make 45, which is the number of paths in `docs/api/openapi.yaml`, and the openapi checker compares the two lists.
+4. The 26 modules hold 54 routes. The five sign-in routes in `security/auth.ts` and the two health routes in `http/health.ts` make 61, which is the number of operations in `docs/api/openapi.yaml`, and the openapi checker compares the two lists.
 
 ## Checking input
 
 Everything in `req.query` arrives as text or not at all, and both failures are silent. A missing id reaches Zabbix as `[undefined]` and comes back as an opaque 500. A non-numeric window becomes `NaN`, which Zabbix reads as "no time limit", and one request once returned an item's whole history, 20,218 points. So the routes use four helpers. An id is digits and no larger than Zabbix stores, 18446744073709551615 (`isZabbixId`): a longer number only comes back from Zabbix as a failed read, so it is a 400 here.
 
 <!-- gen:snippet server/src/core/validate.ts#requireId sha=1c2bb6afeeac -->
-`server/src/core/validate.ts:46-51`
+`server/src/core/validate.ts:51-56`
 
 ```ts
 export function requireId(value: unknown, name: string): string {
@@ -44,7 +44,7 @@ export function requireId(value: unknown, name: string): string {
 <!-- /gen -->
 
 <!-- gen:snippet server/src/core/validate.ts#intParam sha=188640584a71 -->
-`server/src/core/validate.ts:63-67`
+`server/src/core/validate.ts:68-72`
 
 ```ts
 export function intParam(value: unknown, fallback: number, min: number, max: number): number {
@@ -56,7 +56,7 @@ export function intParam(value: unknown, fallback: number, min: number, max: num
 <!-- /gen -->
 
 <!-- gen:snippet server/src/core/schemas.ts#singleValues sha=8d93d74e2c93 -->
-`server/src/core/schemas.ts:34-39`
+`server/src/core/schemas.ts:37-42`
 
 ```ts
 export function singleValues(...names: string[]) {
@@ -68,13 +68,13 @@ export function singleValues(...names: string[]) {
 ```
 <!-- /gen -->
 
-<!-- gen:snippet server/src/core/schemas.ts#AJV_OPTIONS sha=bd4bf8d9a63f -->
-`server/src/core/schemas.ts:22-25`
+<!-- gen:snippet server/src/core/schemas.ts#AJV_OPTIONS sha=d1e32c8f783d -->
+`server/src/core/schemas.ts:25-28`
 
 ```ts
 export const AJV_OPTIONS: NonNullable<FastifyServerOptions['ajv']> = {
   // Union types such as ['string', 'array'] are plain JSON Schema; Ajv logs a warning at startup without this.
-  customOptions: { coerceTypes: false, allowUnionTypes: true },
+  customOptions: { coerceTypes: false, allowUnionTypes: true, removeAdditional: false },
 };
 ```
 <!-- /gen -->
@@ -82,14 +82,14 @@ export const AJV_OPTIONS: NonNullable<FastifyServerOptions['ajv']> = {
 1. `requireId` accepts a Zabbix id only: required, digits only. Anything else throws a `BadRequestError`, which `registerErrorHandler` answers with a 400 and the message "name is required and must be a numeric Zabbix id." `optionalId` accepts an absent value and checks a present one the same way.
 2. `intParam` reads an integer from a query value. An absent or non-numeric value gives the fallback, and a value out of range is clamped, so `days=9999` becomes 365 and `NaN` never escapes. A plain `Math.min(Math.max(...))` does not catch `NaN`, which is why the function exists.
 3. `singleValues('hostid', 'search')` is the query schema of a GET route: each named value is one string of at most 2,000 characters. A name sent twice reaches a handler as a list, which no handler reads, and `search.trim()` on one was a 500. Names not listed pass as before.
-4. `AJV_OPTIONS` turns type coercion off in Fastify's validator, which would otherwise turn the text "false" into `false` and a list of one name into the name. The handlers refuse those, so the schemas must not accept them. `index.ts` and the test helpers both pass these options.
+4. `AJV_OPTIONS` turns type coercion off in Fastify's validator, which would otherwise turn the text "false" into `false` and a list of one name into the name. The handlers refuse those, so the schemas must not accept them. `index.ts` and the test helpers both pass these options. They also leave `removeAdditional` off, so a body with a field that a schema does not list, where the schema says `additionalProperties: false`, is a 400 that names the field and not a 200 that quietly dropped it and changed nothing (BK-97).
 5. A POST has a body schema in the same file (`loginBody`, `noBody`, `acknowledgeBody`, `chatBody`). The schema fixes the shape. The finer rules stay in the handler: digits only in an event id, a message cut at 2,048 characters, a chat that must end on a user turn.
 
 Tests: `request-schemas.test.ts` holds the schemas, and `graphs.test.ts` and `routes.test.ts` run the helpers through the routes.
 
 ### A route that uses them: /api/items
 
-<!-- gen:snippet server/src/routes/hosts.ts#hostRoutes lines=17-31 sha=dfa3f2ad9141 -->
+<!-- gen:snippet server/src/routes/hosts.ts#hostRoutes lines=17-31 sha=cae99c083b20 -->
 `server/src/routes/hosts.ts:35-49` (lines 17 to 31 of hostRoutes)
 
 ```ts
@@ -105,7 +105,7 @@ app.get('/api/items', { schema: { querystring: ITEMS_QUERY }, preHandler: search
   }
   const hostid = itemids ? optionalId(q.hostid, 'hostid') : requireId(q.hostid, 'hostid');
   const found = await findItems({ hostid, itemids, search: q.search, graphable });
-  // Interface items are wall data. Cut after the cache: it holds one list for every role.
+  // Interface items are for accounts that have the Network page. Cut after the cache: it holds one list for every account.
   return hidesNetwork(req) ? withoutNetworkItems(found) : found;
 });
 ```
@@ -113,7 +113,7 @@ app.get('/api/items', { schema: { querystring: ITEMS_QUERY }, preHandler: search
 
 1. `ITEMS_QUERY` is `singleValues('hostid', 'search', 'graphable', 'itemids')`. The query is then read by hand: `graphable` is true for `1` or `true`, and `itemids` is a comma list that is split, checked id by id with `requireId`, and made unique.
 2. At most `MAX_ITEMIDS` (50) ids are taken, and more is a 400. `hostid` is required unless `itemids` is given, because without either Zabbix would get `hostids: [undefined]`.
-3. `findItems` reads the items and keeps one list for every role. A request with a `search` is counted first by `searchGuard`: 120 a minute for each person, and more is a 429 `rate_limited` with a `retry-after`; `/api/latest` has the same guard. The search text is trimmed, and the cache key is `typed`. After the cache, a role below `wall` loses the interface items, `hidesNetwork(req)` deciding. The cut is after the cache so that one entry serves all roles. `/api/latest` and `/api/graph` do the same.
+3. `findItems` reads the items and keeps one list for every account. A request with a `search` is counted first by `searchGuard`: 120 a minute for each person, and more is a 429 `rate_limited` with a `retry-after`; `/api/latest` has the same guard. The search text is trimmed, and the cache key is `typed`. After the cache, an account without the Network page loses the interface items, `hidesNetwork(req)` deciding. The cut is after the cache so that one entry serves every account. `/api/latest` and `/api/graph` do the same.
 
 ### A route that refuses: /api/graph
 
@@ -137,7 +137,7 @@ export async function historyRoutes(app: FastifyInstance): Promise<void> {
 ```
 <!-- /gen -->
 
-1. `/api/graph` reads an item by its id, and ids can be guessed, so leaving interface items out of a list is not enough. `networkItemsDenied` looks the ids up, and a viewer who asks for an interface item gets a 403 with the sentence that names the role they would need.
+1. `/api/graph` reads an item by its id, and ids can be guessed, so leaving interface items out of a list is not enough. `networkItemsDenied` looks the ids up, and an account without the Network page that asks for an interface item gets a 403 with the sentence that says interface data is for accounts that have it.
 2. `parseRange` reads `hours`, or `from` and `to`, or a `month`, and `intParam` keeps `points` between 200 and 3,000. `getGraph` then makes the series, and is the next section.
 
 ### getGraph
@@ -145,7 +145,7 @@ export async function historyRoutes(app: FastifyInstance): Promise<void> {
 `server/src/services/history.ts`. Chart-ready series for one to four numeric items over a window.
 
 <!-- gen:snippet server/src/services/history.ts#parseRange sha=331a25f8ee92 -->
-`server/src/services/history.ts:209-230`
+`server/src/services/history.ts:203-224`
 
 ```ts
 export function parseRange(q: Record<string, string | undefined>, now: number): { from: number; to: number } {
@@ -174,7 +174,7 @@ export function parseRange(q: Record<string, string | undefined>, now: number): 
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/history.ts#getGraph lines=4-23 sha=d0300a290b6a -->
-`server/src/services/history.ts:244-263` (lines 4 to 23 of getGraph)
+`server/src/services/history.ts:238-257` (lines 4 to 23 of getGraph)
 
 ```ts
 const items = await zbx<ZGraphItem[]>('item.get', {
@@ -201,7 +201,7 @@ let usedHistoryFill = false;
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/history.ts#getGraph lines=52-83 sha=d0300a290b6a -->
-`server/src/services/history.ts:292-323` (lines 52 to 83 of getGraph)
+`server/src/services/history.ts:286-317` (lines 52 to 83 of getGraph)
 
 ```ts
 if (!useTrends) {
@@ -240,7 +240,7 @@ if (!useTrends) {
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/history.ts#getGraph lines=113-121 sha=d0300a290b6a -->
-`server/src/services/history.ts:353-361` (lines 113 to 121 of getGraph)
+`server/src/services/history.ts:347-355` (lines 113 to 121 of getGraph)
 
 ```ts
 const lastClocks = series.map((s) => s.series.stats?.lastClock).filter((c): c is number => c != null);
@@ -266,7 +266,7 @@ Tests: `graphs.test.ts`.
 
 ## The write path: acknowledge
 
-`server/src/routes/actions.ts`. The only route that writes to Zabbix. Everything else in the server is read-only by design, and these routes break that rule on purpose, so they are fenced four ways: a separate `ZABBIX_WRITE_TOKEN`, so the read token never gains write power; the `operator` role or above, in `ROUTE_RULES`; a blank write token gives a 503 and the page hides the buttons; and with sign-in off it is a 503 too, unless `ALLOW_WRITE_WITHOUT_AUTH=true`.
+`server/src/routes/actions.ts`. The only route that writes to Zabbix. Everything else in the server is read-only by design, and these routes break that rule on purpose, so they are fenced four ways: a separate `ZABBIX_WRITE_TOKEN`, so the read token never gains write power; the `operator` role or above, in the table of routes; a blank write token gives a 503 and the page hides the buttons; and with sign-in off it is a 503 too, unless `ALLOW_WRITE_WITHOUT_AUTH=true`.
 
 ![The acknowledge path: the page sends the request, the guard checks the role, the route checks the body, the write token sends event.acknowledge to Zabbix, the caches are cleared and the live screens are told.](../diagrams/acknowledge-flow.png)
 
@@ -349,72 +349,79 @@ try {
 ```
 <!-- /gen -->
 
-1. Every attempt is on record before any check can turn it away. `logAttempt` runs as a pre-validation hook and logs who, from where and which events. The `onResponse` hook logs a refusal that happened outside the handler (no token, a viewer, a bad body, a limit).
+1. Every attempt is on record before any check can turn it away. `logAttempt` runs as a pre-validation hook and logs who, from where and which events. The `onResponse` hook logs a refusal that happened outside the handler (no token, a guest, a bad body, a limit).
 2. `refuse` logs the refusal with the same fields and sends the status. A blank write token or a sign-in that is off gives the 503 `zabbix_write_disabled`, with a sentence for the reader that says to tell an administrator, and the setting to change goes to the log only.
 3. The lines left out between the two quotes check the body: it must be an object, there must be at least one event id and at most 50 (`MAX_EVENTIDS`), every id must be digits and no larger than Zabbix stores (`isZabbixId`), `message` must be text, and `acknowledge` and `close` must be true or false. Types are checked and not coerced: the text "false" would otherwise count as true. Last of all `takeEvents` counts the ids against the person's allowance, `ACTION_EVENTS_PER_MINUTE` (200, and never under 50), only for a request that will be written, so a refusal above costs nothing; over it the answer is 429 `rate_limited` with `Retry-After` (SC-51).
 4. `asked` is a bit mask of what the caller wants: 1 closes the problem, 2 acknowledges it and 4 adds a message. Acknowledging is the default. A request that asks for nothing is a 400.
 5. Zabbix files every write under the owner of the write token, so the portal user goes into the message as `[portal:<user>]`, first, and the cut to 2,048 characters keeps it. The cut never splits a pair of characters such as an emoji, and the dialog allows 1,974 characters, which leaves room for the longest tag, so a note is not cut off unseen. `actor`, in `security/audit.ts`, takes brackets and control characters out of the name so the tag cannot be closed early.
 6. `zbxWrite` sends `event.acknowledge`. A failure is logged. A refusal by Zabbix and a timeout are answered by the route itself, through `writeFailure`, with the portal's own sentence and the reference to quote (BK-43): 502 `zabbix_error` for a refusal, which says that Zabbix refused the change and that it may already be closed or the account may not be allowed to change it, and 503 `zabbix_timeout` for a timeout, which says that the change may or may not have been made, and 502 `zabbix_error` with its own sentence when the portal cannot tell what Zabbix did with the request (an error page, a body that is not JSON-RPC, a connection that failed when the request may have left), which says the same (BK-53). After a timeout or such an error the route drops the cached lists and tells the open screens, as after a write that went through. The route writes the error handler's log line itself, because the reply skips the handler and the address is in that line. Any other failure is thrown to the error handler as before.
 7. After a write, `STALE_AFTER_WRITE` lists the cache entries that show problem state: the problem list, the counts, the problems by group, the sites, the aging report, the services, the hosts overview, the Devices page, the maps and the Assistant's snapshot. Each is invalidated with a hold of `WRITE_HOLD_MS`, 15 seconds, on a short lifetime, because Zabbix applies a close a few seconds after the call returns and the first refetch can still read the problem as open. `notifyProblemsChanged` then pushes the new list to the live screens.
-8. The route is `/api/problems/acknowledge` only. The rule in `ROUTE_RULES` also names a `close` path, but closing is a flag of the same call and nothing is registered at that path. Closing works only when the trigger allows a manual close, and `getProblems` carries that flag so the page does not offer a button Zabbix would reject.
+8. The route is `/api/problems/acknowledge` only. The table of routes names only that path, since closing is a flag of the same call and nothing is registered at a `close` path. Closing works only when the trigger allows a manual close, and `getProblems` carries that flag so the page does not offer a button Zabbix would reject.
 
 Tests: `write-gate.test.ts` holds the fences, `write-audit.test.ts` the log lines, and `surface.test.ts` the role.
 
 ## Every route
 
-Roles are the lowest that may call the route: `public` needs no sign-in, `viewer` any signed-in user, then `wall`, `operator` and `admin`. The `ai` mark means the route runs behind `aiGuard` and counts against the per-minute and daily limits.
+Roles are the lowest that may call the route: `public` needs no sign-in, then `guest`, `operator` and `admin`. A person also needs one of the pages that own the route, named in the third column as the modules of `security/modules.ts` (an administrator holds them all). The `ai` mark means the route runs behind `aiGuard` and counts against the per-minute and daily limits.
 
-| Route | Role | Module and service |
-|---|---|---|
-| `GET /api/health` | public | `http/health.ts` |
-| `GET /api/ready` | viewer | `http/health.ts` |
-| `POST /api/auth/login` | public | `security/auth.ts` |
-| `GET /api/auth/me` | public | `security/auth.ts` |
-| `POST /api/auth/logout` | public | `security/auth.ts` |
-| `POST /api/auth/refresh` | viewer | `security/auth.ts` |
-| `GET /api/problems` | viewer | `problems.ts`, `domain/queries.ts` |
-| `GET /api/stream` | viewer | `stream.ts`, `services/stream.ts` |
-| `POST /api/problems/acknowledge` | operator | `actions.ts`, `services/actions.ts` |
-| `GET /api/hosts` | viewer | `hosts.ts`, `services/hosts.ts` |
-| `GET /api/hosts/overview` | viewer | `hosts.ts`, `services/hosts.ts` |
-| `GET /api/hostgroups` | viewer | `hosts.ts`, `services/hosts.ts` |
-| `GET /api/items` | viewer | `hosts.ts`, `services/hosts.ts` |
-| `GET /api/latest` | viewer | `hosts.ts`, `services/hosts.ts` |
-| `GET /api/devices` | viewer | `devices.ts`, `services/devices.ts` |
-| `GET /api/graph` | viewer | `history.ts`, `services/history.ts` |
-| `GET /api/sites` | viewer | `sites.ts`, `services/sites.ts` |
-| `GET /api/maps` | viewer | `maps.ts`, `services/maps.ts` |
-| `GET /api/maps/detail` | viewer | `maps.ts`, `services/maps.ts` |
-| `GET /api/stats` | viewer | `reports.ts`, `services/reports.ts` |
-| `GET /api/freshness` | viewer | `reports.ts`, `services/reports.ts` |
-| `GET /api/reports/problems-by-group` | viewer | `reports.ts`, `services/reports.ts` |
-| `GET /api/reports/top-triggers` | viewer | `reports.ts`, `services/reports.ts` |
-| `GET /api/reports/top-hosts` | viewer | `topHosts.ts`, `services/topHosts.ts` |
-| `GET /api/reports/web-monitoring` | viewer | `webMonitoring.ts`, `services/webMonitoring.ts` |
-| `GET /api/reports/availability` | viewer | `analytics.ts`, `services/availability.ts` |
-| `GET /api/reports/noise` | viewer | `analytics.ts`, `services/noise.ts` |
-| `GET /api/reports/aging` | viewer | `analytics.ts`, `services/aging.ts` |
-| `GET /api/reports/capacity` | viewer | `analytics.ts`, `services/capacity.ts` |
-| `GET /api/reports/inventory` | admin | `inventory.ts`, `services/inventory.ts` |
-| `GET /api/net/devices` | wall | `net.ts`, `services/net.ts` |
-| `GET /api/net/interfaces` | wall | `net.ts`, `services/net.ts` |
-| `GET /api/net/meters` | wall | `meters.ts`, `services/meters.ts` |
-| `GET /api/links` | wall | `links.ts`, `services/links.ts` |
-| `GET /api/services` | viewer | `services.ts`, `services/services.ts` |
-| `GET /api/services/derived` | viewer | `services.ts`, `sli/tree.ts` |
-| `GET /api/sla` | viewer | `sla.ts`, `services/sla.ts` |
-| `GET /api/sla/sli` | viewer | `sla.ts`, `services/sla.ts` |
-| `GET /api/sla/source` | viewer | `sla.ts`, `services/sla.ts` |
-| `GET /api/sli` | viewer | `sli.ts`, `services/sli.ts` |
-| `GET /api/sli/export` | viewer | `sliExport.ts`, `services/sliExport.ts` |
-| `GET /api/sli/email` | admin | `sliMail.ts`, `services/mailState.ts` |
-| `POST /api/sli/email` | admin | `sliMail.ts`, `services/sliMail.ts`, `services/mailState.ts` |
-| `GET /api/sli/schedule` | admin | `sliSchedule.ts`, `services/reportSchedule.ts` |
-| `PUT /api/sli/schedule` | admin | `sliSchedule.ts`, `services/reportSchedule.ts` |
-| `GET /api/explain/problem` | viewer, ai | `explain.ts`, `services/explain.ts` |
-| `GET /api/explain/sla` | viewer, ai | `explain.ts`, `services/explain.ts` |
-| `GET /api/chat/warm` | viewer | `chat.ts`, `services/chat.ts` |
-| `POST /api/chat` | viewer, ai | `chat.ts`, `services/chat.ts` |
+| Route | Role | Pages that own it | Module and service |
+|---|---|---|---|
+| `GET /api/health` | public | none | `http/health.ts` |
+| `GET /api/ready` | guest | any signed-in user | `http/health.ts` |
+| `POST /api/auth/login` | public | none | `security/auth.ts` |
+| `GET /api/auth/me` | public | none | `security/auth.ts` |
+| `POST /api/auth/logout` | public | none | `security/auth.ts` |
+| `POST /api/auth/refresh` | guest | any signed-in user | `security/auth.ts` |
+| `POST /api/auth/password` | guest | any signed-in user | `security/auth.ts` |
+| `GET /api/problems` | guest | `dashboard`, `problems` | `problems.ts`, `domain/queries.ts` |
+| `GET /api/stream` | guest | `dashboard`, `problems` | `stream.ts`, `services/stream.ts` |
+| `POST /api/problems/acknowledge` | operator | `problems` | `actions.ts`, `services/actions.ts` |
+| `GET /api/hosts` | guest | `hosts`, `graphs`, `latest` | `hosts.ts`, `services/hosts.ts` |
+| `GET /api/hosts/overview` | guest | `hosts`, `graphs`, `latest` | `hosts.ts`, `services/hosts.ts` |
+| `GET /api/hostgroups` | guest | `hosts`, `latest` | `hosts.ts`, `services/hosts.ts` |
+| `GET /api/items` | guest | `graphs`, `latest`, `hosts` | `hosts.ts`, `services/hosts.ts` |
+| `GET /api/latest` | guest | `latest` | `hosts.ts`, `services/hosts.ts` |
+| `GET /api/devices` | guest | `devices`, `hosts`, `dashboard` | `devices.ts`, `services/devices.ts` |
+| `GET /api/graph` | guest | `graphs` | `history.ts`, `services/history.ts` |
+| `GET /api/sites` | guest | `sites` | `sites.ts`, `services/sites.ts` |
+| `GET /api/maps` | guest | `maps` | `maps.ts`, `services/maps.ts` |
+| `GET /api/maps/detail` | guest | `maps` | `maps.ts`, `services/maps.ts` |
+| `GET /api/stats` | guest | `dashboard`, `problems` | `reports.ts`, `services/reports.ts` |
+| `GET /api/freshness` | guest | `dashboard`, `problems` | `reports.ts`, `services/reports.ts` |
+| `GET /api/reports/problems-by-group` | guest | `dashboard` | `reports.ts`, `services/reports.ts` |
+| `GET /api/reports/top-triggers` | guest | `top-triggers` | `reports.ts`, `services/reports.ts` |
+| `GET /api/reports/top-hosts` | guest | `dashboard` | `topHosts.ts`, `services/topHosts.ts` |
+| `GET /api/reports/web-monitoring` | guest | `dashboard` | `webMonitoring.ts`, `services/webMonitoring.ts` |
+| `GET /api/reports/availability` | guest | `sla` | `analytics.ts`, `services/availability.ts` |
+| `GET /api/reports/noise` | guest | `noise` | `analytics.ts`, `services/noise.ts` |
+| `GET /api/reports/aging` | guest | `sla`, `problems`, `dashboard` | `analytics.ts`, `services/aging.ts` |
+| `GET /api/reports/capacity` | guest | `capacity` | `analytics.ts`, `services/capacity.ts` |
+| `GET /api/reports/inventory` | admin | `inventory` | `inventory.ts`, `services/inventory.ts` |
+| `GET /api/net/devices` | guest | `network` | `net.ts`, `services/net.ts` |
+| `GET /api/net/interfaces` | guest | `network` | `net.ts`, `services/net.ts` |
+| `GET /api/net/meters` | guest | `network` | `meters.ts`, `services/meters.ts` |
+| `GET /api/links` | guest | `links` | `links.ts`, `services/links.ts` |
+| `GET /api/services` | guest | `services` | `services.ts`, `services/services.ts` |
+| `GET /api/services/derived` | guest | `services` | `services.ts`, `sli/tree.ts` |
+| `GET /api/sla` | guest | `sla`, `services` | `sla.ts`, `services/sla.ts` |
+| `GET /api/sla/sli` | guest | `sla`, `services` | `sla.ts`, `services/sla.ts` |
+| `GET /api/sla/source` | guest | `sla`, `services` | `sla.ts`, `services/sla.ts` |
+| `GET /api/sli` | guest | `sla` | `sli.ts`, `services/sli.ts` |
+| `GET /api/sli/export` | guest | `sla` | `sliExport.ts`, `services/sliExport.ts` |
+| `GET /api/sli/email` | admin | `sla` | `sliMail.ts`, `services/mailState.ts` |
+| `POST /api/sli/email` | admin | `sla` | `sliMail.ts`, `services/sliMail.ts`, `services/mailState.ts` |
+| `GET /api/sli/schedule` | admin | `sla` | `sliSchedule.ts`, `services/reportSchedule.ts` |
+| `PUT /api/sli/schedule` | admin | `sla` | `sliSchedule.ts`, `services/reportSchedule.ts` |
+| `PUT /api/sli/recipients` | admin | `sla` | `sliMail.ts`, `services/mailState.ts` |
+| `DELETE /api/sli/recipients` | admin | `sla` | `sliMail.ts`, `services/mailState.ts` |
+| `GET /api/users` | admin | `users` | `users.ts`, `services/users.ts` |
+| `POST /api/users` | admin | `users` | `users.ts`, `services/users.ts` |
+| `PATCH /api/users/{name}` | admin | `users` | `users.ts`, `services/users.ts` |
+| `POST /api/users/{name}/password` | admin | `users` | `users.ts`, `services/users.ts` |
+| `GET /api/explain/problem` | guest, ai | `problems`, `dashboard`, `assistant` | `explain.ts`, `services/explain.ts` |
+| `GET /api/explain/sla` | guest, ai | `sla`, `services`, `assistant` | `explain.ts`, `services/explain.ts` |
+| `GET /api/chat/warm` | guest | `assistant` | `chat.ts`, `services/chat.ts` |
+| `POST /api/chat` | guest, ai | `assistant` | `chat.ts`, `services/chat.ts` |
 
 Which chapter explains each service: the problem list, hosts, items and the Dashboard counts are in [domain and hosts](server-domain-and-hosts.md). The network pages, links, meters and the Capacity report are in [network and capacity](server-network-and-capacity.md). The SLA, the availability, noise, aging and inventory reports, the service tree and the file export are in [SLA and reports](server-sla-and-reports.md) and [export](server-export.md). The live stream, Explain and the Assistant are in [live and assistant](server-live-and-assistant.md). Sign-in and the guard are in [security and http](server-security-and-http.md).
 

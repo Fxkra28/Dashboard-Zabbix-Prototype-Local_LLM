@@ -312,3 +312,16 @@ export function sampleSliReports(): { strict: SliReport; hcml: SliReport } {
   const hosts = (strict: boolean) => all.map(({ spec, hostid, truth }) => host(spec, hostid, truth, strict));
   return { strict: report('availability', hosts(true)), hcml: report('hcml-report', hosts(false)) };
 }
+
+const RANGE_FROM = at('2026-08-03T00:00:00+07:00');
+const RANGE_TO = at('2026-08-10T00:00:00+07:00');
+
+/** The same two reports in the shape `getWindowSli` gives for 3 to 9 August 2026: no month, no web checks. `change` overrides fields of both, such as `dailyHours`. */
+export function sampleRangeReports(change: Partial<SliReport> = {}): { strict: SliReport; hcml: SliReport } {
+  const bend = (r: SliReport): SliReport => {
+    const { webTakenAt: _, ...rest } = r;
+    return { ...rest, month: null, from: RANGE_FROM, to: RANGE_TO, end: RANGE_TO, closed: true, web: [], ...change };
+  };
+  const { strict, hcml } = sampleSliReports();
+  return { strict: bend(strict), hcml: bend(hcml) };
+}

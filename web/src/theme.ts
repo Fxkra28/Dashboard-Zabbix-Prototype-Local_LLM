@@ -6,17 +6,17 @@
  * TimeSeriesChart reads the tokens at render and falls back to these if it runs without a document.
  *
  * Keep them equal to the `:root` block: a value that drifts shows only when the page runs without a
- * document, so nobody would notice.
+ * document, so nobody would notice. __tests__/themeFallbacks.test.ts holds each one to its token.
  */
 export const theme = {
   primary: '#2B5584',
   primaryDark: '#1E3B5C',
   primaryLight: '#4681C3',
-  bg: '#F4F7FB',
-  surface: '#FFFFFF',
+  bg: '#E3E9F1',
+  surface: '#E3E9F1',
   text: '#1B2733',
   muted: '#566577',
-  border: '#E2E8F0',
+  border: 'rgba(150, 166, 190, 0.4)',
   good: '#2E9E5B',
   ok: '#2B5584',
 };

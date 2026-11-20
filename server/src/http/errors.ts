@@ -9,7 +9,9 @@ import { AiBusyError, AiDisabledError, AiUpstreamError } from '../clients/ai.js'
 import { MailDisabledError, MailError } from '../clients/mail.js';
 import { Cancelled } from '../core/gate.js';
 import { StateWriteError } from '../core/state.js';
-import { BadRequestError, EmptyReportError, ScheduleUnavailableError } from '../core/validate.js';
+import { RequestsWriteError } from '../security/requestStore.js';
+import { UsersWriteError } from '../security/userStore.js';
+import { BadRequestError, DataNotReadYetError, EmptyReportError, ScheduleUnavailableError } from '../core/validate.js';
 import { validationProblem } from '../core/schemas.js';
 
 /**
@@ -91,6 +93,10 @@ export function registerErrorHandler(app: FastifyInstance): void {
     if (err instanceof ScheduleUnavailableError) {
       return reply.code(503).send({ error: 'schedule_unavailable', message: err.message });
     }
+    if (err instanceof DataNotReadYetError) {
+      // The request is right and the figures are not there yet: a page may try again, which a 400 tells it not to.
+      return reply.code(503).header('retry-after', '60').send({ error: 'data_not_read_yet', message: err.message });
+    }
     // The reader left before their read began (gate.ts, cache.ts): nobody is there to be told, so this writes no line of its own.
     if (err instanceof Cancelled) {
       return reply.code(499).send({ error: 'cancelled', message: 'The read was dropped because its reader left.' });
@@ -99,6 +105,16 @@ export function registerErrorHandler(app: FastifyInstance): void {
       // `detail` is the system's code for the failure: the log gets it, the response never does.
       req.log.error({ detail: err.detail }, 'the portal could not save its state');
       return reply.code(500).send({ error: 'state_error', message: err.message });
+    }
+    if (err instanceof UsersWriteError) {
+      // The same for the file of users: a full or read-only volume says what to check instead of the unexpected-error sentence (BK-99).
+      req.log.error({ detail: err.detail }, 'the portal could not save its users');
+      return reply.code(500).send({ error: 'users_error', message: err.message });
+    }
+    if (err instanceof RequestsWriteError) {
+      // And for the file of requests for an account, which a stranger's request and an administrator's answer both write.
+      req.log.error({ detail: err.detail }, 'the portal could not save its requests for an account');
+      return reply.code(500).send({ error: 'requests_error', message: err.message });
     }
 
     // Fastify's own client errors (malformed JSON, wrong content type, body too

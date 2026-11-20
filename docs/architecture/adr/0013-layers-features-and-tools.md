@@ -4,6 +4,7 @@
 * Deciders: HCML internship project, from a review of the folder structure of both portals; the owner chose
   which of the review's items to do, and to keep the two copies separate
 * Date: 2026-10-16
+* Amended: 2026-11-17, by [ADR-0017](0017-keep-the-portals-users-in-a-file-of-their-own.md): `security/` also holds the table of routes and pages (`modules.ts`) and the users (`accounts.ts`, `userStore.ts`), and `pageAccess.ts` is gone
 
 ## Context and Problem Statement
 
@@ -62,7 +63,7 @@ checks.**
   check in `http/health.ts`), `services/` held 5,639 then and holds 5,737 in 33 files now. The 25 files that sat flat beside `index.ts` went into five
   folders by what they are for: `core/` (config, the cache and its stale marker, the gate, query parsing, the body
   schemas), `clients/` (the Zabbix client, the model client, the caps on its use), `domain/` (naming rules,
-  reachability, the shared reads), `security/` (sign-in and roles, passwords, the page table, the viewer policy) and
+  reachability, the shared reads), `security/` (sign-in, roles and pages with the table of routes, the users and their file, passwords, the viewer policy) and
   `http/` (the hooks `index.ts` wires in, error mapping, the health check, shutdown). `index.ts` is the only file
   left at the top. Only their paths changed: 385 import specifiers in 121 files, and the one place that read a path
   from its own location (`http/health.ts` reading `package.json`). Two moves were not a plain
@@ -79,7 +80,7 @@ checks.**
   (`Markdown.tsx` and `markdown.ts`, `HostsView.tsx` and `hostsView.ts`, `Gauge.tsx` and `gauge.ts`) could not
   share a folder on a case-insensitive disk, so the lower-case ones are now `parseMarkdown.ts`, `hostsFigures.ts`
   and `gaugeDial.ts`.
-* **Styles.** `styles.css` is 20 numbered parts in `web/src/styles/`, and `index.css` imports them in order. The
+* **Styles.** `styles.css` is 21 numbered parts in `web/src/styles/`, and `index.css` imports them in order. The
   order is the cascade, so a new rule goes into the part it belongs to, and the build serves the same one sheet:
   its SHA-256 is the same before and after.
 * **The setup guide.** `setup.md` is the index and `docs/setup/NN-title.md` are its 35 parts (38 since 20 October, three parts of changes more), each the text of
@@ -123,8 +124,8 @@ of both configurations. Mutation checks showed that each layering rule fails whe
 
 * **History is harder to follow.** 146 web files and 25 server files changed folder, and the logic of 22 routes moved to new files.
   `git blame` on a moved line points at the commit of the move, and `git log --follow` loses a file that was
-  split. The older records name the old tree and are left as written: `tracker.md`, `CHANGELOG.md`,
-  `AUDIT_REPORT.md` and the "What changed" parts of the setup guide, whose paths and line citations were right on
+  split. The older records name the old tree and are left as written: `CHANGELOG.md`, the work log, the audit report
+  and the dated "What changed" chapters of the setup guide (the last three are kept outside the repository), whose paths and line citations were right on
   their day: they say `server/src/zabbix.ts` where the file is now `server/src/clients/zabbix.ts`. The changelog entry
   of 16 October has a table from the old paths to the new.
 * **An endpoint is now two files.** A change to what an endpoint reads and to what it accepts opens a service and

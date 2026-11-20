@@ -47,7 +47,8 @@ export async function buildAuthApp(env: Record<string, string> = {}) {
   app.get('/api/hosts', async () => ({ ok: 'hosts' }));
   app.get('/api/links', async () => ({ ok: 'links' }));
   app.get('/api/reports/inventory', async () => ({ ok: 'inventory' }));
-  app.get('/api/whoami', async (req) => ({ role: auth.roleOf(req) }));
+  // A route that every signed-in user may use (it is /api/stats's), to read back the role the guard found.
+  app.get('/api/stats', async (req) => ({ role: auth.roleOf(req) }));
   await app.ready();
   open.push(app);
 

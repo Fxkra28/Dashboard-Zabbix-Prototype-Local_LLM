@@ -26,7 +26,7 @@ const { registerErrorHandler } = await import('../http/errors.js');
 const { invalidate } = await import('../core/cache.js');
 const { analyticsRoutes } = await import('../routes/analytics.js');
 const { reportRoutes } = await import('../routes/reports.js');
-const { HEAVY_REPORTS_PER_PERSON, heavyReportGuard } = await import('../security/heavyLimit.js');
+const { HEAVY_REPORTS_PER_PERSON, SLI_READS_PER_PERSON, heavyReportGuard, takeHeavyPlace, takeSliPlace } = await import('../security/heavyLimit.js');
 
 let app: FastifyInstance;
 /** Zabbix answers nothing until `open()`: a request that reaches it stays in flight. */
@@ -192,5 +192,25 @@ describe('the places one person may hold in the line of the heavy reports (BK-75
     }
     expect(status).not.toBe(429);
     open();
+  });
+});
+
+describe('the places the Assistant takes by name (BK-88)', () => {
+  it('gives a person four, refuses a fifth, frees one when it is released once or twice, and counts each person and each line apart', () => {
+    const mine = Array.from({ length: HEAVY_REPORTS_PER_PERSON }, () => takeHeavyPlace('assistant:test-a'));
+    expect(mine.every((release) => release !== null)).toBe(true);
+    expect(takeHeavyPlace('assistant:test-a')).toBeNull();
+    expect(takeHeavyPlace('assistant:test-b')).not.toBeNull();
+    mine[0]!();
+    mine[0]!();
+    const again = takeHeavyPlace('assistant:test-a');
+    expect(again).not.toBeNull();
+    expect(takeHeavyPlace('assistant:test-a')).toBeNull();
+    // The line of the SLA reads is another one.
+    const sla = Array.from({ length: SLI_READS_PER_PERSON }, () => takeSliPlace('assistant:test-a'));
+    expect(sla.every((release) => release !== null)).toBe(true);
+    expect(takeSliPlace('assistant:test-a')).toBeNull();
+    for (const release of [...mine.slice(1), again, ...sla]) release?.();
+    expect(takeHeavyPlace('assistant:test-a')).not.toBeNull();
   });
 });

@@ -87,13 +87,31 @@ export function detectLanguage(text: string): 'English' | 'Bahasa Indonesia' | n
   return null;
 }
 
-/** Placed after the snapshot, next to the question, where a small model heeds it. */
-export function languageReminder(latestUserMessage: string): string {
-  const lang = detectLanguage(latestUserMessage);
+/** The language of an answer as a page marks it for a screen reader: the one the words of the question show, else the one the user chose, else none (UX-73). */
+export function answerLanguage(latestUserMessage: string, preferred?: 'en' | 'id' | null): 'en' | 'id' | null {
+  const detected = detectLanguage(latestUserMessage);
+  if (detected) return detected === 'Bahasa Indonesia' ? 'id' : 'en';
+  return preferred === 'id' || preferred === 'en' ? preferred : null;
+}
+
+/**
+ * Placed after the snapshot, next to the question, where a small model heeds it. A message the word lists cannot place (a short one, a mixed one) is answered in the
+ * language the user chose, when they chose one.
+ */
+export function languageReminder(latestUserMessage: string, preferred?: 'en' | 'id' | null): string {
+  const code = answerLanguage(latestUserMessage, preferred);
+  const lang = code === 'id' ? 'Bahasa Indonesia' : code === 'en' ? 'English' : null;
   return lang
     ? `The user's latest message is in ${lang}. Reply in ${lang}; keep host and site names exactly as written.`
     : "Reply in the same language as the user's latest message (English or Bahasa Indonesia).";
 }
+
+/**
+ * The line that tells the model something was held back for this user's pages, so that it does not answer none or no about what it was never given (BK-84). `words` say what, in the
+ * words of a person asking.
+ */
+export const notGivenLine = (words: string[]): string =>
+  `NOT GIVEN TO THIS USER: ${words.join(', ')}. This account does not have the pages that show ${words.length === 1 ? 'it' : 'them'}. If asked, say so; never answer none or no.`;
 
 /**
  * The part of the system text that is the same for every question asked of

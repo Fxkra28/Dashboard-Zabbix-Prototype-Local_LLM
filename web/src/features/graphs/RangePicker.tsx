@@ -4,6 +4,7 @@ import type { GraphRange } from '../../types';
 import { useSearchPatch } from '../../shared/hooks/useUrlState';
 import { fromZonedInput, isMonth, monthBounds, monthLabel, monthOf, recentMonths, toZonedInput, zoneLabel } from '../../shared/lib/time';
 import { useReportTimeZone } from '../../shared/hooks/useReportTimeZone';
+import { serverNow } from '../../shared/lib/clock';
 
 export const PRESETS: { label: string; hours: number }[] = [
   { label: '1h', hours: 1 },
@@ -30,7 +31,7 @@ export function rangeKey(r: GraphRange): string {
 
 /** Does the window end at "now" (so the graph should refresh)? */
 export function isLiveRange(r: GraphRange): boolean {
-  const now = Date.now() / 1000;
+  const now = serverNow() / 1000;
   if (r.kind === 'hours') return true;
   if (r.kind === 'month') return monthOf(Math.floor(now)) === r.month;
   return r.to >= now - 60;
@@ -75,7 +76,7 @@ export default function RangePicker({ value, onChange }: { value: GraphRange; on
       ? value
       : value.kind === 'month'
         ? monthBounds(value.month)
-        : { from: Math.floor(Date.now() / 1000) - value.hours * 3600, to: Math.floor(Date.now() / 1000) };
+        : { from: Math.floor(serverNow() / 1000) - value.hours * 3600, to: Math.floor(serverNow() / 1000) };
   const [fromText, setFromText] = useState(toZonedInput(initial.from, zone));
   const [toText, setToText] = useState(toZonedInput(initial.to, zone));
   // The fields read in the report zone: when the server names another one, they are rewritten in it.
@@ -157,7 +158,7 @@ export default function RangePicker({ value, onChange }: { value: GraphRange; on
           >
             Apply
           </button>
-          <span className="muted">Times in {zoneLabel(Date.now(), zone)}</span>
+          <span className="muted">Times in {zoneLabel(serverNow(), zone)}</span>
         </div>
       )}
     </div>

@@ -64,6 +64,16 @@ describe('GET /api/reports/top-hosts', () => {
     expect(body.generatedAt).toBeGreaterThanOrEqual(NOW);
   });
 
+  it('keeps every host in its one cached read, so that a caller who wants them all shares it with a request for a few', async () => {
+    const { topHostsView } = await import('../services/topHosts.js');
+    zabbix(Array.from({ length: 30 }, (_, i) => item(String(i + 1), String(100 + i), `H${i}`, 'system.cpu.util', i + 1)));
+    const few = await topHostsView(2);
+    const all = await topHostsView(Number.POSITIVE_INFINITY);
+    expect(few.metrics[0].rows).toHaveLength(2);
+    expect(all.metrics[0].rows).toHaveLength(30);
+    expect(zbxMock).toHaveBeenCalledTimes(2);
+  });
+
   it('takes the hottest of a host\'s items once: a switch with a CPU item for each module is one row', async () => {
     zabbix([
       item('1', '10', 'SITE1-CORESWITCH', 'system.cpu.util[cpmCPUTotal5minRev.19]', 20),

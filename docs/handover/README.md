@@ -4,7 +4,7 @@
 |---|---|---|---|
 | Everyone | about 6 min | none | [Repository map](1-folders/repository-map.md) |
 
-This handbook is for the person who takes over the portal. It has six parts. Part 0 is for people who do not read code and need to know what the portal is, what it shows and whom to trust on it. Parts 1 to 3 answer three questions in order of how often they are asked: where is everything, what does the code do, and what does the portal talk to. Part 4 is the day-to-day work: running it, rebuilding it, changing it and finding out why it broke. Part 5 is the reference: the decisions, the history, what is still open, and a glossary.
+This handbook is for the person who takes over the portal. It has six parts. Part 0 is for people who do not read code and need to know what the portal is, what it shows and whom to trust on it. Parts 1 to 3 answer three questions in order of how often they are asked: where is everything, what does the code do, and what does the portal talk to. Part 4 is the day-to-day work: running it, rebuilding it, changing it and finding out why it broke. Part 5 is the reference: the decisions, the history and a glossary. The editions made for HCML IT add two pages on what is still open, which are kept outside the repository.
 
 The portal is a web page that reads HCML's Zabbix and shows it more clearly: the open problems, the state of each site and device, graphs, the monthly SLA report, and an assistant that answers questions in plain language. It reads. The only thing it writes is the acknowledgement or closing of a problem, and only for operators and admins.
 
@@ -27,7 +27,7 @@ Every page opens with a small box: who it is for, how long it takes, what to rea
 | [2, Code](2-code/one-request.md) | How one request travels, then the important functions one by one with the real code beside the explanation, a card for every source file, an A to Z index of every name the code exports, and a map of the tests | Developers | Written |
 | [3, Integrations](3-integrations/map.md) | Zabbix, the AI providers, nginx and Docker, sign-in, the report files, operations, and GitHub and its checks: what each one needs, what the portal sends, what comes back, how it fails | Operators and developers | Written |
 | [4, Working](4-working/run-it.md) | Run it, deploy it, roll it back, change it, find out why it broke, the traps that cost time before, and [twelve exercises](4-working/exercises.md) for a new owner | Operators and developers | Written |
-| [5, Reference](5-reference/decisions.md) | The decisions and why, the history, what is still open, a glossary, and how this handbook is kept true | Everyone | Written |
+| [5, Reference](5-reference/decisions.md) | The decisions and why, the history, a glossary, and how this handbook is kept true | Everyone | Written |
 
 ## How the handbook stays true
 

@@ -4,7 +4,7 @@
 |---|---|---|---|
 | Developers | about 30 min | [Server: live and assistant](server-live-and-assistant.md) | [Server: routes](server-routes.md) |
 
-The monthly SLA report can be downloaded as a PDF, an Excel workbook or a zip of CSV files. All three are written by hand, with nothing but Node's built-in modules: no PDF library, no spreadsheet library, no zip library. The CSV writer (`csv.ts`) and the style (`style.ts`: a dot or a comma, three date shapes, a comma or a semicolon) are small and are described at the end of this chapter. The server image stays small, and the writers have no dependency to update. The cost is that the file formats are written out in the code, and that is what this chapter walks through. All of it is in `server/src/export/`, and `services/sliExport.ts` (in [the SLA chapter](server-sla-and-reports.md)) is what calls it.
+The SLA report, for a month or for a range of days, can be downloaded as a PDF, an Excel workbook or a zip of CSV files. All three are written by hand, with nothing but Node's built-in modules: no PDF library, no spreadsheet library, no zip library. The CSV writer (`csv.ts`) and the style (`style.ts`: a dot or a comma, three date shapes, a comma or a semicolon) are small and are described at the end of this chapter. The server image stays small, and the writers have no dependency to update. The cost is that the file formats are written out in the code, and that is what this chapter walks through. All of it is in `server/src/export/`, and `services/sliExport.ts` (in [the SLA chapter](server-sla-and-reports.md)) is what calls it.
 
 ## One document, two writers
 
@@ -13,7 +13,7 @@ The report is built once as a plain value, a `ReportDoc`, and both writers turn 
 | File | What it does |
 |---|---|
 | `types.ts` | The document model: `ReportDoc`, `Table`, `Cell`, `Kpi`, `BarChart`, `Note` |
-| `slaReport.ts` | Builds the `ReportDoc` from the two derived reports of one month |
+| `slaReport.ts` | Builds the `ReportDoc` from the two derived reports of one month or one range, and says the range and the hours that were counted |
 | `pdf.ts` | The PDF writer: an A4 landscape file, hand-written PDF 1.4 |
 | `pdfFonts.ts` | Text measuring for the PDF: the width of each character, wrapping and cutting |
 | `logo.ts` | The logo for the PDF header, and a small PNG reader |
@@ -83,7 +83,7 @@ export interface ReportDoc {
 `server/src/export/slaReport.ts`. Makes the document from the two reports of one month: the strict one and HCML's method.
 
 <!-- gen:snippet server/src/export/slaReport.ts#buildSlaReportDoc lines=10-31 sha=d21cf52c7b59 -->
-`server/src/export/slaReport.ts:513-534` (lines 10 to 31 of buildSlaReportDoc)
+`server/src/export/slaReport.ts:563-584` (lines 10 to 31 of buildSlaReportDoc)
 
 ```ts
 }

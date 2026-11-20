@@ -27,6 +27,9 @@ and was deleted on 22 September 2026. One file per decision does not rot as a un
 | [0014](0014-email-the-sla-report-through-smtp.md) | Email the SLA report through SMTP, when an administrator asks, and keep it off until it is set up | accepted, amended by 0015 | 2026-11-04 |
 | [0015](0015-keep-a-small-state-file-for-recipients-and-the-schedule.md) | Keep a small state file on a volume for the report's recipients, its schedule and what was sent | accepted, amended by 0016 | 2026-11-04 |
 | [0016](0016-keep-the-web-check-figures-of-closed-months.md) | Keep the web check figures of a closed month as they were when it was first read | accepted | 2026-11-16 |
+| [0017](0017-keep-the-portals-users-in-a-file-of-their-own.md) | Keep the portal's users in a file of their own, with a role and a list of modules for each | accepted | 2026-11-17 |
+| [0018](0018-evaluate-any-sla-window-from-the-months-read-once.md) | Read each month of Zabbix once, and evaluate any SLA window from what was read | accepted | 2026-11-17 |
+| [0019](0019-let-the-portal-read-what-a-question-needs.md) | Let the portal read what a question needs, and keep the model without tools | accepted | 2026-11-18 |
 
 ## How they relate
 
@@ -43,11 +46,16 @@ and was deleted on 22 September 2026. One file per decision does not rot as a un
  ├── 0006  read-only, one write
  │    └── 0012  the internet meters read HCML's own Zabbix dashboard, and store nothing
  └── 0005  provider-neutral AI
+      └── 0019  the portal reads what a question needs, and the model keeps no tools
 
 0008  stop polling ──── freezes the dataset 0007 measures against
 
-0009  renew an open portal's sign-in ──── users still come from env, per 0003
+0009  renew an open portal's sign-in ──── a disabled user cannot renew, per 0017
  └── 0010  the token in an httpOnly cookie ──── still no session store, per 0003
+
+0017  the users in a file of their own ──── amends 0003, 0015 and 0016
+
+0018  any SLA window from the months read once ──── amends 0004
 ```
 
 ## Writing a new one

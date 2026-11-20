@@ -49,10 +49,14 @@ try {
   /* storage blocked: nothing to clear */
 }
 
-/** Note a session the BFF just described: `expiresIn` seconds from now. */
-export function recordSession(expiresIn: unknown, user?: { name: string; role: string } | null): void {
+/**
+ * Note a session the BFF just described: `expiresIn` seconds from now. A sign-in and a renewal give the whole life of the session; /api/auth/me gives what is left of it (`'left'`), which moves
+ * the end but not the life, since the margin of a renewal is taken from the life and would shrink with every re-read of an aging session (FR-70).
+ */
+export function recordSession(expiresIn: unknown, user?: { name: string; role: string } | null, kind: 'whole' | 'left' = 'whole'): void {
   if (typeof expiresIn === 'number' && expiresIn > 0) {
-    session = { endsAt: Date.now() + expiresIn * 1000, lifeMs: expiresIn * 1000 };
+    const ms = expiresIn * 1000;
+    session = { endsAt: Date.now() + ms, lifeMs: kind === 'left' && session ? Math.max(session.lifeMs, ms) : ms };
     signedOut = false;
   }
   if (user) lastUser = { name: user.name, role: user.role };

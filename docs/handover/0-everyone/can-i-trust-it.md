@@ -55,7 +55,7 @@ It shows two figures, because two methods are in use.
 
 The two also differ in the hours when nothing was collected. The strict method leaves those hours out, and a device with too little data gets no figure. HCML's method counts them as up, and a device that was never measured counts as fully available. That is why the same device can read No data in one figure and 100 percent in the other.
 
-Both are shown because HCML's own published reports use the second one, and the portal was built to reproduce them. The check is made against HCML's monthly Availability Reports, with tolerances for the figure of each category, each device and the number of incidents. It is run by hand with spreadsheets that only the owner holds. They answer different questions. The strict one asks whether the device was reachable. The other asks whether the ping loss was high. It is the one that matches HCML's reports. When they differ, the note on the page says why.
+Both are shown because HCML's own published reports use the second one, and the portal was built to reproduce them. The check is made against HCML's monthly Availability Reports, with tolerances for the figure of each category, each device and the number of incidents. We run it by hand, with spreadsheets that only we hold. They answer different questions. The strict one asks whether the device was reachable. The other asks whether the ping loss was high. It is the one that matches HCML's reports. When they differ, the note on the page says why.
 
 Planned maintenance windows that Zabbix knows about are left out of both methods.
 

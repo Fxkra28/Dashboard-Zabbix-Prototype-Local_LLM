@@ -11,7 +11,7 @@ import { BadRequestError } from '../core/validate.js';
 import { ZabbixApiError } from '../clients/zabbix.js';
 import { sliExportRoutes } from '../routes/sliExport.js';
 import { buildTestApp } from './helpers/app.js';
-import { sampleSliReports } from './helpers/sliReportFixture.js';
+import { sampleRangeReports, sampleSliReports } from './helpers/sliReportFixture.js';
 
 /**
  * GET /api/sli/export through Fastify, with the real writers. Only the Zabbix
@@ -19,10 +19,10 @@ import { sampleSliReports } from './helpers/sliReportFixture.js';
  * reports, so every byte of the file is the portal's own.
  */
 
-const { sliMock } = vi.hoisted(() => ({ sliMock: vi.fn() }));
+const { sliMock, windowMock } = vi.hoisted(() => ({ sliMock: vi.fn(), windowMock: vi.fn() }));
 vi.mock('../services/sli.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../services/sli.js')>();
-  return { ...actual, getMonthlySli: sliMock };
+  return { ...actual, getMonthlySli: sliMock, getWindowSli: windowMock };
 });
 
 const PDF_TYPE = 'application/pdf';
@@ -44,6 +44,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   sliMock.mockReset();
+  windowMock.mockReset();
 });
 
 /** The package's central directory, read with plain Buffer calls so the test trusts nothing of the writer. */
@@ -191,7 +192,7 @@ describe('GET /api/sli/export', () => {
   ])('refuses %s before anything is read or sent', async (_label, query) => {
     const res = await get(query);
     expect(res.statusCode).toBe(400);
-    expect(res.json()).toMatchObject({ error: 'bad_request', message: 'Only month, format, decimal, date and separator are accepted.' });
+    expect(res.json()).toMatchObject({ error: 'bad_request', message: 'Only month, from, to, dayHours, days, format, decimal, date and separator are accepted.' });
     expect(res.headers['content-disposition']).toBeUndefined();
     expect(res.headers['x-evil']).toBeUndefined();
     expect(JSON.stringify(res.json())).not.toMatch(/evil|passwd|proto|mont\b/);
@@ -423,7 +424,7 @@ describe('the style of a download', () => {
   it('still refuses a name that is not one of the choices', async () => {
     const res = await get('&format=csv&locale=id');
     expect(res.statusCode).toBe(400);
-    expect(res.json()).toEqual({ error: 'bad_request', message: 'Only month, format, decimal, date and separator are accepted.' });
+    expect(res.json()).toEqual({ error: 'bad_request', message: 'Only month, from, to, dayHours, days, format, decimal, date and separator are accepted.' });
   });
 });
 
@@ -563,5 +564,85 @@ describe('behind the production stack (helmet, cors, compression and the error h
     expect(res.statusCode).toBe(400);
     expect(res.headers['content-type']).toMatch(/^application\/json/);
     expect(res.json()).toMatchObject({ error: 'bad_request' });
+  });
+});
+
+/** What the file says of a range (FR-60): the same two methods, read for the window asked, and named by it. */
+describe('GET /api/sli/export for a range of days', () => {
+  let app: FastifyInstance;
+  const FROM = Date.parse('2026-08-03T00:00:00+07:00') / 1000;
+  const TO = Date.parse('2026-08-10T00:00:00+07:00') / 1000;
+  const HOURS_CALLS = (n: number) => windowMock.mock.calls[n]![0] as { from: number; to: number; profile: string; hours: unknown; month?: string };
+
+  beforeEach(async () => {
+    // The window service gives what the page's /api/sli gives: the report of the hours it was asked for, with no web checks.
+    windowMock.mockImplementation(async (req: { profile: string; hours: { start: number; end: number; weekdays: number[] | null } | null; month?: string }) => {
+      const dailyHours = req.hours ? { ...req.hours, seconds: 5 * 9 * 3600 } : undefined;
+      const both = sampleRangeReports(dailyHours ? { dailyHours } : {});
+      const report = req.profile === 'availability' ? both.strict : both.hcml;
+      if (!req.month) return report;
+      const month = sampleSliReports().strict;
+      return { ...report, month: req.month, from: month.from, to: month.to, end: month.to };
+    });
+    app = await buildTestApp(sliExportRoutes);
+  });
+  afterEach(() => app.close());
+
+  const get = (query: string) => app.inject({ url: `/api/sli/export${query}` });
+
+  it('sends the file for two times, named by their dates, after reading both methods for that window and not the month', async () => {
+    const res = await get(`?from=${FROM}&to=${TO}&format=pdf`);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toBe(PDF_TYPE);
+    expect(res.headers['content-disposition']).toBe(disposition('HCML_SLA_Report_2026-08-03_to_2026-08-09.pdf'));
+    expect(res.rawPayload.subarray(0, 5).toString('latin1')).toBe('%PDF-');
+    expect(sliMock).not.toHaveBeenCalled();
+    expect(windowMock).toHaveBeenCalledTimes(2);
+    expect(windowMock.mock.calls.map(([r]) => (r as { profile: string }).profile).sort()).toEqual(['availability', 'hcml-report']);
+    expect(HOURS_CALLS(0)).toMatchObject({ from: FROM, to: TO, hours: null });
+  });
+
+  it('keeps the hours of the day in what it reads and in the name, so two files of the same days differ', async () => {
+    const res = await get(`?from=${FROM}&to=${TO}&format=xlsx&dayHours=8-17&days=1,2,3,4,5`);
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-type']).toBe(XLSX_TYPE);
+    expect(res.headers['content-disposition']).toBe(disposition('HCML_SLA_Report_2026-08-03_to_2026-08-09_0800-1700_d12345.xlsx'));
+    expect(HOURS_CALLS(0)).toMatchObject({ hours: { start: 8, end: 17, weekdays: [1, 2, 3, 4, 5] } });
+  });
+
+  it('gives a month in the hours of the day its own name, which is not the plain month’s', async () => {
+    const res = await get('?month=2026-08&format=csv&dayHours=8-17');
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['content-disposition']).toBe(disposition('HCML_SLA_Report_2026-08_0800-1700_csv.zip'));
+    expect(HOURS_CALLS(0)).toMatchObject({ month: '2026-08', hours: { start: 8, end: 17, weekdays: null } });
+    const names = [...unzip(res.rawPayload).keys()];
+    expect(names.length).toBeGreaterThan(0);
+    expect(names.every((n) => n.startsWith('HCML_SLA_Report_2026-08_0800-1700_csv/'))).toBe(true);
+  });
+
+  it('still gives the plain month the monthly report, with its web checks, and its old name', async () => {
+    const res = await get('?month=2026-08&format=pdf');
+    expect(res.headers['content-disposition']).toBe(disposition(FILE.pdf));
+    expect(windowMock).not.toHaveBeenCalled();
+    expect(sliMock).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['a month and two times together', `?month=2026-08&from=${FROM}&to=${TO}&format=pdf`, 'Give a month, or from and to, and not both.'],
+    ['a start with no end', `?from=${FROM}&format=pdf`, 'to must be a time in Unix seconds.'],
+    ['a time that is not a number', `?from=monday&to=${TO}&format=pdf`, 'from must be a time in Unix seconds.'],
+    ['a time that is not a whole hour', `?from=${FROM + 60}&to=${TO}&format=pdf`, 'from and to must be whole hours.'],
+    ['an end before the start', `?from=${TO}&to=${FROM}&format=pdf`, 'from must be before to.'],
+    ['a window that has not begun', `?from=${Date.parse('2026-10-01T00:00:00+07:00') / 1000}&to=${Date.parse('2026-10-02T00:00:00+07:00') / 1000}&format=pdf`, 'That period has not started yet.'],
+    ['hours that are not hours', `?from=${FROM}&to=${TO}&format=pdf&dayHours=eight`, 'dayHours must be two whole hours'],
+    ['days that hold none of the window', `?from=${Date.parse('2026-08-01T00:00:00+07:00') / 1000}&to=${Date.parse('2026-08-03T00:00:00+07:00') / 1000}&format=pdf&days=1,2,3,4,5`, 'No hour of this range falls inside the daily hours you chose.'],
+    ['a word it does not know', `?from=${FROM}&to=${TO}&format=pdf&profile=availability`, 'Only month, from, to, dayHours, days, format, decimal, date and separator are accepted.'],
+    ['a list in place of a value', `?from=${FROM}&from=${FROM}&to=${TO}&format=pdf`, ''],
+  ])('refuses %s, before anything is read', async (_why, query, message) => {
+    const res = await get(query);
+    expect(res.statusCode).toBe(400);
+    if (message) expect(JSON.stringify(res.json())).toContain(message);
+    expect(windowMock).not.toHaveBeenCalled();
+    expect(sliMock).not.toHaveBeenCalled();
   });
 });

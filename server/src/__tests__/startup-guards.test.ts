@@ -120,7 +120,7 @@ describe('passwords stored as scrypt hashes (SC-22)', () => {
 
   it('are refused in PORTAL_PASS when it starts like a hash and is not one', async () => {
     const { assertUsers } = await load({ ...AUTH_ON, PORTAL_PASS: 'scrypt.32768.8.1.garbage.garbage' });
-    expect(assertUsers).toThrow(/PORTAL_PASS starts with "scrypt." and is not a usable hash/);
+    expect(assertUsers).toThrow(/PORTAL_PASS starts with "scrypt." or "argon2id." and is not a usable hash/);
     expect(assertUsers).not.toThrow(/garbage\.garbage/);
   });
 });

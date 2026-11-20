@@ -5,11 +5,11 @@ import {
   coveredFromTrends,
   initialState,
   intervalsFor,
-  parseDelay,
   wasMeasured,
   type SliHost,
   type TriggerEvent,
 } from '../sli/engine.js';
+import { parseDelay } from '../core/delay.js';
 import { intersectIntervals, mergeIntervals, totalSeconds } from '../sli/intervals.js';
 
 /**
@@ -245,11 +245,11 @@ describe('computeSli: hcml-report profile', () => {
   it('reproduces HCML’s method: clip to the month, open problems end at month end − 1 s, silent hosts are 100%', async () => {
     serve({
       triggers: [
-        trig('1', '101', '1.2.1 IDX02CORESWITCH', 'High ICMP ping loss'),
+        trig('1', '101', '1.2.1 TANGO02CORESWITCH', 'High ICMP ping loss'),
         trig('2', '102', '4.3.3 FPSO ARUBA 3', 'High ICMP ping loss', { value: '1' }),
         trig('3', '103', 'INET : SAMPANG WAN 1', 'High ICMP ping loss'),
         // Not the report trigger: must not count in this profile.
-        trig('4', '101', '1.2.1 IDX02CORESWITCH', 'Unavailable by ICMP ping'),
+        trig('4', '101', '1.2.1 TANGO02CORESWITCH', 'Unavailable by ICMP ping'),
       ],
       parents: { '101': ['Cisco IOS by SNMP'], '102': ['Generic by SNMP'], '103': ['ICMP Ping'] },
       events: [
@@ -266,7 +266,7 @@ describe('computeSli: hcml-report profile', () => {
     const r = await computeSli({ month: '2026-08', profile: 'hcml-report' });
 
     const byName = Object.fromEntries(r.hosts.map((h) => [h.name, h]));
-    expect(byName['1.2.1 IDX02CORESWITCH'].downtime).toBe(3600);
+    expect(byName['1.2.1 TANGO02CORESWITCH'].downtime).toBe(3600);
     expect(byName['4.3.3 FPSO ARUBA 3'].downtime).toBe(1800 + 99);
     expect(byName['4.3.3 FPSO ARUBA 3'].incidents).toBe(2);
     expect(byName['INET : SAMPANG WAN 1'].sli).toBe(100);
@@ -299,7 +299,7 @@ describe('computeSli: hcml-report profile', () => {
   it('flags never-measured hosts without changing a figure', async () => {
     const fixture: Fixture = {
       triggers: [
-        trig('1', '101', '1.2.1 IDX02CORESWITCH', 'High ICMP ping loss'),
+        trig('1', '101', '1.2.1 TANGO02CORESWITCH', 'High ICMP ping loss'),
         trig('2', '102', 'INET : SAMPANG WAN 1', 'High ICMP ping loss'),
         trig('3', '103', '9.9 DMR REPEATER', 'High ICMP ping loss', {
           hosts: [{ hostid: '103', name: '9.9 DMR REPEATER', status: '1' }],
@@ -351,8 +351,8 @@ describe('computeSli: strict availability profile', () => {
     }
     serve({
       triggers: [
-        trig('1', '101', '1.2.1 IDX02CORESWITCH', 'Unavailable by ICMP ping'),
-        trig('2', '101', '1.2.1 IDX02CORESWITCH', 'High ICMP ping loss'),
+        trig('1', '101', '1.2.1 TANGO02CORESWITCH', 'Unavailable by ICMP ping'),
+        trig('2', '101', '1.2.1 TANGO02CORESWITCH', 'High ICMP ping loss'),
         trig('3', '103', 'INET : SAMPANG WAN 1', 'Unavailable by ICMP ping', { value: '1' }),
       ],
       parents: { '101': ['Cisco IOS by SNMP'], '103': ['ICMP Ping'] },
@@ -416,7 +416,7 @@ describe('computeSli: a span declared not measured (SLA_NO_DATA_WINDOWS)', () =>
     const trends = [];
     for (let h = AUG.from; h < AUG.to; h += 3600) trends.push({ itemid: 'i101', clock: h, num: 60 });
     serve({
-      triggers: [trig('1', '101', '1.2.1 IDX02CORESWITCH', 'Unavailable by ICMP ping')],
+      triggers: [trig('1', '101', '1.2.1 TANGO02CORESWITCH', 'Unavailable by ICMP ping')],
       parents: { '101': ['Cisco IOS by SNMP'] },
       events,
       items: [{ itemid: 'i101', hostid: '101', key_: 'icmpping', delay: '1m', value_type: '3' }],
@@ -436,7 +436,7 @@ describe('computeSli: a span declared not measured (SLA_NO_DATA_WINDOWS)', () =>
   });
 
   it('counts as up in HCML’s method: no downtime inside it, and the month keeps its length', async () => {
-    serve({ triggers: [trig('1', '101', '1.2.1 IDX02CORESWITCH', 'High ICMP ping loss')], parents: { '101': ['Cisco IOS by SNMP'] }, events });
+    serve({ triggers: [trig('1', '101', '1.2.1 TANGO02CORESWITCH', 'High ICMP ping loss')], parents: { '101': ['Cisco IOS by SNMP'] }, events });
     await declare([declared]);
     const { computeSli } = await import('../sli/engine.js');
     const r = await computeSli({ month: '2026-08', profile: 'hcml-report' });
@@ -541,7 +541,7 @@ describe('computeSli: planned maintenance (tracker BK-05)', () => {
     const D = 86400;
     serve({
       triggers: [
-        trig('1', '101', '1.2.1 IDX02CORESWITCH', 'High ICMP ping loss'),
+        trig('1', '101', '1.2.1 TANGO02CORESWITCH', 'High ICMP ping loss'),
         trig('2', '102', '4.3.3 FPSO ARUBA 3', 'High ICMP ping loss'),
         trig('3', '103', 'INET : SAMPANG WAN 1', 'High ICMP ping loss'),
       ],
@@ -575,7 +575,7 @@ describe('computeSli: planned maintenance (tracker BK-05)', () => {
     const r = await computeSli({ month: '2026-08', profile: 'hcml-report' });
     const byName = Object.fromEntries(r.hosts.map((h) => [h.name, h]));
 
-    expect(byName['1.2.1 IDX02CORESWITCH']).toMatchObject({ downtime: 0, sli: 100, maintenance: D });
+    expect(byName['1.2.1 TANGO02CORESWITCH']).toMatchObject({ downtime: 0, sli: 100, maintenance: D });
     expect(byName['4.3.3 FPSO ARUBA 3']).toMatchObject({ downtime: 1800, maintenance: 3600 });
     expect(byName['4.3.3 FPSO ARUBA 3'].sli).toBeCloseTo(100 * (1 - 1800 / (MONTH - 3600)), 10);
     expect(byName['INET : SAMPANG WAN 1']).toMatchObject({ downtime: 3600, maintenance: 0 });
@@ -590,7 +590,7 @@ describe('computeSli: a trigger set to multiple PROBLEM events (BK-46)', () => {
 
   it('counts the time before a repeated PROBLEM as down when the last event before the window was a PROBLEM', async () => {
     serve({
-      triggers: [trig('1', '101', '1.2.1 IDX02CORESWITCH', 'High ICMP ping loss', { type: '1', value: '0' })],
+      triggers: [trig('1', '101', '1.2.1 TANGO02CORESWITCH', 'High ICMP ping loss', { type: '1', value: '0' })],
       parents: { '101': ['Cisco IOS by SNMP'] },
       events: [
         { eventid: 'a', objectid: '1', clock: AUG.from - 5000, value: 1 },
@@ -605,7 +605,7 @@ describe('computeSli: a trigger set to multiple PROBLEM events (BK-46)', () => {
 
   it('starts the outage at the first PROBLEM in the window when the last event before it was an OK', async () => {
     serve({
-      triggers: [trig('1', '101', '1.2.1 IDX02CORESWITCH', 'High ICMP ping loss', { type: '1' })],
+      triggers: [trig('1', '101', '1.2.1 TANGO02CORESWITCH', 'High ICMP ping loss', { type: '1' })],
       parents: { '101': ['Cisco IOS by SNMP'] },
       events: [
         { eventid: 'a', objectid: '1', clock: AUG.from - 5000, value: 0 },
@@ -620,7 +620,7 @@ describe('computeSli: a trigger set to multiple PROBLEM events (BK-46)', () => {
 
   it('starts it there too when there was no event before the window at all', async () => {
     serve({
-      triggers: [trig('1', '101', '1.2.1 IDX02CORESWITCH', 'High ICMP ping loss', { type: '1' })],
+      triggers: [trig('1', '101', '1.2.1 TANGO02CORESWITCH', 'High ICMP ping loss', { type: '1' })],
       parents: { '101': ['Cisco IOS by SNMP'] },
       events: [
         { eventid: 'b', objectid: '1', clock: AUG.from + 1000, value: 1 },
@@ -635,7 +635,7 @@ describe('computeSli: a trigger set to multiple PROBLEM events (BK-46)', () => {
   it('asks for the event before the window once for each such trigger, newest first, one row, and for no other trigger', async () => {
     serve({
       triggers: [
-        trig('1', '101', '1.2.1 IDX02CORESWITCH', 'High ICMP ping loss', { type: '1' }),
+        trig('1', '101', '1.2.1 TANGO02CORESWITCH', 'High ICMP ping loss', { type: '1' }),
         // Single PROBLEM events: a first PROBLEM is always the start, nothing to ask.
         trig('2', '102', '4.3.3 FPSO ARUBA 3', 'High ICMP ping loss', { type: '0' }),
         // Its first event is an OK, which always ends a problem: nothing to ask either.
@@ -659,7 +659,7 @@ describe('computeSli: a trigger set to multiple PROBLEM events (BK-46)', () => {
 
   it('asks nothing extra when no trigger is set to multiple PROBLEM events', async () => {
     serve({
-      triggers: [trig('1', '101', '1.2.1 IDX02CORESWITCH', 'High ICMP ping loss')],
+      triggers: [trig('1', '101', '1.2.1 TANGO02CORESWITCH', 'High ICMP ping loss')],
       parents: {},
       events: [{ eventid: 'a', objectid: '1', clock: AUG.from + 1000, value: 1 }],
     });
@@ -687,7 +687,7 @@ describe('computeSli: the hours after the last trend row, in an open month (BK-4
     const history = [];
     for (let c = historyFrom; c < NOW; c += 60) history.push({ itemid: 'i101', clock: c });
     serve({
-      triggers: [trig('1', '101', '1.2.1 IDX02CORESWITCH', 'Unavailable by ICMP ping')],
+      triggers: [trig('1', '101', '1.2.1 TANGO02CORESWITCH', 'Unavailable by ICMP ping')],
       parents: { '101': ['Cisco IOS by SNMP'] },
       events: [],
       items: [{ itemid: 'i101', hostid: '101', key_: 'icmpping', delay: '1m', value_type: '3' }],

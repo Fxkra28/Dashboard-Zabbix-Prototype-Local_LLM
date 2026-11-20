@@ -96,8 +96,13 @@ describe('auth guard', () => {
   });
 
   it('names the missing role in a 403', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/problems/acknowledge', headers: bearer(tokenFor('ana', 'viewer')) });
+    expect(res.json()).toMatchObject({ error: 'forbidden', message: 'This view needs the "operator" role; you are signed in as "guest".' });
+  });
+
+  it('names the missing module in a 403, for a page the account was not given', async () => {
     const res = await app.inject({ url: '/api/links', headers: bearer(tokenFor('ana', 'viewer')) });
-    expect(res.json()).toMatchObject({ error: 'forbidden', message: expect.stringContaining('"wall"') });
+    expect(res.json()).toEqual({ error: 'forbidden', message: 'Your account does not have Links & WAN health. Ask an administrator for access.' });
   });
 
   // The role comes from PORTAL_USERS on every request, not from the token.
@@ -193,7 +198,7 @@ describe('rate limits', () => {
     const index = await readFile(new URL('../index.ts', import.meta.url), 'utf8');
     const limiter = index.indexOf('await registerRateLimit(app)');
     expect(limiter).toBeGreaterThan(-1);
-    expect(limiter).toBeLessThan(index.indexOf('await setupAuth(app)'));
+    expect(limiter).toBeLessThan(index.indexOf('await setupAuth(app, userDirectory())'));
   });
 
   it('never refuses a sign-out, so a spent allowance cannot leave the cookie working', async () => {
@@ -389,7 +394,7 @@ describe('POST /api/auth/login', () => {
     for (const typed of ['Ana', 'ANA', 'aNa']) {
       const res = await login({ username: typed, password: 'viewer-pass' });
       expect(res.statusCode, typed).toBe(200);
-      expect(res.json().user).toEqual({ name: 'ana', role: 'viewer' });
+      expect(res.json().user).toEqual({ name: 'ana', role: 'guest' });
       expect((app.jwt.decode(sessionCookie(res)!.value) as { sub: string }).sub).toBe('ana');
     }
     // The password is still exact.
@@ -412,7 +417,7 @@ describe('GET /api/auth/me', () => {
       // The menu's role table has its own test (page-access.test.ts).
       const { expiresIn, pages, ...rest } = res.json();
       expect(pages).toBeTypeOf('object');
-      expect(rest).toEqual({ authEnabled: true, user: { name: 'adi', role: 'admin' } });
+      expect(rest).toEqual({ authEnabled: true, user: { name: 'adi', role: 'admin', displayName: 'adi', source: 'env' }, modules: expect.arrayContaining(['dashboard', 'inventory', 'users']) });
       expect(expiresIn).toBeGreaterThan(3590);
       expect(expiresIn).toBeLessThanOrEqual(3600);
     }
@@ -630,6 +635,7 @@ describe('with auth off', () => {
         user: { name: 'anonymous', role: 'admin' },
         expiresIn: null,
         pages: expect.any(Object),
+        modules: expect.any(Array),
       });
       expect((await open.inject({ method: 'POST', url: '/api/auth/logout' })).statusCode).toBe(403);
       expect((await open.inject({ method: 'POST', url: '/api/auth/logout', headers: page() })).statusCode).toBe(200);
@@ -679,7 +685,7 @@ describe('POST /api/auth/refresh', () => {
     const old = tokenFor('ana', 'viewer');
     const res = await refresh(page(old));
     expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ user: { name: 'ana', role: 'viewer' }, expiresIn: 43200 });
+    expect(res.json()).toEqual({ user: { name: 'ana', role: 'guest' }, expiresIn: 43200 });
     expect(sessionCookie(res)).toMatchObject({ httpOnly: true, sameSite: 'Strict', path: '/', maxAge: 43200 });
     const fresh = claims(renewed(res));
     expect(fresh.sub).toBe('ana');
@@ -728,8 +734,8 @@ describe('POST /api/auth/refresh', () => {
 
   it('takes the role from the current user list, not from the old token', async () => {
     const res = await refresh(page(tokenFor('ana', 'admin')));
-    expect(res.json().user).toEqual({ name: 'ana', role: 'viewer' });
-    expect(claims(renewed(res)).role).toBe('viewer');
+    expect(res.json().user).toEqual({ name: 'ana', role: 'guest' });
+    expect(claims(renewed(res)).role).toBe('guest');
   });
 
   it('refuses a name PORTAL_USERS lists twice, rather than renewing into the first entry\'s role', async () => {
@@ -742,7 +748,7 @@ describe('POST /api/auth/refresh', () => {
       await setupAuth(dup);
       await dup.ready();
       const login = await dup.inject({ method: 'POST', url: '/api/auth/login', headers: page(), payload: { username: 'shared', password: 'wall-pass' } });
-      expect(login.json().user).toEqual({ name: 'shared', role: 'viewer' });
+      expect(login.json().user).toEqual({ name: 'shared', role: 'guest' });
       const res = await dup.inject({ method: 'POST', url: '/api/auth/refresh', headers: page(sessionCookie(login)!.value) });
       expect(res.statusCode).toBe(401);
       expect(warnings.join(' ')).toContain('names "shared" more than once');

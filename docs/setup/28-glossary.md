@@ -46,7 +46,7 @@ than recovered. Terms are the ones this project uses in a specific way.*
 |---|---|
 | BFF | Backend-for-frontend. The Fastify service; holds the Zabbix token, caches, derives, and never lets the browser talk to Zabbix |
 | The derived layer | Everything the portal computes that Zabbix stores no row for. Green in every diagram |
-| The two portals | `hcml-portal` (hosted model) and `hcml-portal-ollama` (local model). Byte-identical source; 22 files differ |
+| The two portals | `hcml-portal` (hosted model) and `hcml-portal-ollama` (local model). Byte-identical source; 21 files differ |
 | Explain | The per-problem plain-language summary. One problem, cached an hour |
 | The Assistant | The conversational page. Sends the whole estate snapshot, streamed, never cached |
 | Stale-while-revalidate | Serving an expired cached value instantly while refreshing behind it. Allowed on the slow views (the Hosts overview, Devices, the Network and Maps pages, the internet meters, the busiest hosts, web monitoring, the SLA and the service pages), never on problem or acknowledgement state |

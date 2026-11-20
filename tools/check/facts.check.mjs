@@ -21,7 +21,7 @@
  * that name each method; and the Configuration section of README.md names every environment variable the BFF reads.
  * The tracker is checked as a table: ten cells in every row (a pipe inside a code span splits a cell and moves every cell
  * after it along), a mark that fits its status, one row for each id, and the totals that its text and the open-items page state.
- * The open-problems page of the handbook is checked against the open-items page: its two tables cover exactly the rows given to HCML alone and to the owner alone.
+ * The open-problems page of the handbook is checked against the open-items page: its two tables cover exactly the rows given to HCML alone and to us alone.
  *
  * It does not read what a sentence means. A number the forms above do not reach, and a line citation that still
  * exists but no longer says what the sentence does, are for a person.
@@ -270,15 +270,16 @@ export const RULES = [
   { id: 'parts of the guide', re: /\b(\d+) parts\b/g, want: (f) => [[f.parts]], only: /setup|guide|subsystem|each part/i },
   { id: 'ADRs', re: /\b(\w+) (?:ADRs|Architecture Decision Records|decision records)\b/gi, want: (f) => [[f.adrs]] },
   { id: 'ADRs listed', re: /\bThere are (\d+), in `docs\/architecture\/adr\/`/g, want: (f) => [[f.adrs]] },
-  { id: 'pages', re: /\b(\d+) pages\b/g, want: (f) => [[f.pages]], not: /PDF|workbook|\bKB\b|about \d+ pages/i },
+  // `not` is tested against the sentence a statement sits in, and is case-sensitive: a table row that names a size in kB is still a row that may state the pages (DC-65).
+  { id: 'pages', re: /\b(\d+) pages\b/g, want: (f) => [[f.pages]], not: /PDF|pdf|workbook|\bKB\b|about \d+ pages/ },
   { id: 'pages behind the shell', re: /\b(\d+) of them behind the shell\b/g, want: (f) => [[f.behindShell]] },
   { id: 'direct dependencies', re: /\b(\d+) direct (?:dependencies|ones)\b/g, want: (f) => [[f.deps.total]] },
   { id: 'dependencies shipped', re: /\b(\d+) (?:of them shipped|ship:)/g, want: (f) => [[f.deps.shipped]] },
   { id: 'dependencies split', re: /\b(\d+) in the BFF and (\d+) in the web app\b/g, want: (f) => [[f.deps.server.run + f.deps.server.dev, f.deps.web.run + f.deps.web.dev]] },
   { id: 'dependencies in full', re: /\b(\d+) runtime \+ (\d+) dev on the server, (\d+) \+ (\d+) on the web: (\d+) in all, (\d+) of them shipped/g, want: (f) => [[f.deps.server.run, f.deps.server.dev, f.deps.web.run, f.deps.web.dev, f.deps.total, f.deps.shipped]] },
-  { id: 'test files', re: /\b[\d,]+ tests in (\d+) files\b/g, want: (f) => [[f.serverTestFiles], [f.webTestFiles]] },
+  { id: 'test files', re: /\b[\d,]+ tests(?:,\s*| in | across )(\d+) files\b/g, want: (f) => [[f.serverTestFiles], [f.webTestFiles]] },
   // The counts come from the files `npm test` writes (see testCounts): a test cannot be counted without running one.
-  { id: 'test counts', re: /\b(\d[\d,]*) tests in \d+ files\b/g, want: (f) => [[f.serverTests], [f.webTests]], when: (f) => f.serverTests !== null && f.webTests !== null },
+  { id: 'test counts', re: /\b(\d[\d,]*) tests(?:,\s*| in | across )\d+ files\b/g, want: (f) => [[f.serverTests], [f.webTests]], when: (f) => f.serverTests !== null && f.webTests !== null },
   { id: 'stylesheet parts', re: /\b(\d+) numbered parts\b/g, want: (f) => [[f.cssParts]] },
   { id: 'cards on a page', re: /has one card on this page, (\d+) in all/g, want: (f) => f.cardPages.map((n) => [n]) },
   { id: 'CI jobs', re: /\b(\w+) jobs\b/gi, want: (f) => [[f.jobs]], only: /workflow|ci\.yml|\bCI\b/ },
@@ -319,6 +320,7 @@ const claimsIn = (text, from, to, rule, facts) => {
     const stated = m.slice(1).filter((x) => x !== undefined).map(toNumber);
     if (stated.some((n) => n === null)) continue;
     const [a, b] = spans.find(([x, y]) => m.index >= x && m.index < y) ?? [0, text.length];
+    if (rule.not && rule.not.test(text.slice(a, b))) continue;
     if (PAST.test(text.slice(a, b))) {
       left.push(m[0]);
       continue;
@@ -344,7 +346,6 @@ export function checkText(text, facts) {
     const from = before.length + 1;
     for (const rule of RULES) {
       if (rule.only && !rule.only.test(line)) continue;
-      if (rule.not && rule.not.test(line)) continue;
       const { problems: found, seen, left } = claimsIn(window, from, from + line.length + 1, rule, facts);
       checked += seen;
       for (const p of found) problems.push({ line: i + 1, ...p });
@@ -453,7 +454,7 @@ export function checkTracker(text) {
       problems.push(`tracker.md:${at}  the row of ${id || 'an item with no id'} has ${cells.length} cells, not 10 (a "|" inside a code span splits a cell: write the words, or "\\|")`);
       return;
     }
-    if (!/^[A-Z]{2}-\d\d$/.test(id)) problems.push(`tracker.md:${at}  "${id}" is not an id such as BK-38`);
+    if (!/^[A-Z]{2}-\d{2,3}$/.test(id)) problems.push(`tracker.md:${at}  "${id}" is not an id such as BK-38 or BK-101`);
     else if (seen.has(id)) problems.push(`tracker.md:${at}  ${id} is also the row at line ${seen.get(id)}`);
     else seen.set(id, at);
     if (!TRACKER_STATUS[m[1]].includes(cells[1])) problems.push(`tracker.md:${at}  ${id}: the mark ${m[1]} does not go with the status "${cells[1]}"`);
@@ -476,12 +477,12 @@ export function checkOpenItemsTotals(text, totals) {
   return m.slice(1, 5).map(Number).join(', ') === want ? [] : [`docs/handover/5-reference/open-items.md  "${m[0]}" says ${m.slice(1, 5).join(', ')}; the tracker has ${want}`];
 }
 
-/** The rows of the open-items page that only HCML, or only the owner, can close. */
+/** The rows of the open-items page that only HCML, or only we, can close. */
 export function openItemOwners(text) {
-  const by = { hcml: new Set(), owner: new Set() };
+  const by = { hcml: new Set(), ours: new Set() };
   for (const line of text.split('\n')) {
-    const m = /^\| ([A-Z]{2}-\d\d) \|.*Who can close it: (HCML alone|owner alone)\s*\|?\s*$/.exec(line);
-    if (m) by[m[2] === 'HCML alone' ? 'hcml' : 'owner'].add(m[1]);
+    const m = /^\| ([A-Z]{2}-\d{2,3}) \|.*Who can close it: (HCML alone|we alone)\s*\|?\s*$/.exec(line);
+    if (m) by[m[2] === 'HCML alone' ? 'hcml' : 'ours'].add(m[1]);
   }
   return by;
 }
@@ -489,11 +490,11 @@ export function openItemOwners(text) {
 // Built from a string: a regex literal that holds an HTML comment opener does not parse in vitest's transform, which three tests use to import this file.
 const ROWS_COMMENT = new RegExp('<!--\\s*rows:([^>]*?)-->');
 
-/** A comment before each table of the open-problems page names its rows: they must be the ones the open-items page gives to HCML alone and to the owner alone, one table row each, and the opening sentence must count them. */
+/** A comment before each table of the open-problems page names its rows: they must be the ones the open-items page gives to HCML alone and to us alone, one table row each, and the opening sentence must count them. */
 export function checkOpenProblems(page, items) {
   const want = openItemOwners(items);
   const found = [];
-  const sections = [['hcml', 'HCML', 'What only HCML can close'], ['owner', 'the owner', 'What only the owner can close']];
+  const sections = [['hcml', 'HCML', 'What only HCML can close'], ['ours', 'us', 'What only we can close']];
   const parts = page.split(/^## /m);
   for (const [key, who, heading] of sections) {
     const body = parts.find((p) => p.startsWith(heading)) ?? '';
@@ -503,9 +504,9 @@ export function checkOpenProblems(page, items) {
     for (const id of named) if (!want[key].has(id)) found.push(`the table for ${who} names ${id}, which the open-items page does not give to ${who} alone`);
     if (tableRows !== named.size) found.push(`the table for ${who} has ${tableRows} rows for ${named.size} named`);
   }
-  const said = /\b(\w+) for HCML and (\w+) for the owner\b/.exec(page);
-  if (said && (toNumber(said[1]) !== want.hcml.size || toNumber(said[2]) !== want.owner.size)) {
-    found.push(`the opening sentence says ${said[1]} for HCML and ${said[2]} for the owner, and the open-items page has ${want.hcml.size} and ${want.owner.size}`);
+  const said = /\b(\w+) for HCML and (\w+) for us\b/.exec(page);
+  if (said && (toNumber(said[1]) !== want.hcml.size || toNumber(said[2]) !== want.ours.size)) {
+    found.push(`the opening sentence says ${said[1]} for HCML and ${said[2]} for us, and the open-items page has ${want.hcml.size} and ${want.ours.size}`);
   }
   return found;
 }
@@ -592,6 +593,12 @@ const samples = [
   ['All 19 pages are lazy', []],
   ['All 18 pages are lazy', ['pages']],
   ['Its PDF is about 10 pages', []],
+  // DC-65: a row that mentions a size in another cell is still read, and a lower-case kB is not the KB of a document's size.
+  ['| Bundle | 222 kB | All 18 pages are lazy |', ['pages']],
+  ['| Bundle | 222 kB | All 19 pages are lazy |', []],
+  ['All 18 pages are lazy. Its PDF is 40 KB.', ['pages']],
+  ['The report is a PDF of 40 KB. All 19 pages are lazy.', []],
+  ['A workbook of 12 pages and 40 KB', []],
   ['19 pages, 18 of them behind the shell', []],
   ['19 pages, 17 of them behind the shell', ['pages behind the shell']],
   ['40 direct dependencies in total, 17 in the BFF and 23 in the web app, of which 13 ship: the', []],
@@ -605,6 +612,12 @@ const samples = [
   ['2,750 tests in 77 files, in node', ['test files']],
   ['1,602 tests in 81 files, in jsdom', []],
   ['2,751 tests in 78 files, in node', ['test counts']],
+  // DC-65: a number of tests followed by files, whatever the glue between them.
+  ['npm test                      # 2750 tests, 78 files', []],
+  ['npm test                      # 2750 tests, 77 files', ['test files']],
+  ['| Tests | `npm test` in `server/` | 2751 tests, 78 files. The status codes are pinned here |', ['test counts']],
+  ['2,750 tests across 78 files', []],
+  ['2,750 tests across 79 files', ['test files']],
   ['1,603 tests in 77 files, in jsdom', ['test files', 'test counts']],
   ['The server had 2,061 tests in 78 files when this was written', []],
   ['The CI workflow runs five jobs: server, web, the checks', []],
@@ -640,6 +653,8 @@ for (const [sample, expected] of samples) {
     ['a status of an item that was superseded', `${head}${row('☑', '✔ superseded', 'BK-01')}\n`, 0],
     ['an id in two rows', `${head}${row('☑', '✔ applied', 'BK-01')}\n${row('☑', '✔ applied', 'BK-01')}\n`, 1],
     ['a row with no id', `${head}${row('☑', '✔ applied', 'later')}\n`, 1],
+    ['an id of three digits', `${head}${row('☑', '✔ applied', 'BK-101')}\n`, 0],
+    ['an id of one digit', `${head}${row('☑', '✔ applied', 'BK-1')}\n`, 1],
     ['totals that the rows contradict', `${head}${row('☑', '✔ applied', 'BK-01')}\nThe tracker now has 3 rows: 2 done, 0 partly done and 1 not done.\n`, 1],
     ['an older total, followed by the right one', `${head}${row('☑', '✔ applied', 'BK-01')}\nThe tracker has 9 rows: 2 done, 0 partly done and 7 not done.\nThe tracker has 1 rows: 1 done, 0 partly done and 0 not done.\n`, 0],
   ];
@@ -655,19 +670,23 @@ for (const [sample, expected] of samples) {
     console.error('facts.check open-items self-test failed');
     process.exit(1);
   }
-  // The open-problems page covers the rows that only HCML or only the owner can close, one table row for each.
-  const given = ['| SC-01 | High | Done in part | A Who can close it: owner alone |', '| SC-23 | High | Not done | B Who can close it: HCML alone |', "| IN-13 | Medium | Done in part | C Who can close it: assistant, after the owner's word |"].join('\n');
+  if (!openItemOwners('| SC-123 | Low | Not done | D Who can close it: we alone |\n').ours.has('SC-123')) {
+    console.error('facts.check open-items self-test failed (an id of three digits)');
+    process.exit(1);
+  }
+  // The open-problems page covers the rows that only HCML or only we can close, one table row for each.
+  const given = ['| SC-01 | High | Done in part | A Who can close it: we alone |', '| SC-23 | High | Not done | B Who can close it: HCML alone |', "| IN-13 | Medium | Done in part | C Who can close it: we, once we decide |"].join('\n');
   const tableRow = '| x | y | z |\n';
-  const page = (hcml, owner, rowsH, rowsO, sentence = 'one for HCML and one for the owner') =>
-    `# T\n\nThese are ${sentence}, as of today.\n\n## What only HCML can close\n\n<!-- rows: ${hcml} -->\n\n| Kind | A | B |\n|---|---|---|\n${rowsH}\n## What only the owner can close\n\n<!-- rows: ${owner} -->\n\n| Kind | A | B |\n|---|---|---|\n${rowsO}`;
+  const page = (hcml, ours, rowsH, rowsO, sentence = 'one for HCML and one for us') =>
+    `# T\n\nThese are ${sentence}, as of today.\n\n## What only HCML can close\n\n<!-- rows: ${hcml} -->\n\n| Kind | A | B |\n|---|---|---|\n${rowsH}\n## What only we can close\n\n<!-- rows: ${ours} -->\n\n| Kind | A | B |\n|---|---|---|\n${rowsO}`;
   const problemCases = [
     ['the rows that the open items give to each', page('SC-23', 'SC-01', tableRow, tableRow), 0],
     ['a row of HCML left out', page('', 'SC-01', '', tableRow), 1],
     ['a row that the open items do not give to HCML', page('SC-23 SC-99', 'SC-01', tableRow + tableRow, tableRow), 1],
-    ['a row the assistant does, which the page does not need', page('SC-23', 'SC-01', tableRow, tableRow), 0],
+    ['a row that we do later, which the page does not need', page('SC-23', 'SC-01', tableRow, tableRow), 0],
     ['an id with no table row', page('SC-23', 'SC-01', '', tableRow), 1],
     ['a table row with no id', page('SC-23', 'SC-01', tableRow + tableRow, tableRow), 1],
-    ['a sentence that counts wrongly', page('SC-23', 'SC-01', tableRow, tableRow, 'two for HCML and one for the owner'), 1],
+    ['a sentence that counts wrongly', page('SC-23', 'SC-01', tableRow, tableRow, 'two for HCML and one for us'), 1],
   ];
   for (const [label, sample, expected] of problemCases) {
     const found = checkOpenProblems(sample, given).length;

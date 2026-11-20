@@ -55,7 +55,7 @@ export interface paths {
         /**
          * Whether the portal can read Zabbix, as a status code
          * @description For a monitor that holds a session cookie or a Bearer token, so it is guarded like any route and
-         *     needs `viewer`. `GET /api/health` always answers 200 and says inside `ready` whether Zabbix does;
+         *     needs `guest`. `GET /api/health` always answers 200 and says inside `ready` whether Zabbix does;
          *     this answers `503` while the portal cannot read Zabbix, so a status check is enough.
          *
          *     It reads the same cached check as `/api/health`: one `host.get` with the read-only token, given up
@@ -90,13 +90,15 @@ export interface paths {
          *     deliberately, since it is otherwise an unthrottled password oracle: the global limit, and 10
          *     attempts a minute per account and address of its own (`LOGIN_ATTEMPTS_PER_MINUTE` in `auth.ts`).
          *     After 10 failures in a row for one account from one address, sign-in is locked for a minute,
-         *     doubling with each further failure up to 5 minutes; a success clears it. Both answer 429 with
+         *     doubling with each further failure up to 5 minutes; a success clears it. An address that fails 30 times within 15 minutes, across at least 10 different names, is locked the same way
+         *     whatever the names: a password tried once against many accounts never trips the lock of one (SC-61; `SPRAY_FAILURES` and `SPRAY_NAMES` in `auth.ts`). All answer 429 with
          *     `Retry-After`.
          *
-         *     Credentials come from `PORTAL_USERS` (comma-separated `name:password:role` triples) or from
-         *     `PORTAL_USER`/`PORTAL_PASS` as a single-admin shorthand. A password is plain text or an scrypt
-         *     hash (`scrypt.N.r.p.salt.hash`, made by `server/scripts/hash-password.ts`), and either is compared
-         *     in constant time. A plain one is still plain text in the environment.
+         *     Credentials come from the file of users (`users.json` in the data folder, managed on the Users page) and from `.env`: `PORTAL_USERS` (comma-separated
+         *     `name:password:role` triples) or `PORTAL_USER`/`PORTAL_PASS` as a single-admin shorthand, whose first administrator always signs in from `.env` (ADR-0017). A password is plain text or an Argon2id
+         *     hash (`argon2id.m.t.p.salt.hash`, or an older `scrypt.N.r.p.salt.hash`, made by `server/scripts/hash-password.ts`), and either is compared
+         *     in constant time. A plain one is still plain text in the environment. A disabled user, and one past their expiry, is refused with the same 401 as a wrong password. Where hashes are in use, a name nobody has costs as long to refuse as a wrong password for a name
+         *     that exists, so the time of the answer does not say which names are real (SC-60).
          *
          *     The token goes into the session cookie, never the body. Needs `X-HCML-CSRF: 1`, with or
          *     without a cookie, and with auth off too: a refused sign-in gets 403 and sets no cookie.
@@ -122,13 +124,17 @@ export interface paths {
         /**
          * Who the current session says you are, and how long it has left
          * @description Self-verifying: registered before the guard and calls `jwtVerify()` itself, on the cookie or
-         *     a Bearer header. Drives the sidebar's role filter, which is cosmetic: the BFF enforces with a
-         *     403 regardless. `pages` gives the role each menu page needs, worked out from the guard's own
-         *     rules (`pageAccess.ts`), so the sidebar keeps no second copy of them. `expiresIn` is relative,
-         *     so the page times its renewal without trusting its own clock.
+         *     a Bearer header. Drives the sidebar's filter, which is cosmetic: the BFF enforces with a
+         *     403 regardless. `pages` gives the pages this user has, each with the role it needs, worked out from the table of routes
+         *     (`modules.ts`), so the sidebar keeps no second copy of it, and a page the user lacks is not in it. `modules` is the list of the modules the user holds.
+         *     The role and the modules are those of now, not those the session began with. `expiresIn` is relative,
+         *     so the page times its renewal without trusting its own clock. `mustChange` is present, and true, when the password is a temporary one: nothing else can be read until it is changed.
+         *     `user.source` says where the account is kept, `file` for the file of users and `env` for `.env`: one of `.env` cannot change its password on the Account page (FR-73).
+         *     The web app asks again when its tab is shown or gains focus (at most once a minute), after each renewal, and every ten minutes while the page stays in view, so a page an
+         *     administrator gives or takes away reaches a screen that is already open (FR-70).
          *
          *     When `AUTH_ENABLED=false` this returns `{ authEnabled: false, user: { name: "anonymous",
-         *     role: "admin" }, expiresIn: null, pages }`. `user` is **never** null, despite `web/src/types.ts`
+         *     role: "admin" }, expiresIn: null, pages, modules }`, with every module but the Users page. `user` is **never** null, despite `web/src/types/auth.ts`
          *     allowing it.
          */
         get: operations["getMe"];
@@ -159,12 +165,36 @@ export interface paths {
          *     Behind the guard, so it takes the cookie or a Bearer header; a `?token=` is refused like on
          *     every route. A cookie renewal is a cookie POST and needs `X-HCML-CSRF: 1`; a Bearer renewal
          *     does not. The user is looked up again in the current user list: one removed from
-         *     `PORTAL_USERS`, or a name listed there twice, gets 401 and no cookie, and the new token carries
+         *     `PORTAL_USERS`, a name listed there twice, a user disabled on the Users page and one past their expiry get 401 and no cookie, and the new token carries
          *     the role configured now, not the one in the old token. It takes no body: none, or a JSON
          *     object that is ignored. Any other JSON body is a 400. Registered only when
          *     `AUTH_ENABLED=true`; otherwise 404.
          */
         post: operations["refreshToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change your own password
+         * @description For a user of the file of users (ADR-0017); a user kept in `.env`, the first administrator, is refused with 409, since their password is changed there, and the Account page shows
+         *     a sentence instead of the form for them (`user.source` of `GET /api/auth/me`, FR-73). Asks for the current password, which is
+         *     tried at most 10 times a minute for each user, and for a new one that is at least 8 and at most 256 characters, not on the lists of passwords that anyone can guess (the common ones, one of their base words with digits or signs after it, or one character repeated), and not holding `hcml` or the sign-in name, and that is not the current one. A change ends every older
+         *     session of the person, renews this one (the new session cookie is set, as for `POST /api/auth/refresh`), and clears `mustChange`. It is the one call, with sign-out, renewal and
+         *     `GET /api/auth/me`, that a user with a temporary password may make. It needs `X-HCML-CSRF: 1` with a cookie. The log gets one line, never the password.
+         */
+        post: operations["changePassword"];
         delete?: never;
         options?: never;
         head?: never;
@@ -187,11 +217,42 @@ export interface paths {
          *     with. It also ends the session on the server: every token of that sign-in, the ones a renewal gave
          *     too, is refused from then on (a list in memory, which a restart forgets), and the live streams of
          *     the session are closed at once. A copy of a token that someone keeps renewing after the owner only
-         *     closed the tab, without signing out, works until the user is taken out of `PORTAL_USERS`, a new
+         *     closed the tab, without signing out, works until the user is disabled on the Users page (or, for a user of `.env` alone, taken out of `PORTAL_USERS` and the container recreated), a new
          *     `JWT_SECRET` is set, or a higher `SESSION_EPOCH` is set and the server restarted (SC-14); there is no
          *     absolute age, because a wall screen must stay signed in. A live stream also ends when its token expires, and the browser reconnects (SC-15). Needs `X-HCML-CSRF: 1` like any POST that touches the cookie. It takes no body: none, or a JSON object that is ignored. Any other JSON body is a 400.
          */
         post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether the sign-in page offers a request for an account, and for which pages
+         * @description Public, like sign-in. Answers `{ "enabled": false }` unless `ACCOUNT_REQUESTS=true`, sign-in is on, and the portal has a data folder to keep the requests and the users in (FR-62).
+         *     When it is on it lists the pages a person may ask for, those a guest can hold (not the Users page or the scorecard), and the longest name and reason it keeps.
+         */
+        get: operations["getAccountRequestInfo"];
+        put?: never;
+        /**
+         * Leave a request for an account
+         * @description Public, and the one public route that writes to disk, so it is held tight (FR-62). A 404 while the setting is off. It is checked like sign-in is: it needs `X-HCML-CSRF: 1` and an `Origin`
+         *     of the portal's own, and a body over 8 KB is a 413. The body is a name, the pages wanted, chosen from the list `GET /api/auth/request` gives (at most 20), and a reason. The name is cut at
+         *     80 characters and the reason at 500; control characters are dropped. What is wrong with a body is a 400 in words: a name under 2 characters, no page, a page that is not on the list, a reason
+         *     under 3 characters, or a field the portal does not know. One address may leave `ACCOUNT_REQUESTS_PER_ADDRESS` requests a day (3 by default; 429 with `Retry-After`; the addresses of one IPv6 network, a /64, count as one, as they do for sign-in), at most
+         *     `ACCOUNT_REQUESTS_MAX_PENDING` wait at once (50 by default; 503 `requests_full`), and a request nobody answers is dropped after 30 days. A request whose name is already waiting, whatever the case,
+         *     is dropped, and the answer is the same 202 as for one that was kept, so the form says nothing about who is known. When the list is full it is the same 503 for a name that is waiting and for one that is not, for the same reason.
+         *     The log gets the step and the name, never the reason.
+         */
+        post: operations["leaveAccountRequest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -206,9 +267,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Every monitored host, with its resolved site
-         * @description Cached 30 s. `site` is derived by `naming.ts` from four ranked signals: tag, host name,
-         *     inventory, group, because no HCML host carries a site tag. It is null when none match.
+         * Every host, disabled ones included, with its resolved site
+         * @description Cached 30 s. `site` is resolved by `siteRefOf` in `sites.ts` from four ranked signals: tag, host name,
+         *     inventory, group, because no HCML host carries a site tag. It is null when none of them names one of HCML's sites. The
+         *     Sites page and the scorecard use the same rule, and so do `/api/hosts/overview`, `/api/devices` and `/api/net/devices`, so a host is under one site on every page (BK-94).
          */
         get: operations["getHosts"];
         put?: never;
@@ -230,7 +292,7 @@ export interface paths {
          * Hosts with reachability state and problem counts
          * @description Cached 15 s. `state` is the portal's own reachability judgement (`reachability.ts`), ping
          *     first, interface flags only as a fallback, on 17 Sep, 16 of 23 hosts Zabbix called
-         *     unavailable answered ping. `reason` records which signal decided it.
+         *     unavailable answered ping. `reason` records which signal decided it. `site` is the same as on `/api/hosts`.
          */
         get: operations["getHostsOverview"];
         put?: never;
@@ -298,8 +360,8 @@ export interface paths {
          * Items for a host, or by explicit ids
          * @description Cached 30 s. `hostid` is required unless `itemids` is given.
          *
-         *     `search` is passed to Zabbix with `startSearch: true` deliberately: without it Zabbix runs
-         *     `LIKE '%…%'` and scans all 51,845 items at about 105 ms per call.
+         *     `search` is a substring match on the item's key (`search: { key_ }`, with no `startSearch`), so it finds text in the middle of a key. A prefix match would be quicker for Zabbix,
+         *     but the picker would stop finding mid-key text; the words here once said the prefix match was in use, and it never was.
          *
          *     The items carry no `lastvalue` or `lastclock`. Zabbix looks each of them up on its own, from 30 ms to half a second an
          *     item on HCML's, which made a host of 609 items take 20 to 32 s, and the item picker never shows them. `/api/latest` has them.
@@ -405,8 +467,9 @@ export interface paths {
          *     flushed after every frame and keep-alive, with `Content-Encoding: gzip` and `Vary: Accept-Encoding`;
          *     on HCML's list the first frame goes from 166 kB to 19 kB.
          *
-         *     The stream ends when the session token it was opened with expires, so the browser reconnects
-         *     with the renewed cookie or is sent to sign in, and when the BFF shuts down on `SIGTERM`.
+         *     The stream ends, and the browser reconnects with the renewed cookie or is sent to sign in, when: the session token it was opened with expires, or the person's account does, whichever is
+         *     first (SC-57); the person signs out; an administrator changes the person (disables them, sets an expiry, changes the role or the pages, resets the password or asks for a new one) or the
+         *     person changes their own password, so that the screen comes back as the account allows now (SC-57); and when the BFF shuts down on `SIGTERM`.
          *
          *     No `id:` field is emitted, so `Last-Event-ID` resumption is not supported. Browsers cannot
          *     set headers on `EventSource`, but it sends the session cookie on a same-origin request like
@@ -458,7 +521,7 @@ export interface paths {
         };
         /**
          * Network devices with ICMP state
-         * @description **wall.** Cached 30 s. Narrowed to `NET_GROUP_IDS` when that is configured.
+         * @description **Network page.** Cached 30 s. Narrowed to `NET_GROUP_IDS` when that is configured.
          */
         get: operations["getNetDevices"];
         put?: never;
@@ -478,7 +541,7 @@ export interface paths {
         };
         /**
          * Internet traffic meters, read from the gauge widgets of a Zabbix dashboard
-         * @description **wall.** Cached 30 s. The dashboard itself is kept for two minutes.
+         * @description **Network page.** Cached 30 s. The dashboard itself is kept for two minutes.
          *
          *     Reads the dashboard named by `INTERNET_METERS_DASHBOARD` (default `Global view`, HCML's own) with
          *     `dashboard.get` and makes one meter of each gauge widget: the interface item it is bound to, the
@@ -518,7 +581,7 @@ export interface paths {
         };
         /**
          * Interfaces for one device, searched then filtered then paged
-         * @description **wall.** Cached 15 s.
+         * @description **Network page.** Cached 15 s.
          *
          *     Order matters and is observable: `search` is applied first, `summary` is computed over the
          *     searched set, *then* `status` filters, *then* the page is sliced. So `summary` counts more
@@ -796,6 +859,9 @@ export interface paths {
          *     measured 22 Sep.
          *
          *     `avg` is the unweighted mean of the hourly averages, not a sample-weighted mean.
+         *
+         *     The busiest interfaces are those of the moment the report was built: the 40 with the highest last rate against the port's speed (four times `top` when that is more) are chosen then, and only those are read for the
+         *     `days` asked for and ranked by their average over them. A link that was quiet at that moment, and busy before it, is not in the list. `generatedAt` says when (BK-92).
          */
         get: operations["getCapacityReport"];
         put?: never;
@@ -815,7 +881,7 @@ export interface paths {
         };
         /**
          * Naming, site, owner and criticality completeness
-         * @description **admin: the only admin-gated path.** Cached 60 s, and the cheapest heavy report: exactly
+         * @description **admin.** Cached 60 s, and the cheapest heavy report: exactly
          *     one Zabbix call, everything else computed in process.
          *
          *     `dimensions` always has four entries in the order `naming`, `site`, `owner`, `criticality`.
@@ -839,7 +905,7 @@ export interface paths {
         };
         /**
          * WAN links and paths, from ICMP item triplets
-         * @description **wall.** Cached 20 s.
+         * @description **Links page.** Cached 20 s.
          *
          *     A "link" is not a Zabbix entity. It is synthesised from the `icmpping`, `icmppingloss` and
          *     `icmppingsec` items on a host, paired into a path by the `link_group` item tag. `jitter` is
@@ -864,7 +930,7 @@ export interface paths {
         };
         /**
          * Hosts grouped into sites
-         * @description Cached 15 s. Zabbix has no site entity. `naming.ts` resolves one from four ranked
+         * @description Cached 15 s. Zabbix has no site entity. `resolveSite` (`services/sites.ts`) resolves one from four ranked
          *     signals, tag, host name, inventory, group, and `coverage` reports how many hosts each
          *     signal accounted for, which is the metric for the standardisation goal.
          */
@@ -886,8 +952,9 @@ export interface paths {
         };
         /**
          * Zabbix-native service tree
-         * @description Cached 30 s. Recursive, depth-capped at 12, and de-duplicated by `serviceid` because a shared
-         *     dependency legitimately appears under two parents: it is a DAG, not a tree.
+         * @description Cached 30 s. Recursive, depth-capped at 12. A shared
+         *     dependency legitimately appears under two parents (it is a DAG, not a tree), so it is built under each of them, and `descendants` counts each distinct `serviceid` once. A service below several parents is built under each of them, so the tree stops at 5,000 nodes and says so
+         *     with `truncated: true` (BK-96).
          *
          *     **At HCML this returns an empty tree**: the `services` table has zero rows. Use
          *     `/api/sla/source` to decide whether to render this or the derived equivalent.
@@ -1019,6 +1086,141 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The users, the modules, and whether they can be changed
+         * @description **admin.** The users that can sign in (the break-glass account first, then by name), the modules a user can be given, the modules a new user of each role starts with,
+         *     and whether the users are kept across a restart (`durable`) and may be changed here (`editable`). Without a data folder the users are those of `.env` and neither is true. `secure` says that this
+         *     request came over HTTPS: real accounts wait for it. With sign-in off (`AUTH_ENABLED=false`) all of the Users routes answer 503 `sign_in_off`, since nobody could be told from an administrator (SC-59).
+         *     The requests waiting for an account are read from `GET /api/users/requests`.
+         */
+        get: operations["listUsers"];
+        put?: never;
+        /**
+         * Add a user
+         * @description **admin.** The name is 3 to 64 letters, digits and `. _ @ -`, beginning and ending with a letter or digit, and unique whatever the case. The role is `guest`, `operator` or `admin`; the modules
+         *     are those of the role's preset when left out, and an administrator always has every one. The password is at least 8 and at most 256 characters, not on the lists of passwords that anyone can guess (the common ones, one of their base words with digits or signs after it, or one character repeated), and not holding `hcml` or the sign-in name, and the user must
+         *     change it at the first sign-in unless `mustChange` is false. 409 when the name is taken, when there is no data folder to keep users in, or when the portal holds the most it can (200).
+         *     A field the portal does not know is a 400 that names it; it is not dropped, so a mistyped field cannot pass as a change that did nothing (BK-97). The log gets one line, never the password.
+         */
+        post: operations["createUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Change a user
+         * @description **admin.** Any of the name shown, the role, the modules, the language, the expiry, `disabled` and `mustChange`; at least one. A user is never deleted, only disabled. A new role keeps the modules the user
+         *     may still have. 409 for a user kept in `.env`, for a change that would leave no administrator who can sign in, and for an administrator who disables, demotes or expires their own account. Takes effect on the user's next request, and the person's open live streams end so that they come back as the account allows now (SC-57).
+         *     A field the portal does not know is a 400 that names it; it is not dropped, so a mistyped field cannot pass as a change that did nothing (BK-97).
+         */
+        patch: operations["updateUser"];
+        trace?: never;
+    };
+    "/api/users/{name}/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set a user's password
+         * @description **admin.** A reset. The user must change it at the next sign-in unless `mustChange` is false, and every session of theirs begun before now ends, and so do their open live streams. The password is held to the same rule as a new user's: at least 8 and at most 256 characters, not on the lists of passwords that anyone can guess (the common ones, one of their base words with digits or signs after it, or one character repeated), and not holding `hcml` or the sign-in name. A field the portal does not know is a 400 that names it; it is not dropped, so a mistyped field cannot pass as a change that did nothing (BK-97).
+         */
+        post: operations["resetUserPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The requests for an account that are waiting
+         * @description **admin.** The requests left on the sign-in page (FR-62), the oldest first. `enabled` is whether the portal accepts them now, `max` how many may wait at once
+         *     (`ACCOUNT_REQUESTS_MAX_PENDING`). A request nobody answers is dropped after 30 days. With sign-in off this answers 503 `sign_in_off`, as the other Users routes do.
+         */
+        get: operations["listAccountRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/requests/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a request by making the account
+         * @description **admin.** The body is the one of `POST /api/users`: the administrator types the name (it need not be the one asked for), the role, the pages and a temporary password, and the account is made
+         *     exactly as the Users page makes any. The request is taken off the list first, in one step, so that of two administrators who answer it at once only one gets it and the other has 404; when the account cannot be made (the name is taken, there is no data folder, the password is not accepted)
+         *     it is put back where it was. 404 when the request is gone, for example answered by another administrator. A field the portal does not know is a 400 that names it; it is not dropped, so a mistyped field cannot pass as a change that did nothing (BK-97). The log gets the step and the names, never a password.
+         */
+        post: operations["approveAccountRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/requests/{id}/refuse": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refuse a request
+         * @description **admin.** Takes the request off the list and makes no account. It takes no body: none, or a JSON object that is ignored. 404 when the request is gone.
+         */
+        post: operations["refuseAccountRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sli/export": {
         parameters: {
             query?: never;
@@ -1027,12 +1229,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The monthly SLA report as a PDF, Excel or CSV download
-         * @description **viewer.** The figures `/api/sli` shows for one month, both methods side by side, as one
-         *     file. `format=pdf` is the printable report; `format=xlsx` is the workbook, a Summary sheet and
+         * The SLA report for a month, or for a range of days, as a PDF, Excel or CSV download
+         * @description **guest.** The figures `/api/sli` shows for one month, or for a window of whole hours and the hours of the day that count (`from`, `to`, `dayHours`,
+         *     `days`, read as `/api/sli` reads them), both methods side by side, as one file. `format=pdf` is the printable report; `format=xlsx` is the workbook, a Summary sheet and
          *     one sheet per table; `format=csv` is one zip holding a CSV file for the first page and for each
          *     table, and a notes file that explains them. The file states when it was generated and, for the
          *     current month, that its figures are not final.
+         *
+         *     A file for a window is the same file with the period in place of the month. It has one figure for the whole window, not one for each month it touches, and
+         *     its first page, its period line and its notes say which hours of the day were counted. Its Web checks table is there and empty, with the reason, since web checks are
+         *     measured by calendar month: choose a month for them. A month with `dayHours` or `days` is a file of that kind too, and is named apart from the plain month's.
          *
          *     `decimal`, `date` and `separator` choose how numbers and dates are written, and never what they say:
          *     a figure, a verdict and the order of the rows are the same in every style. `decimal` is the mark in a
@@ -1047,12 +1253,13 @@ export interface paths {
          *     `X-Data-Stale` and `X-Data-Age-Seconds`. Nothing is kept for long: a
          *     built file is reused for ten seconds, then built again from the cached figures.
          *
-         *     `format` and the style are checked before Zabbix is asked, so a bad request costs nothing. `month`,
+         *     `format`, the style, the window and the hours are checked before Zabbix is asked, so a bad request costs nothing. `month`, `from`, `to`, `dayHours`, `days`,
          *     `format`, `decimal`, `date` and `separator` are the only parameters: any other is a 400, so a misspelt
-         *     `month` is never read as the current month. `month` is
+         *     `month` is never read as the current month. A month and a window together are a 400. `month` is
          *     validated as on `/api/sli`, and a month that has not started, or is more than about 400 days
-         *     back, is a 400. The file name is made from the validated month alone, `HCML_SLA_Report_<month>.pdf`,
-         *     `.xlsx` or `_csv.zip`, never from other request text.
+         *     back, is a 400, as is a window that begins in such a month or that has no hour inside the daily hours chosen. The file name is made from the validated month, or from the dates and hours of the
+         *     report itself, never from other request text: `HCML_SLA_Report_<month>.pdf`, `.xlsx` or `_csv.zip` for a month,
+         *     `HCML_SLA_Report_<first day>_to_<last day>` for a window, and `_0800-1700` and `_d12345` after it when hours of the day were chosen.
          *
          *     The body is not JSON, so it is never compressed whatever `Accept-Encoding` says, and
          *     `Cache-Control: private, no-store` keeps a shared cache from holding on to it.
@@ -1085,22 +1292,26 @@ export interface paths {
         get: operations["getSliEmail"];
         put?: never;
         /**
-         * Email one month's SLA report
-         * @description **admin.** Builds the files `/api/sli/export` gives for the month, one to three formats, and sends them as attachments
+         * Email the SLA report for a month, or for a range of days
+         * @description **admin.** Builds the files `/api/sli/export` gives for the month, or for the `window` and the hours of the day, one to three formats, and sends them as attachments
          *     to one message, with the four figures of the report's first page in its text, through the SMTP server the `MAIL_`
          *     settings name. `to` is who it goes to: one to ten plain addresses, each in `allowedDomains` when that list is not empty.
          *     Left out, the saved list is used (`GET`), and with `remember: true` the list that was given is saved once the report has gone.
-         *     `style` is written as `/api/sli/export` writes it. Any other field, in the body or in `style`, is a 400: there is no subject
+         *     `style` is written as `/api/sli/export` writes it. Any other field, in the body, in `window` or in `style`, is a 400: there is no subject
          *     and no message to set, and no copy or blind copy.
          *
+         *     The body names a `month`, or a `window` with `from` and `to` in Unix seconds (inside an object, since `to` is the list of people), and with either one
+         *     `dayHours` and `days` as on `/api/sli`. Neither, or both, is a 400. A range waits ten minutes after its end, as a month does. Only a plain month is entered in the portal's short
+         *     record of sends, which is the monthly schedule's book and is kept by month; a range, or a month in the hours of the day, is in the log alone. The schedule itself stays monthly.
+         *
          *     Checked in this order: the shape of the body (400), whether email is set up (503 `mail_disabled`), the month, the formats, the
-         *     style and the recipients (400, each with a sentence that says what is wrong; a month that has not started, that is more than about 400 days back or that ended less than ten minutes ago, is one of them), the allowance of 5 sends an hour for each person
+         *     style and the recipients (400, each with a sentence that says what is wrong; a month or a window that has not started, that begins more than about 400 days back, that has no hour inside the daily hours chosen or that ended less than ten minutes ago, is one of them), the allowance of 5 sends an hour for each person
          *     (429 with `Retry-After`; only a request that gets this far is counted), the mail login (502 `mail_error`, before Zabbix is
          *     asked, so a wrong password fails in a second), and then the two reports are read and the message is sent. A month in which neither method
          *     finds a device is not sent (502 `empty_report`). A month that is
          *     not cached can take as long as the download does.
          *
-         *     Every send and every failure is logged with the user, the month, the formats, the size, the number of recipients and the
+         *     Every send and every failure is logged with the user, the month (or the window's two times and the hours), the formats, the size, the number of recipients and the
          *     domains they are in, and never the addresses, the subject or a file; the portal also keeps a short record of it (counts only). A send that the mail server took for only some of the addresses is logged at warning level.
          *     A failure at the mail server is one fixed sentence for its kind (`login`, `connect`, `timeout`, `tls`, `recipients`,
          *     `rejected`, `other`); what the server said goes to the log only. The sentence for `timeout` says that the report may or may not have gone,
@@ -1204,11 +1415,11 @@ export interface paths {
         /**
          * Plain-language explanation of one problem
          * @description Cached 1 h, keyed by the event id together with its acknowledged and resolved state, so
-         *     an explanation is not reused after the problem changes.
+         *     an explanation is not reused after the problem changes. It follows the Problems and Dashboard pages: a person who holds only the Assistant page does not have it (SC-62).
          *
          *     Buffered JSON, not streamed. This path sends the host name, trigger name, opdata, severity,
-         *     start time, flags and the problem's tags to the model: in `hcml-portal` that means they
-         *     leave the machine.
+         *     start time and flags to the model, and the problem's tags (up to 20) only to a model on this
+         *     machine: in `hcml-portal` that means the rest leaves the machine and the tags do not (SC-72).
          */
         get: operations["explainProblem"];
         put?: never;
@@ -1236,6 +1447,8 @@ export interface paths {
          *
          *     `noData: true` marks an answer produced without calling the model because there was
          *     nothing to measure.
+         *
+         *     It follows the SLA and Services pages: a person who holds only the Assistant page does not have it (SC-62).
          */
         get: operations["explainSla"];
         put?: never;
@@ -1295,9 +1508,9 @@ export interface paths {
          *
          *     | Event | Payload |
          *     |---|---|
-         *     | `context` | the estate snapshot's metadata, counts and a `truncated` flag |
+         *     | `context` | the estate snapshot's metadata, counts and a `truncated` flag; for a user whose pages show only part of the estate, `shown` names the parts the model was given, and the counts of the others are 0 |
          *     | `token` | `{ "t": string }`, concatenate in order |
-         *     | `done` | `{ ms, text, firstTokenMs }`, `text` is the cleaned answer and replaces the concatenated tokens |
+         *     | `done` | `{ ms, text, firstTokenMs, truncated, remembered, language }`: `text` is the cleaned answer and replaces the concatenated tokens; `truncated` is true when the model stopped at its length limit; `remembered` is how many turns of the conversation the model was given, the question included, so the page can show where its memory ends (FR-72); `language` is the one the answer was asked in, `en` or `id` (UX-73) |
          *     | `error` | `{ "message": string }` |
          *
          *     Once the response is hijacked the HTTP status can no longer change, so failures after that
@@ -1505,11 +1718,116 @@ export interface components {
         User: {
             name: string;
             /** @enum {string} */
-            role: "viewer" | "wall" | "operator" | "admin";
+            role: "guest" | "operator" | "admin";
+            /** @description The name shown, on `GET /api/auth/me`. */
+            displayName?: string;
+            /**
+             * @description On `GET /api/auth/me`: `env` for an account kept in `.env`, which cannot change its password on the Account page (FR-73), `file` for one of the file of users.
+             * @enum {string}
+             */
+            source?: "env" | "file";
+            /**
+             * @description The language the person chose for the Assistant, on `GET /api/auth/me`, when they chose one.
+             * @enum {string}
+             */
+            language?: "en" | "id";
+        };
+        /**
+         * @description One page of the menu. `inventory` and `users` are for administrators and cannot be given to anyone else.
+         * @enum {string}
+         */
+        ModuleId: "dashboard" | "problems" | "sites" | "hosts" | "devices" | "latest" | "graphs" | "maps" | "network" | "links" | "services" | "sla" | "capacity" | "noise" | "top-triggers" | "inventory" | "assistant" | "users";
+        ModuleInfo: {
+            id: components["schemas"]["ModuleId"];
+            label: string;
+            /** @description The path of its page, such as `/network`. */
+            page: string;
+            /** @description Its page needs the administrator role, so it cannot be given to anyone else. */
+            adminOnly: boolean;
+        };
+        NewUser: {
+            name: string;
+            displayName?: string;
+            /** @enum {string} */
+            role: "guest" | "operator" | "admin";
+            modules?: components["schemas"]["ModuleId"][];
+            language?: ("en" | "id") | null;
+            password: string;
+            expires?: number | null;
+            mustChange?: boolean;
+        };
+        UserPatch: {
+            displayName?: string;
+            /** @enum {string} */
+            role?: "guest" | "operator" | "admin";
+            modules?: components["schemas"]["ModuleId"][];
+            language?: ("en" | "id") | null;
+            disabled?: boolean;
+            expires?: number | null;
+            mustChange?: boolean;
+        };
+        /** @description A user as the Users page reads them. Never a password or a hash. */
+        UserRecord: {
+            name: string;
+            displayName: string;
+            /** @enum {string} */
+            role: "guest" | "operator" | "admin";
+            modules: components["schemas"]["ModuleId"][];
+            language: ("en" | "id") | null;
+            /**
+             * @description `env` for a user kept in `.env`, which the page cannot change; `file` for one of the file of users.
+             * @enum {string}
+             */
+            source: "env" | "file";
+            /** @description The first administrator of `.env`: it signs in with the password in `.env` whatever the state of the file. */
+            breakGlass: boolean;
+            disabled: boolean;
+            /** @description Unix seconds after which the user cannot sign in, or null. */
+            expires: number | null;
+            mustChange: boolean;
+            created: number | null;
+            createdBy: string | null;
+            lastSignIn: number | null;
+        };
+        /** @description What the sign-in page asks before it offers the form for a request for an account (FR-62). */
+        AccountRequestInfo: {
+            /** @description False unless ACCOUNT_REQUESTS is on, sign-in is on, and there is a data folder. */
+            enabled: boolean;
+            /** @description The pages a person may ask for. Only when `enabled`. */
+            pages?: {
+                id: components["schemas"]["ModuleId"];
+                label: string;
+            }[];
+            /** @description The longest name kept. Only when `enabled`. */
+            nameMax?: number;
+            /** @description The longest reason kept. Only when `enabled`. */
+            reasonMax?: number;
+        };
+        AccountRequestBody: {
+            name: string;
+            pages: string[];
+            reason: string;
+        };
+        AccountRequest: {
+            id: string;
+            name: string;
+            pages: components["schemas"]["ModuleId"][];
+            reason: string;
+            /** @description Unix seconds when it was left. */
+            created: number;
+        };
+        AccountRequestList: {
+            /** @description Whether the portal accepts requests now. */
+            enabled: boolean;
+            /** @description How many requests may wait at once. */
+            max: number;
+            requests: components["schemas"]["AccountRequest"][];
         };
         /** @description What sign-in and renewal return. The token is in the `Set-Cookie` header, never here. */
         Session: {
             user: components["schemas"]["User"];
+            /** @description True when the password is a temporary one that must be changed first. */
+            mustChange?: boolean;
             /**
              * @description Seconds the new session lasts: SESSION_HOURS times 3600, so 43200 (12 hours) by default.
              * @example 43200
@@ -1981,8 +2299,13 @@ export interface components {
             degraded: number;
             /** @description Worst status anywhere; -1 when everything is fine. */
             worst: number;
+            /**
+             * @description Present, and true, when the tree was cut at 5,000 nodes because services that share children appear under each parent.
+             * @constant
+             */
+            truncated?: true;
         };
-        /** @description Recursive, depth-capped at 12. De-duplicated by `serviceid`, the graph is a DAG. */
+        /** @description Recursive, depth-capped at 12. The graph is a DAG, so a service below several parents is built under each of them, and `descendants` counts each distinct `serviceid` once. */
         ServiceNode: {
             serviceid: string;
             name: string;
@@ -2079,6 +2402,19 @@ export interface components {
             closed: boolean;
             timezone: string;
             target: number;
+            /**
+             * @description Present when the window was restricted to hours of the day. Only these hours were measured: `window` of each host is `seconds`, an outage counts as an incident
+             *     when any part of it lies inside them, and `longest` is the longest part inside them.
+             */
+            dailyHours?: {
+                start: number;
+                /** @description Not after `start` means the span runs through midnight into the next morning. */
+                end: number;
+                /** @description Days the spans begin on, Monday 1 to Sunday 7, or null for every day. */
+                weekdays: number[] | null;
+                /** @description The seconds of the window that the hours keep. */
+                seconds: number;
+            };
             /** @description What the figure counts, so two profiles can be compared like for like. */
             basis: {
                 triggers: string[];
@@ -2345,6 +2681,8 @@ export interface components {
         };
         CapacityReport: {
             days: number;
+            /** @description Unix seconds when the report was built. The list of busiest interfaces was chosen at that moment, from the latest rate of each port, and only then ranked by the days. */
+            generatedAt: number;
             metrics: {
                 /** @description In practice `cpu`, `memory`, `disk` or `ifutil`; typed open server-side. */
                 key: string;
@@ -2442,6 +2780,7 @@ export interface components {
         };
         ProblemExplanation: {
             summary: string;
+            /** @description One row for each tag the model was given, so none when the model is outside the machine (SC-72). */
             tagsExplained: {
                 tag: string;
                 value: string;
@@ -2478,8 +2817,26 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description `forbidden`, authenticated, but the role is below what this path requires. */
+        /** @description `forbidden`, authenticated, but the role is below what this path requires, or the user does not hold a module that owns it. `password_change_required` when the password is a temporary one. */
         Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `not_found`, there is no such user, or no such request for an account. */
+        NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `conflict`, the change cannot be made: the name is taken, the user is kept in `.env`, there is no data folder, or it would leave no administrator who can sign in. */
+        Conflict: {
             headers: {
                 [name: string]: unknown;
             };
@@ -2500,7 +2857,7 @@ export interface components {
                 "application/json": components["schemas"]["Error"];
             };
         };
-        /** @description Body over Fastify's 1 MiB default, or over 4 KB on `POST /api/auth/login`. */
+        /** @description Body over Fastify's 1 MiB default, or over the limit of the route, which is 4 KB on `POST /api/auth/login`, `POST /api/auth/password` and `POST /api/users/{name}/password`, 8 KB on `POST /api/auth/request`, `POST /api/users`, `PATCH /api/users/{name}` and the approval of a request, and 1 KB on the refusal of a request. */
         PayloadTooLarge: {
             headers: {
                 [name: string]: unknown;
@@ -2512,7 +2869,7 @@ export interface components {
         /**
          * @description 300 requests per minute per client, counted before the guard, so refused requests count too.
          *     `/api/health`, `/api/stream` and `POST /api/auth/logout` are exempt. The stream has its own cap
-         *     instead, `429 too_many_streams`, described under `/api/stream`.
+         *     instead, `429 too_many_streams`, described under `/api/stream`. `Retry-After` says how many seconds to wait.
          */
         RateLimited: {
             headers: {
@@ -2537,6 +2894,53 @@ export interface components {
         };
         /** @description `internal`. The message is fixed; the detail is in the BFF log only. */
         Internal: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /**
+         * @description `users_error`, the file of users could not be saved, for example because the data volume is full or read-only. The message says to check the data folder; the detail is in the BFF log only (BK-99).
+         *     Any other failure is `internal`.
+         */
+        UsersError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /**
+         * @description `requests_error`, the file of requests for an account could not be saved, for example because the data volume is full or read-only. The message says to check the data folder; the detail is in the BFF log only.
+         *     Any other failure is `internal`.
+         */
+        RequestsError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /**
+         * @description `data_not_read_yet`: the request is right and the figures are not there yet, because no reading is newer than the start of the range and the month could not be read again now. `Retry-After` says 60 seconds,
+         *     and the same request is answered once the next read has run (BK-80). Or `zabbix_timeout`, `zabbix_auth`, as for any read (`ZabbixUnavailable`).
+         */
+        SliUnavailable: {
+            headers: {
+                /** @description Seconds to wait before asking again (`data_not_read_yet`). */
+                "Retry-After"?: number;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["Error"];
+            };
+        };
+        /** @description `sign_in_off`, the users cannot be managed while sign-in is off (`AUTH_ENABLED=false`). The guard that tells an administrator from anyone else is not installed then, so these routes refuse everyone (SC-59). */
+        SignInOff: {
             headers: {
                 [name: string]: unknown;
             };
@@ -2594,10 +2998,10 @@ export interface components {
     };
     parameters: {
         /**
-         * @description Must be `1` on sign-in, sign-out and every `POST`, `PUT`, `PATCH` or `DELETE` that
+         * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
          *     authenticates with the session cookie. A page on another site cannot add a custom header
          *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
-         *     Bearer header, except on sign-in and sign-out.
+         *     Bearer header, except on sign-in, sign-out and the request for an account.
          */
         CsrfHeader: "1";
     };
@@ -2644,7 +3048,7 @@ export interface operations {
                         aiProvider: "anthropic" | "openai-compatible";
                         /**
                          * @description Whether a question leaves this machine's own network: true when the hosted Anthropic backend is configured, or when
-                         *     the model is on a host that is not local (`AI_BASE_URL` names a public address). The Assistant and Explain then say so
+                         *     the model is on a host that is not local (`AI_BASE_URL` names a public address) or has a name that Ollama sends to ollama.com (it ends in `cloud` after a colon, an underscore or a hyphen, as `kimi-k2:cloud` does). The Assistant and Explain then say so
                          *     next to every answer; a model on this machine, on a private address or on a name that only resolves inside a
                          *     network shows nothing.
                          */
@@ -2734,10 +3138,10 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description Must be `1` on sign-in, sign-out and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
                  *     authenticates with the session cookie. A page on another site cannot add a custom header
                  *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
-                 *     Bearer header, except on sign-in and sign-out.
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
                  */
                 "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
             };
@@ -2807,10 +3211,14 @@ export interface operations {
                         user: components["schemas"]["User"];
                         /** @description Seconds until the session ends. Null with auth off. */
                         expiresIn: number | null;
-                        /** @description The minimum role for each menu page, by path, such as `/network`. */
+                        /** @description The pages this user has, by path such as `/network`, each with the minimum role it needs. A page the user lacks is not here. */
                         pages: {
-                            [key: string]: "viewer" | "wall" | "operator" | "admin";
+                            [key: string]: "guest" | "operator" | "admin";
                         };
+                        /** @description The modules the user holds, by id. */
+                        modules: components["schemas"]["ModuleId"][];
+                        /** @description True when the password is a temporary one that must be changed first. */
+                        mustChange?: boolean;
                     };
                 };
             };
@@ -2823,10 +3231,10 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description Must be `1` on sign-in, sign-out and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
                  *     authenticates with the session cookie. A page on another site cannot add a custom header
                  *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
-                 *     Bearer header, except on sign-in and sign-out.
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
                  */
                 "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
             };
@@ -2856,15 +3264,59 @@ export interface operations {
             429: components["responses"]["RateLimited"];
         };
     };
+    changePassword: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 *     authenticates with the session cookie. A page on another site cannot add a custom header
+                 *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
+                 */
+                "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    current: string;
+                    password: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Changed. The session cookie is set again with a fresh token. */
+            200: {
+                headers: {
+                    "Set-Cookie": components["headers"]["SetSessionCookie"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"] & {
+                        ok: boolean;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["CsrfRefused"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["RateLimited"];
+        };
+    };
     logout: {
         parameters: {
             query?: never;
             header?: {
                 /**
-                 * @description Must be `1` on sign-in, sign-out and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
                  *     authenticates with the session cookie. A page on another site cannot add a custom header
                  *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
-                 *     Bearer header, except on sign-in and sign-out.
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
                  */
                 "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
             };
@@ -2897,6 +3349,93 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             403: components["responses"]["CsrfRefused"];
+        };
+    };
+    getAccountRequestInfo: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Whether requests are accepted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRequestInfo"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
+        };
+    };
+    leaveAccountRequest: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 *     authenticates with the session cookie. A page on another site cannot add a custom header
+                 *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
+                 */
+                "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AccountRequestBody"];
+            };
+        };
+        responses: {
+            /** @description Kept, or a copy of one that was waiting. Nothing says which. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            403: components["responses"]["CsrfRefused"];
+            /** @description `not_found`, this portal does not accept requests for an account. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            413: components["responses"]["PayloadTooLarge"];
+            /** @description `rate_limited`, this address has left as many requests as it may for one day, or the 300 requests a minute of the client address. `Retry-After` says how long to wait. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            500: components["responses"]["RequestsError"];
+            /** @description `requests_full`, the list of requests is full; an administrator has to clear it. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
         };
     };
     getHosts: {
@@ -2943,6 +3482,7 @@ export interface operations {
                         state: components["schemas"]["HostState"];
                         reason: components["schemas"]["StateReason"];
                         problems: components["schemas"]["ProblemCounts"];
+                        site: components["schemas"]["SiteRef"] | null;
                     })[];
                 };
             };
@@ -3009,7 +3549,7 @@ export interface operations {
                 hostid?: string;
                 /** @description Comma-separated numeric ids, de-duplicated. At most 50 or 400. */
                 itemids?: string;
-                /** @description Prefix match on `key_`. */
+                /** @description Substring match on `key_`. */
                 search?: string;
                 /** @description Numeric items only. Truthy for exactly `1` or `true`; anything else is false. */
                 graphable?: "1" | "true";
@@ -3125,7 +3665,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The stream opens and stays open until its token expires. */
+            /** @description The stream opens and stays open until its token or the account expires, or the account changes. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3189,7 +3729,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
-            /** @description `forbidden`, a viewer asked for a network interface item (key starting `net.if`). Wall screens, operators and admins may read them. */
+            /** @description `forbidden`, an account without the Network page asked for a network interface item (key starting `net.if`). Accounts that have the Network page, and administrators, may read them. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -3848,9 +4388,23 @@ export interface operations {
     getSli: {
         parameters: {
             query?: {
-                /** @description Defaults to the current month in `Asia/Jakarta`. */
+                /** @description Defaults to the current month in `Asia/Jakarta`. Not with `from` and `to`. */
                 month?: string;
                 profile?: "availability" | "hcml-report";
+                /**
+                 * @description The start of a window that is not a calendar month, in Unix seconds, on the hour in the report's time zone. Goes with `to`. The month
+                 *     it starts in must have begun no more than 400 days ago, since Zabbix keeps events for about a year, and the window may be at most 366 days.
+                 */
+                from?: string;
+                /** @description The end of the window, in Unix seconds, on the hour. A window that ends in the future is measured up to now. */
+                to?: string;
+                /**
+                 * @description Count only these hours of the day, as `start-end` in whole hours: `8-17` is 08:00 to 17:00, `22-6` runs from 22:00 through midnight to 06:00 of the next day,
+                 *     and a span belongs to the day it starts. With `month` or with `from` and `to`.
+                 */
+                dayHours?: string;
+                /** @description Count only spans that begin on these days of the week, Monday 1 to Sunday 7, separated by commas. All days when left out. */
+                days?: string;
             };
             header?: never;
             path?: never;
@@ -3858,7 +4412,10 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The monthly report. */
+            /**
+             * @description The report. For a calendar month with no `dayHours` or `days` it is the monthly report, with its web checks. For any other window it has no web checks
+             *     (`web` is empty), since those need the raw readings of the last 31 days and are kept monthly, and `month` is null unless the window was given as a month.
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3880,14 +4437,318 @@ export interface operations {
             };
             499: components["responses"]["Cancelled"];
             502: components["responses"]["ZabbixError"];
-            503: components["responses"]["ZabbixUnavailable"];
+            503: components["responses"]["SliUnavailable"];
+        };
+    };
+    listUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The users. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        users: components["schemas"]["UserRecord"][];
+                        modules: components["schemas"]["ModuleInfo"][];
+                        /** @description The modules a new user of each role starts with. Only a start: what is stored is the user's own list. */
+                        presets: {
+                            guest: components["schemas"]["ModuleId"][];
+                            operator: components["schemas"]["ModuleId"][];
+                            admin: components["schemas"]["ModuleId"][];
+                        };
+                        durable: boolean;
+                        editable: boolean;
+                        /** @description A save failed and has not worked since. */
+                        failing: boolean;
+                        secure: boolean;
+                    };
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["SignInOff"];
+        };
+    };
+    createUser: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 *     authenticates with the session cookie. A page on another site cannot add a custom header
+                 *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
+                 */
+                "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewUser"];
+            };
+        };
+        responses: {
+            /** @description Added. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        user: components["schemas"]["UserRecord"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["UsersError"];
+            503: components["responses"]["SignInOff"];
+        };
+    };
+    updateUser: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 *     authenticates with the session cookie. A page on another site cannot add a custom header
+                 *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
+                 */
+                "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserPatch"];
+            };
+        };
+        responses: {
+            /** @description Changed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        user: components["schemas"]["UserRecord"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["UsersError"];
+            503: components["responses"]["SignInOff"];
+        };
+    };
+    resetUserPassword: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 *     authenticates with the session cookie. A page on another site cannot add a custom header
+                 *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
+                 */
+                "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    password: string;
+                    mustChange?: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Set. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        user: components["schemas"]["UserRecord"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["UsersError"];
+            503: components["responses"]["SignInOff"];
+        };
+    };
+    listAccountRequests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The requests. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountRequestList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            429: components["responses"]["RateLimited"];
+            503: components["responses"]["SignInOff"];
+        };
+    };
+    approveAccountRequest: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 *     authenticates with the session cookie. A page on another site cannot add a custom header
+                 *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
+                 */
+                "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewUser"];
+            };
+        };
+        responses: {
+            /** @description The account is made and the request is off the list. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        user: components["schemas"]["UserRecord"];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["RateLimited"];
+            /** @description `users_error` (the file of users could not be saved) or `requests_error` (the file of requests could not be saved): see `UsersError` and `RequestsError`. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            503: components["responses"]["SignInOff"];
+        };
+    };
+    refuseAccountRequest: {
+        parameters: {
+            query?: never;
+            header?: {
+                /**
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 *     authenticates with the session cookie. A page on another site cannot add a custom header
+                 *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
+                 */
+                "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
+            };
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /** @description Ignored. Nothing, or a JSON object. */
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Refused. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        ok: true;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            413: components["responses"]["PayloadTooLarge"];
+            429: components["responses"]["RateLimited"];
+            500: components["responses"]["RequestsError"];
+            503: components["responses"]["SignInOff"];
         };
     };
     exportSli: {
         parameters: {
             query: {
-                /** @description Defaults to the current month in `Asia/Jakarta`. An empty value means the default. */
+                /** @description Defaults to the current month in `Asia/Jakarta`. An empty value means the default. Not with `from` and `to`. */
                 month?: string;
+                /** @description The start of a window that is not a calendar month, in Unix seconds, on the hour in the report's time zone. Goes with `to`, as on `/api/sli`. */
+                from?: string;
+                /** @description The end of the window, in Unix seconds, on the hour. A window that ends in the future is measured up to now, and its file says the figures are not final. */
+                to?: string;
+                /** @description Count only these hours of the day, as `start-end` in whole hours, as on `/api/sli`. With `month` or with `from` and `to`. */
+                dayHours?: string;
+                /** @description Count only spans that begin on these days of the week, Monday 1 to Sunday 7, separated by commas. All days when left out. */
+                days?: string;
                 /** @description Exactly `pdf`, `xlsx` or `csv`, in lower case. Missing, anything else, or given twice is a 400. */
                 format: "pdf" | "xlsx" | "csv";
                 /** @description The mark in a percentage. Defaults to `dot`. */
@@ -3937,7 +4798,7 @@ export interface operations {
             };
             499: components["responses"]["Cancelled"];
             502: components["responses"]["ZabbixError"];
-            503: components["responses"]["ZabbixUnavailable"];
+            503: components["responses"]["SliUnavailable"];
         };
     };
     getSliEmail: {
@@ -3979,10 +4840,10 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description Must be `1` on sign-in, sign-out and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
                  *     authenticates with the session cookie. A page on another site cannot add a custom header
                  *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
-                 *     Bearer header, except on sign-in and sign-out.
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
                  */
                 "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
             };
@@ -3992,7 +4853,19 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    month: string;
+                    /** @description A calendar month. Not with `window`. */
+                    month?: string;
+                    /** @description A window of whole hours that is not a calendar month. Both times are needed, on the hour in the report's time zone, and the window may be at most 366 days. Not with `month`. */
+                    window?: {
+                        /** @description The start, in Unix seconds. */
+                        from?: number;
+                        /** @description The end, in Unix seconds. */
+                        to?: number;
+                    };
+                    /** @description Count only these hours of the day, as `8-17`. As on `/api/sli`. */
+                    dayHours?: string;
+                    /** @description Count only spans that begin on these days of the week, Monday 1 to Sunday 7. */
+                    days?: string;
                     /** @description Each once. They are attached in the order pdf, xlsx, csv whatever order is given. */
                     formats: ("pdf" | "xlsx" | "csv")[];
                     /** @description One to ten plain addresses. Left out: the saved list. */
@@ -4023,11 +4896,16 @@ export interface operations {
                         sent: number;
                         /** @description How many it refused. The message still went to the others. */
                         refused: number;
-                        month: string;
+                        /** @description The month the report was for, or null for a window. */
+                        month: string | null;
+                        /** @description The window's start. Only for a window. */
+                        from?: number;
+                        /** @description The window's end. Only for a window. */
+                        to?: number;
                         files: {
                             /** @enum {string} */
                             format: "pdf" | "xlsx" | "csv";
-                            /** @description The attached file, `HCML_SLA_Report_<month>.pdf`, `.xlsx` or `_csv.zip`. */
+                            /** @description The attached file, named as `/api/sli/export` names it. */
                             fileName: string;
                             bytes: number;
                         }[];
@@ -4068,7 +4946,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description `mail_disabled`, email is not set up on this portal, or it is off while sign-in is off and `ALLOW_EMAIL_WITHOUT_AUTH` is not true, or a Zabbix state (`zabbix_timeout`, `zabbix_auth`). */
+            /** @description `mail_disabled`, email is not set up on this portal, or it is off while sign-in is off and `ALLOW_EMAIL_WITHOUT_AUTH` is not true, `data_not_read_yet` (no reading is newer than the start of the range; `Retry-After`; see `SliUnavailable`), or a Zabbix state (`zabbix_timeout`, `zabbix_auth`). */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -4084,10 +4962,10 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description Must be `1` on sign-in, sign-out and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
                  *     authenticates with the session cookie. A page on another site cannot add a custom header
                  *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
-                 *     Bearer header, except on sign-in and sign-out.
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
                  */
                 "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
             };
@@ -4153,10 +5031,10 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description Must be `1` on sign-in, sign-out and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
                  *     authenticates with the session cookie. A page on another site cannot add a custom header
                  *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
-                 *     Bearer header, except on sign-in and sign-out.
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
                  */
                 "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
             };
@@ -4364,7 +5242,7 @@ export interface operations {
             };
             /**
              * @description `rate_limited`, more calls than the per-user limit a minute (`AI_CHAT_PER_MINUTE` and `AI_EXPLAIN_PER_MINUTE`, 10 each by default), or, with a
-             *     local model, a call of the same person that is still waiting or running (one for each person); or `ai_budget`, the daily token budget is used
+             *     local model, a call of the same person that is still waiting or running (one for each person); with `source=derived`, also more than four of the person's reads of the derived SLA at once (`Retry-After` 10); or `ai_budget`, the daily token budget is used
              *     up (hosted Claude and a model at an outside address, counted by the tokens it reports or else by the size of what went in and out; `AI_DAILY_TOKENS_PER_USER` and `AI_DAILY_TOKENS_TOTAL`). `Retry-After` says how long to wait.
              */
             429: {
@@ -4419,10 +5297,10 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description Must be `1` on sign-in, sign-out and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
                  *     authenticates with the session cookie. A page on another site cannot add a custom header
                  *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
-                 *     Bearer header, except on sign-in and sign-out.
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
                  */
                 "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
             };
@@ -4483,10 +5361,10 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description Must be `1` on sign-in, sign-out and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
                  *     authenticates with the session cookie. A page on another site cannot add a custom header
                  *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
-                 *     Bearer header, except on sign-in and sign-out.
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
                  */
                 "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
             };
@@ -4616,10 +5494,10 @@ export interface operations {
             query?: never;
             header?: {
                 /**
-                 * @description Must be `1` on sign-in, sign-out and every `POST`, `PUT`, `PATCH` or `DELETE` that
+                 * @description Must be `1` on sign-in, sign-out, the request for an account and every `POST`, `PUT`, `PATCH` or `DELETE` that
                  *     authenticates with the session cookie. A page on another site cannot add a custom header
                  *     without a CORS preflight, which the BFF answers only for `WEB_ORIGIN`. Not needed with a
-                 *     Bearer header, except on sign-in and sign-out.
+                 *     Bearer header, except on sign-in, sign-out and the request for an account.
                  */
                 "X-HCML-CSRF"?: components["parameters"]["CsrfHeader"];
             };

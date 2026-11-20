@@ -9,13 +9,16 @@ import ReportDialog, { useReveal } from './ReportDialog';
 import ReportSchedule from './ReportSchedule';
 import SavedList from './SavedList';
 import { readReportStyle, styleSentence } from './reportStyle';
-import { monthInWords } from './ReportDownload';
+import { periodOf, periodWords, type ReportPeriod } from './ReportDownload';
 
 /**
- * Email the month's report, by hand: to the people typed in the box, in the files ticked, in the style chosen for the downloads.
- * Offered to administrators only, once the BFF says email is set up. The sender is the portal's settings and is shown, not chosen.
+ * Email the report for a month or a range of days (FR-60), by hand: to the people typed in the box, in the files ticked, in the style chosen for the downloads.
+ * Offered to administrators only, once the BFF says email is set up; while it is off they read why the buttons are missing. The sender is the portal's settings and is shown, not chosen.
  * Beside it, the monthly schedule, which sends the same report by itself.
  */
+
+/** Where the buttons would be, while email is off: a person who looks for them should not have to ask. */
+const EMAIL_OFF = 'Email is off in this portal. Its MAIL_ settings are blank, or one of them cannot be used; the start-up log names that one.';
 
 /** What a person should read for a failure: the BFF's own sentence when it gave one. */
 const CHECK_FIRST = 'The report may or may not have gone: look under Last sends in the Schedule dialog, or ask the people it was sent to, before you press Send report again.';
@@ -50,14 +53,14 @@ function summary(sent: EmailSent, asked: boolean): string {
 }
 
 function EmailDialog({
-  month,
+  period,
   info,
   onClose,
   onKept,
   onLeave,
   onEnded,
 }: {
-  month: string;
+  period: ReportPeriod;
   info: EmailInfo;
   onClose: () => void;
   /** The saved list changed, or a send kept the list. A list is the one the portal answered with. */
@@ -111,7 +114,8 @@ function EmailDialog({
     setBusy(true);
     setError('');
     try {
-      const sent = await api.sliEmail(month, { formats: files, to: addresses, remember, style: readReportStyle() });
+      const options = { formats: files, to: addresses, remember, style: readReportStyle() };
+      const sent = period.range ? await api.sliRangeEmail(period.range, options) : await api.sliEmail(period.month, options);
       if (sent.remembered) onKept();
       if (open.current) setResult(sent);
       else onEnded({ ok: true, text: summary(sent, remember) });
@@ -127,7 +131,7 @@ function EmailDialog({
   const status = busy
     ? slow
       ? `Still sending. You can close this window: the send continues, and its result will be under ${WHERE}.`
-      : 'Sending. A month that is not loaded yet can take a minute.'
+      : `Sending. A ${period.range ? 'range' : 'month'} that is not loaded yet can take a minute.`
     : result
       ? summary(result, remember)
       : '';
@@ -140,7 +144,7 @@ function EmailDialog({
   return (
     <ReportDialog
       title="Email the SLA report"
-      sub={`${monthInWords(month)}, both methods`}
+      sub={`${periodWords(period)}, both methods`}
       busy={busy}
       onClose={onClose}
       onSubmit={() => void submit()}
@@ -222,13 +226,15 @@ function EmailDialog({
   );
 }
 
-export default function EmailReport({ month, disabled = false }: { month: string; disabled?: boolean }) {
+export default function EmailReport(props: ReportPeriod & { disabled?: boolean }) {
+  const { disabled = false } = props;
+  const period = periodOf(props);
   const { role } = useAuth();
   const admin = roleAllows(role, 'admin');
   const [info, setInfo] = useState<EmailInfo | null>(null);
   const [open, setOpen] = useState(false);
   // A send the person left while it was out, and then how it ended.
-  const [away, setAway] = useState<{ month: string; outcome: Outcome | null } | null>(null);
+  const [away, setAway] = useState<{ words: string; outcome: Outcome | null } | null>(null);
 
   // Asked once the person is known to be an administrator. A failed check offers nothing and says nothing: it must not get in the way.
   useEffect(() => {
@@ -269,11 +275,12 @@ export default function EmailReport({ month, disabled = false }: { month: string
     refresh();
   };
 
-  if (!admin || !info?.enabled) return null;
+  if (!admin || !info) return null;
+  if (!info.enabled) return <p className="muted sli-source-note">{EMAIL_OFF}</p>;
   const sending = away !== null && away.outcome === null;
   return (
     <div className="field">
-      <div className="report-actions" role="group" aria-label={`Email the SLA report for ${monthInWords(month)}, both methods`}>
+      <div className="report-actions" role="group" aria-label={`Email the SLA report for ${periodWords(period)}, both methods`}>
         <button type="button" className="btn ghost sm" disabled={disabled || sending} aria-haspopup="dialog" onClick={() => setOpen(true)}>
           Email report
         </button>
@@ -281,7 +288,7 @@ export default function EmailReport({ month, disabled = false }: { month: string
       </div>
       {away && (
         <div className={`notice${away.outcome?.ok === false ? ' warn' : ''}`} role={away.outcome?.ok === false ? 'alert' : 'status'}>
-          {away.outcome ? away.outcome.text : `The report email for ${monthInWords(away.month)} is still being sent. When it ends, look under ${WHERE}.`}
+          {away.outcome ? away.outcome.text : `The report email for ${away.words} is still being sent. When it ends, look under ${WHERE}.`}
           {away.outcome && (
             <button type="button" className="btn ghost sm" onClick={() => setAway(null)}>
               Dismiss
@@ -291,13 +298,13 @@ export default function EmailReport({ month, disabled = false }: { month: string
       )}
       {open && (
         <EmailDialog
-          month={month}
+          period={period}
           info={info}
           onClose={() => setOpen(false)}
           onKept={kept}
           onLeave={() => {
             setOpen(false);
-            setAway({ month, outcome: null });
+            setAway({ words: periodWords(period), outcome: null });
           }}
           onEnded={(outcome) => mounted.current && setAway((now) => (now && now.outcome === null ? { ...now, outcome } : now))}
         />

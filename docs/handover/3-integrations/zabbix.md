@@ -12,7 +12,7 @@ Zabbix is the only source of data. Every site, link, incident, host state and SL
 
 Every call is one HTTP POST to the address in `ZBX_URL`, with the body `{"jsonrpc":"2.0","method":...,"params":...,"id":n}`, the content type `application/json-rpc` and the header `Authorization: Bearer <token>`. Two functions make every call. `zbx()` uses the read token, and `zbxWrite()` uses the separate write token and refuses to run when none is set.
 
-The portal calls fifteen methods, fourteen that read and one that writes. A table of the exact lines that name each is kept in the data-model documents ([ERD-Database](../../erd/database/ERD-Database.md)), and a checker keeps it equal to the code.
+The portal calls sixteen methods, fifteen that read and one that writes. A table of the exact lines that name each is kept in the data-model documents ([ERD-Database](../../erd/database/ERD-Database.md)), and a checker keeps it equal to the code.
 
 | Method | What the portal reads or does with it |
 |---|---|
@@ -49,7 +49,7 @@ A rejected token and a Zabbix that does not answer within `ZABBIX_TIMEOUT_MS` ar
 
 | Setting | Default | What it does |
 |---|---|---|
-| `ZBX_URL` | HCML's API address, `https://zabbix.hcml.co.id/zabbix/api_jsonrpc.php` | Where every call goes |
+| `ZBX_URL` | HCML's API address, `https://zabbix.example.com/zabbix/api_jsonrpc.php` | Where every call goes |
 | `ZABBIX_API_TOKEN` | none | The read token |
 | `ZABBIX_WRITE_TOKEN` | none | The write token. Unset means the write is off |
 | `ZABBIX_TIMEOUT_MS` | 300000 in Docker, 10000 when the server is run on its own | How long one call may take. A few reads take longer than a minute on HCML's Zabbix, so it is long. nginx waits longer still |
@@ -65,9 +65,9 @@ The full list of settings, with every default, is in `deploy/settings.example`.
 
 ## The network path and the certificate
 
-From HCML's office network the public name of Zabbix leads to a Zero Trust gateway that refuses the portal. So `docker-compose.override.yml`, a file that stays on the machine and out of git because it names an internal address, maps that name to Zabbix's internal address for the server container. The certificate is still checked against the name. If Zabbix moves, the file has to change, and nothing in the repository will say so.
+From HCML's office network the portal reaches Zabbix by an internal address. `docker-compose.override.yml`, a file that stays on the machine and out of git because it names that address, maps Zabbix's name to it for the server container. The certificate is still checked against the name. If Zabbix moves, the file has to change, and nothing in the repository will say so.
 
-When Zabbix's certificate expired on 1 August 2026, the portal could not read at all. A narrow exception was added, and it still exists, switched off. With `ZBX_TLS_PIN_SHA256` (a fingerprint) and `ZBX_TLS_PIN_UNTIL` (a last day, in WIB) set, one expired certificate is accepted, but only that one and only until that day. `clients/pinnedTls.ts` judges every connection before the request is written to it, so a refused server never receives the token. It accepts a certificate that passes the normal check. Otherwise it accepts only the pinned one, and only when Node's fault is that it expired, the name matches and the last day has not passed. The refusals carry a code: the name of Node's own fault when the certificate fails for any reason other than its age, `ERR_TLS_CERT_ALTNAME_INVALID` when it does not name the host, `ZBX_TLS_PIN_MISMATCH` for a different certificate and `ZBX_TLS_PIN_ENDED` after the last day. Delete both settings once the certificate is renewed.
+The portal has a narrow exception for an expired certificate, switched off. With `ZBX_TLS_PIN_SHA256` (a fingerprint) and `ZBX_TLS_PIN_UNTIL` (a last day, in WIB) set, one expired certificate is accepted, but only that one and only until that day. `clients/pinnedTls.ts` judges every connection before the request is written to it, so a refused server never receives the token. It accepts a certificate that passes the normal check. Otherwise it accepts only the pinned one, and only when Node's fault is that it expired, the name matches and the last day has not passed. The refusals carry a code: the name of Node's own fault when the certificate fails for any reason other than its age, `ERR_TLS_CERT_ALTNAME_INVALID` when it does not name the host, `ZBX_TLS_PIN_MISMATCH` for a different certificate and `ZBX_TLS_PIN_ENDED` after the last day. Delete both settings once the certificate is renewed.
 
 ## Asking for little
 

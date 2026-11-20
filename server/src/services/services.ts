@@ -60,10 +60,18 @@ export interface ServicesResponse {
   degraded: number;
   /** Worst status across the whole tree; -1 when everything is fine. */
   worst: number;
+  /** Present, and true, when the tree was cut at MAX_NODES: services that share children appear under each parent, and a few of them make a tree of millions of nodes (BK-96). */
+  truncated?: true;
 }
 
 /** A service can have several parents, so guard against runaway recursion. */
 const MAX_DEPTH = 12;
+
+/**
+ * The most nodes the tree holds. A service below several parents is built under each of them, so that the depth cap stops loops and not growth: layers of four services, each below all four of the layer
+ * above, gave 87,380 nodes and 11.7 MB from 32 services, and every two layers more multiply that by 16. Past this the rest of the tree is left out and the answer says so.
+ */
+export const MAX_NODES = 5_000;
 
 /** serviceid → the SLA it's measured against (first wins if several apply). */
 async function slaByService(): Promise<Record<string, ServiceSla>> {
@@ -125,11 +133,14 @@ export async function getServiceTree(): Promise<ServicesResponse> {
    * form a DAG (a shared dependency legitimately appears under two parents)
    * so counting tree positions would report it twice.
    */
+  let built = 0;
+  let truncated = false;
   const build = (
     svc: ZService,
     path: Set<string>,
     depth: number,
   ): { node: ServiceNode; ids: Set<string> } => {
+    built++;
     const node: ServiceNode = {
       serviceid: svc.serviceid,
       name: svc.name,
@@ -156,6 +167,11 @@ export async function getServiceTree(): Promise<ServicesResponse> {
 
     const below = new Set<string>();
     for (const kid of kids) {
+      // Past the cap the rest of the tree is left out, here and in every parent still being built.
+      if (built >= MAX_NODES) {
+        truncated = true;
+        break;
+      }
       const { node: child, ids } = build(kid, nextPath, depth + 1);
       node.children.push(child);
       node.worst = Math.max(node.worst, child.worst);
@@ -172,13 +188,21 @@ export async function getServiceTree(): Promise<ServicesResponse> {
     .filter((s) => !(s.parents ?? []).length)
     .sort((a, b) => Number(a.sortorder) - Number(b.sortorder) || a.name.localeCompare(b.name));
 
-  const tree = roots.map((r) => build(r, new Set(), 0).node);
+  const tree: ServiceNode[] = [];
+  for (const root of roots) {
+    if (built >= MAX_NODES) {
+      truncated = true;
+      break;
+    }
+    tree.push(build(root, new Set(), 0).node);
+  }
 
   return {
     tree,
     total: services.length,
     degraded: services.filter((s) => Number(s.status) >= 0).length,
     worst: services.reduce((w, s) => Math.max(w, Number(s.status)), -1),
+    ...(truncated ? { truncated: true as const } : {}),
   };
 }
 

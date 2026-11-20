@@ -111,6 +111,29 @@
   color: var(--danger-text);
   font-size: var(--t-base);
 }
+/* Where the assistant's memory of the conversation ends, and what a partial answer says of itself. */
+.chat-memory {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+.chat-memory::before,
+.chat-memory::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--border-strong);
+}
+.chat-cut {
+  margin-top: var(--s-2);
+  color: var(--muted);
+  font-size: var(--t-sm);
+}
+.chat-count {
+  margin-top: var(--s-1-5);
+  font-size: var(--t-sm);
+}
 .chat-compose {
   display: flex;
   align-items: flex-end;

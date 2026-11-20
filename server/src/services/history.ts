@@ -1,6 +1,7 @@
 import { zbx } from '../clients/zabbix.js';
 import { cached } from '../core/cache.js';
 import { config } from '../core/config.js';
+import { parseDelay } from '../core/delay.js';
 import { fetchTrendsSliced } from '../sli/events.js';
 import { BadRequestError, intParam, requireId } from '../core/validate.js';
 import { monthBounds, parseMonth } from '../sli/time.js';
@@ -44,14 +45,7 @@ export interface Sample {
   trend: boolean;
 }
 
-/** Zabbix update interval → seconds. '60', '1m', '5m', '1h', '30s'; macros/unknown → 60; '0' → 0. */
-export function parseDelay(raw: string | undefined): number {
-  const first = String(raw ?? '').split(';')[0].trim();
-  const m = /^(\d+)([smhdw]?)$/.exec(first);
-  if (!m) return 60;
-  const mult = { '': 1, s: 1, m: 60, h: 3600, d: DAY, w: 7 * DAY }[m[2] as '' | 's' | 'm' | 'h' | 'd' | 'w'];
-  return Number(m[1]) * mult;
-}
+export { parseDelay };
 
 export const STEP_KEY = /^(icmpping\b|icmpping\[|net\.if\.status|web\.test\.fail)/;
 

@@ -38,7 +38,7 @@ describe('index.ts: the order of setting up', () => {
     'registerStaleHeaders(app)',
     'registerHealth(app)',
     'registerErrorHandler(app)',
-    'await setupAuth(app)',
+    'await setupAuth(app, userDirectory())',
     'app.register(hostRoutes)',
     'app.listen(',
     'installShutdown(app)',
@@ -68,7 +68,7 @@ describe('index.ts: the route modules', () => {
   });
 
   it('registers each of them after sign-in is set up, so that the guard covers it', () => {
-    const guard = at('await setupAuth(app)');
+    const guard = at('await setupAuth(app, userDirectory())');
     for (const name of registered) expect(code.indexOf(`app.register(${name}`), name).toBeGreaterThan(guard);
   });
 });

@@ -123,3 +123,27 @@
   top: var(--s-2);
 }
 
+/* Requests for an account, on the Users page (FR-62): what a stranger typed is text, kept in the shape it was written. */
+.requests {
+  display: grid;
+  gap: var(--s-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.requests li {
+  /* A name of eighty characters with no space, typed by a stranger, wraps and does not widen the panel. */
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding-bottom: var(--s-3);
+  border-bottom: 1px solid var(--border);
+}
+.requests li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.request-reason {
+  margin: var(--s-1-5) 0 var(--s-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

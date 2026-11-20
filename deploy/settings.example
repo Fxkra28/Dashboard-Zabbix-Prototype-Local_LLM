@@ -11,7 +11,7 @@
 # The meaning of each setting is in the Configuration table of README.md.
 
 # Zabbix
-ZBX_URL=https://zabbix.hcml.co.id/zabbix/api_jsonrpc.php
+ZBX_URL=https://zabbix.example.com/zabbix/api_jsonrpc.php
 ZABBIX_TIMEOUT_MS=300000
 # Only while Zabbix's certificate has expired: its SHA-256 fingerprint and the last day, WIB (docs/operations/tls.md).
 # ZBX_TLS_PIN_SHA256=
@@ -37,6 +37,11 @@ AUTH_ENABLED=true
 # The server refuses to start on a length it cannot use.
 SESSION_HOURS=12
 SESSION_EPOCH=1
+# A form on the sign-in page for a person to ask for an account (FR-62). Off unless this is true; it needs sign-in and the data folder.
+# The two numbers are the most requests that wait at once and the most one address may leave in a day.
+ACCOUNT_REQUESTS=
+ACCOUNT_REQUESTS_MAX_PENDING=50
+ACCOUNT_REQUESTS_PER_ADDRESS=3
 
 # The portal's own copy of its log, kept in a volume so that it outlives a rebuild: this many files (1 to 100) of this many megabytes
 # each, the oldest dropped first (docs/operations/backup-and-restore.md). How long logs are to be kept is HCML's to set.
@@ -54,7 +59,7 @@ HOST_NAME_PATTERN=
 # Links, alert noise and the availability report
 LINK_LOSS_WARN=2
 LINK_LOSS_CRIT=10
-# The Zabbix dashboard whose gauge widgets are the internet traffic meters (Dashboard, for the wall, operator and admin roles).
+# The Zabbix dashboard whose gauge widgets are the internet traffic meters (Dashboard, for the accounts that have the Network page).
 INTERNET_METERS_DASHBOARD=Global view
 NOISE_SHORT_SECONDS=300
 NOISE_MIN_COUNT=5
@@ -84,8 +89,9 @@ AI_MAX_RETRIES=1
 AI_KEEP_ALIVE=30m
 AI_OLLAMA_NATIVE=auto
 AI_NUM_CTX=8192
-AI_TEMPERATURE=0.7
-AI_TOP_P=0.8
+# Left out, each model family uses its own card's sampling (Qwen3 0.7 / 0.8, Gemma 4 1.0 / 0.95); set them and they win for every model.
+# AI_TEMPERATURE=0.7
+# AI_TOP_P=0.8
 
 # Caps on Explain and the Assistant: calls a minute per signed-in user, calls in flight at once,
 # and tokens a day per user and in all (0 turns a budget off; the hosted API and a model outside this machine's network are counted).
@@ -95,8 +101,8 @@ AI_MAX_CONCURRENT=4
 AI_DAILY_TOKENS_PER_USER=500000
 AI_DAILY_TOKENS_TOTAL=2000000
 
-# Emailing the SLA report: hcml-portal only. Its compose file passes these, all blank by default, and blank means email
-# is off and the button is not offered. hcml-portal-ollama passes none of them, so that nothing leaves the machine.
+# Emailing the SLA report. Both compose files pass these, all blank by default, and blank means email
+# is off and the button is not offered.
 # The password, MAIL_PASS, is a secret and goes in `.env`. MAIL_PROVIDER is gmail, yahoo, zoho, icloud or smtp (README.md).
 # MAIL_PROVIDER=
 # MAIL_HOST=
@@ -108,6 +114,14 @@ AI_DAILY_TOKENS_TOTAL=2000000
 # MAIL_TO=
 # MAIL_ALLOWED_DOMAINS=
 # MAIL_SCHEDULE=
+
+# The virtual machine (docs/operations/vm-runbook.md). Not passed by docker-compose.yml: the overlay docker-compose.vm.yml reads the first three, and Compose itself reads COMPOSE_FILE.
+# The model server's image, pinned to a version and never latest; the questions it answers at once; the memory it may take (the card's own memory is not counted).
+# OLLAMA_IMAGE=ollama/ollama:0.33.3
+# OLLAMA_NUM_PARALLEL=1
+# OLLAMA_MEM_LIMIT=16g
+# The files the stack is made of, so that every plain `docker compose` command, deploy/rebuild.sh and the restore use the same ones (add :docker-compose.vm-gpu.yml with a card).
+# COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose.vm.yml
 
 # Secrets, by name only. They go in `.env` and never in this file, and the encrypted backup
 # is what protects them: JWT_SECRET, ZABBIX_API_TOKEN, ZABBIX_WRITE_TOKEN, PORTAL_PASS,

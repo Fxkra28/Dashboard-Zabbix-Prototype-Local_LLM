@@ -3,6 +3,7 @@
 * Status: accepted
 * Deciders: HCML internship project, on a request from the mentor
 * Date: 2026-10-14
+* Amended: 2026-11-17, by [ADR-0017](0017-keep-the-portals-users-in-a-file-of-their-own.md): the meters are for the accounts that have the Network page. Where this record says a wall account, an operator or an admin, read an account with that page; where it says a viewer, read an account without it
 
 ## Context and Problem Statement
 
@@ -20,7 +21,7 @@ what to call it. Where should the portal get them?
 * The capacity of a link is a figure somebody typed once, in Zabbix. A second copy drifts from the first,
   and then two screens give two answers about one link.
 * The repository is public. A list of HCML's links with their capacities is HCML's estate, and it must
-  not be committed ([SC-06](../../../tracker.md)).
+  not be committed (SC-06).
 * No database ([ADR-0003](0003-no-database.md)) and no write to Zabbix
   ([ADR-0006](0006-read-only-with-one-write.md)).
 * Interface data is for a wall screen's account, an operator and an admin (`viewerPolicy.ts`), and the meters are interface data.

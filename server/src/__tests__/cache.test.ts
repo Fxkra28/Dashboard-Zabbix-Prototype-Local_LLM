@@ -463,6 +463,25 @@ describe('LRU bound', () => {
   });
 });
 
+describe('weigh', () => {
+  it('counts the larger of the walk and the size the caller gives, so a value the walk cannot see through is not counted short', async () => {
+    invalidate('');
+    // 600,000 numbers in an array: the walk stops at 500,000 values and counts less than the array holds.
+    const big = Array.from({ length: 600_000 }, (_, i) => i);
+    const walked = approxBytes(big);
+    expect(walked).toBeLessThan(8 * 600_000 * 2);
+    await cached('weigh:plain', 60_000, async () => big);
+    await cached('weigh:given', 60_000, async () => big, { weigh: () => 50_000_000 });
+    // Both are stored; the second counts what the caller said. A value that claims more than the whole budget is not kept at all.
+    await cached('weigh:huge', 60_000, async () => [1], { weigh: () => 10 * 64 * 1024 * 1024 });
+    let fetched = 0;
+    await cached('weigh:huge', 60_000, async () => ++fetched);
+    await cached('weigh:huge', 60_000, async () => ++fetched);
+    expect(fetched).toBe(1);
+    invalidate('');
+  });
+});
+
 describe('approxBytes', () => {
   it('counts strings by length, numbers as 8, and walks objects, arrays, Maps and Sets', () => {
     expect(approxBytes('x'.repeat(1000))).toBe(16 + 1000);

@@ -20,7 +20,7 @@ entire point of this page.
 | Owner / PIC | inventory `poc_1_name` / `poc_1_email`, or a tag | `OWNER_TAG` |
 | Criticality | a criticality tag | `CRITICALITY_TAG` |
 
-Site is deliberately strict. [`resolveSite()`](../../server/src/services/sites.ts) always returns
+Site is deliberately strict. [`resolveSite()`](../../server/src/domain/siteOf.ts) always returns
 *something* (falling back to a host group), but the scorecard counts only `tag`, `name` (the host name says the site) and `inventory` as
 present. Falling back to a group is exactly the ambiguity Goal 1 names, so it scores as a gap: the
 scorecard and the Sites board agree on the same 86% figure for that reason.
@@ -30,7 +30,7 @@ scorecard and the Sites board agree on the same 86% figure for that reason.
 Read off HCML's own Availability Reports (2026-06, -07, -08), not inferred. Two forms coexist:
 
 ```
-devices    <site>.<class>[.<seq>] NAME     1.2.1 IDX02CORESWITCH    11.3.5 MOPU ARUBA 5
+devices    <site>.<class>[.<seq>] NAME     1.2.1 TANGO02CORESWITCH    11.3.5 MOPU ARUBA 5
 services   <TYPE> : NAME                   INET : SAMPANG WAN 1     SERVER : CUCM JAKARTA
 ```
 

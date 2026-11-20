@@ -6,20 +6,22 @@
 
 ## What it is for
 
-The portal hands a month over as a file: a PDF to print or attach to an email, an Excel workbook to sort and total, and a zip of CSV files for a script or a spreadsheet that wants plain numbers. The files hold the figures the SLA page shows, with both methods side by side, and each is built when asked, from the figures already in the server's memory, and kept nowhere. A *Number and date style* button chooses how percentages and dates are written (a dot or a comma, three date shapes, and a comma or a semicolon between the fields of a CSV file) and never changes what a figure says. That is the part of HCML's automated reporting goal that is built. An administrator can also email the files, by hand or by a schedule that sends them by itself on a day of each month (see below).
+The portal hands a month, or a range of days, over as a file: a PDF to print or attach to an email, an Excel workbook to sort and total, and a zip of CSV files for a script or a spreadsheet that wants plain numbers. The files hold the figures the SLA page shows, with both methods side by side, and each is built when asked, from the figures already in the server's memory, and kept nowhere. A *Number and date style* button chooses how percentages and dates are written (a dot or a comma, three date shapes, and a comma or a semicolon between the fields of a CSV file) and never changes what a figure says. That is the part of HCML's automated reporting goal that is built. An administrator can also email the files, by hand or by a schedule that sends them by itself on a day of each month (see below).
+
+A *range* is the SLA page's "Range and hours of the day": any two whole hours, and if wanted only some hours of the day and some days of the week. Its file is the same file with the range in place of the month. It holds one figure for the whole range, not one for each month the range touches, and its first page, its period line and its notes say which hours were counted. Its Web checks table is there and empty, with the reason, because web checks are measured by calendar month. The schedule stays monthly: it sends the month that has just closed, and a range has no "next".
 
 The files are written by hand, with nothing but Node's own modules: no PDF library and no spreadsheet library ([decision record 11](../../architecture/adr/0011-build-the-sla-report-files-in-the-bff.md) has the reasoning and the price, which is that the project now owns two file formats and every reader's quirks).
 
 ## What the portal sends, and what comes back
 
-`GET /api/sli/export?month=YYYY-MM&format=pdf`, `format=xlsx` or `format=csv`. The format is required, and a missing or unknown one is a 400. The month is optional, and is the current one in the reporting time zone when missing. Three style options, `decimal`, `date` and `separator`, are optional too. The format is checked before Zabbix is asked anything, so a bad request costs nothing, and any other parameter is a 400, because a misspelt `month` would otherwise be ignored and the current month served in its place.
+`GET /api/sli/export?month=YYYY-MM&format=pdf`, `format=xlsx` or `format=csv`. The format is required, and a missing or unknown one is a 400. The month is optional, and is the current one in the reporting time zone when missing. For a range, `from` and `to` (Unix seconds, on the hour) take the place of the month, and `dayHours` (`8-17`) and `days` (`1,2,3,4,5`) say which hours of the day count, as on `/api/sli`; a month may carry `dayHours` and `days` too. A month and a range together are a 400. Three style options, `decimal`, `date` and `separator`, are optional too. The format, the range and the hours are checked before Zabbix is asked anything, so a bad request costs nothing (one function, `checkAsk` in `server/src/services/sliAsk.ts`, does it for the download and for the email), and any other parameter is a 400, because a misspelt `month` would otherwise be ignored and the current month served in its place.
 
 The route reads both methods through the same cached function the page uses, so a report the page already loaded is not computed again. It answers with the file and these headers:
 
 | Header | Value | Why |
 |---|---|---|
 | `Content-Type` | `application/pdf`, the Excel type or `application/zip` for the CSV files | |
-| `Content-Disposition` | An attachment named `HCML_SLA_Report_2026-08.pdf`, `.xlsx` or `_csv.zip` | The name comes from the validated month alone, so no request text reaches a header |
+| `Content-Disposition` | An attachment named `HCML_SLA_Report_2026-08.pdf`, `.xlsx` or `_csv.zip`; for a range the same start followed by the first and last day, as in `2026-08-03_to_2026-08-09`, and with hours of the day `_0800-1700_d12345` after the dates | The name comes from the validated month, or from the report's own dates and hours, which are numbers, so no request text reaches a header. Two files of the same days with other hours differ in name |
 | `Content-Length` | The size | |
 | `Cache-Control` | `private, no-store` | The file is for the person who asked, and the figures can move: the current month does, and a closed month is kept for a day and can still change when a maintenance period is edited or the readings behind the web checks age out |
 
@@ -35,7 +37,7 @@ Both always use the light colours, because they are printed and sent by email, w
 
 | Step | What | File |
 |---|---|---|
-| 1 | Both reports are read, strict and HCML's method | `server/src/services/sli.ts` |
+| 1 | The words of the request become one ask, and both reports are read, strict and HCML's method: a plain month through the monthly report, anything else through the window service | `server/src/services/sliAsk.ts`, `server/src/services/sli.ts` |
 | 2 | They become one document: tables, figures, bars, tones and notes, as a pure function with no Zabbix, no settings and no clock but the one it is given | `server/src/export/slaReport.ts`, `server/src/export/types.ts` |
 | 3 | The document becomes a PDF 1.4 file: A4 landscape, the standard Helvetica fonts so nothing is embedded, the whole layout done first so "Page x of y" is known, the logo read from an embedded PNG | `server/src/export/pdf.ts`, `pdfFonts.ts`, `logo.ts` |
 | 3 | Or an Excel file: SpreadsheetML written by hand, every string through the shared string table, so a device named `=HYPERLINK(...)` stays text and is never evaluated, and the parts in the order the schema wants, because Excel repairs a file that breaks it | `server/src/export/xlsx.ts`, `zip.ts` |
@@ -45,7 +47,7 @@ The wording of the report is the SLA page's own, copied, since the browser's bun
 
 ## The page's side
 
-`web/src/features/sla/ReportDownload.tsx` shows the three file buttons, PDF, Excel and CSV (the style button beside them opens the number and date choices). It fetches the file with an ordinary request, and hands it to the browser through a throwaway link that carries a name, since a blob has no name of its own. It revokes the link after 40 seconds, because Firefox and Safari can cancel a save whose address is revoked at once. It gives up after 440 seconds, a little under the page's own limit of 450 seconds for an SLA read, so the buttons never stay shut for good. It says the file is ready for six seconds. The file always holds both methods, so the toggle beside the buttons does not change it. The SLA page offers the buttons on its derived monthly view, for a calendar month only: the last 7 and 30 days have no month to report, so the buttons are left out there.
+`web/src/features/sla/ReportDownload.tsx` shows the three file buttons, PDF, Excel and CSV (the style button beside them opens the number and date choices). It takes a month or a range: on the range view the same three buttons and the email button sit in the controls row, named for the range in words, and they are off while the choice is not a range the server can be asked for. It fetches the file with an ordinary request, and hands it to the browser through a throwaway link that carries a name, since a blob has no name of its own. It revokes the link after 40 seconds, because Firefox and Safari can cancel a save whose address is revoked at once. It gives up after 440 seconds, a little under the page's own limit of 450 seconds for an SLA read, so the buttons never stay shut for good. It says the file is ready for six seconds. The file always holds both methods, so the toggle beside the buttons does not change it. The SLA page offers the buttons on its derived monthly view, for a calendar month only: the last 7 and 30 days have no month to report, so the buttons are left out there.
 
 The Graphs page has its own download, the points of Show data as a CSV file. Every CSV in the app goes through one writer, `web/src/shared/lib/csv.ts`, which guards against spreadsheet formulas: a text cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return gets a quote put in front of it, so that a spreadsheet reads it as text. A number is never changed, because its minus is a real sign.
 
@@ -59,7 +61,7 @@ The Graphs page has its own download, the points of Show data as a CSV file. Eve
 
 ## Emailing a report
 
-An administrator can send a month's report to people they choose, in the copy that uses Claude only: the other copy passes none of the mail settings to its container, so that nothing leaves the machine there. The *Email report* and *Schedule* buttons sit beside the download buttons, show only to administrators and only when email is set up. *Email report* opens a dialog that names the month and the sender and asks for the files (PDF, Excel, a CSV zip; several go in one message), for the addresses (a box that starts with the saved list; up to ten, in the allowed domains if the settings name any) and whether to keep the list for next time. The style comes from the *Number and date style* button.
+An administrator can send a month's report to people they choose, in either copy, once its settings name a mail account. The *Email report* and *Schedule* buttons sit beside the download buttons, show only to administrators and only when email is set up; while it is off, an administrator reads a note in their place that says so. *Email report* opens a dialog that names the month and the sender and asks for the files (PDF, Excel, a CSV zip; several go in one message), for the addresses (a box that starts with the saved list; up to ten, in the allowed domains if the settings name any) and whether to keep the list for next time. The style comes from the *Number and date style* button.
 
 The settings are the `MAIL_` variables in the root `.env`; [section 18 of the setup guide](../../setup/18-automated-reporting.md) has the table. `MAIL_PROVIDER` picks a preset (`gmail`, `yahoo`, `zoho`, `icloud`) or `smtp` for a server of your own. `MAIL_TO` is only the list the portal starts with and may be blank. `MAIL_ALLOWED_DOMAINS` limits where a report may go, and `MAIL_SCHEDULE=off` keeps the monthly send from running on a machine. With the provider settings blank, email is off and the buttons are not offered. With one that cannot be used, email stays off and the start-up log says which, without the password.
 
@@ -67,11 +69,11 @@ The settings are the `MAIL_` variables in the root `.env`; [section 18 of the se
 |---|---|---|
 | 1 | The settings become one checked object, with the reasons when they cannot be used | `server/src/core/mailConfig.ts`, read by `server/src/core/config.ts` |
 | 2 | The addresses typed are checked by one set of rules | `server/src/core/recipients.ts` |
-| 3 | The route checks the body, the settings, the month, the formats, the style and the recipients, and a month that ended less than ten minutes ago is refused, as the monthly send waits for it too, then the allowance of five sends an hour for each person | `server/src/routes/sliMail.ts`, `server/src/security/mailLimit.ts` |
+| 3 | The route checks the body, the settings, the month or the `window` (an object, since `to` is the list of people) and the hours, the formats, the style and the recipients, and a month or a range that ended less than ten minutes ago is refused, as the monthly send waits for it too, then the allowance of five sends an hour for each person | `server/src/routes/sliMail.ts`, `server/src/security/mailLimit.ts` |
 | 4 | The mail login is tried first, so a wrong password fails in a second | `server/src/services/sliMail.ts` |
-| 5 | The two reports are read, each file is built by the function the download uses, and the message is written from the first-page figures of the same document; a month in which neither method finds a device is not sent (502 `empty_report`, BK-51) | `server/src/services/sliMail.ts`, `server/src/services/sliExport.ts` |
+| 5 | The two reports are read, each file is built by the function the download uses, and the message is written from the first-page figures of the same document; a month or a range in which neither method finds a device is not sent (502 `empty_report`, BK-51), and what was kept of its months is dropped | `server/src/services/sliMail.ts`, `server/src/services/sliExport.ts` |
 | 6 | `nodemailer` sends one message with all the files over TLS or STARTTLS, so every address is in its To line and each person sees the other addresses (SC-50), and a failure becomes one fixed sentence for its kind | `server/src/clients/mail.ts` |
-| 7 | One log line says who sent which report to how many people and which domains, and a short record of the send is kept | `server/src/security/audit.ts`, `server/src/services/mailState.ts` |
+| 7 | One log line says who sent which report (the month, or the range and its hours) to how many people and which domains, and a short record of the send is kept for a plain month only: that list is the monthly schedule's book and is kept by month, so a range or a month in hours is in the log alone | `server/src/security/audit.ts`, `server/src/services/mailState.ts` |
 
 `nodemailer` is the library added for email, and it has none of its own to bring. The PDF, Excel and CSV writers need no library.
 
@@ -86,13 +88,13 @@ What to know about it:
 
 ## The monthly send
 
-An administrator can set the report to go by itself: a day of the month (1 to 28) and a time, the files, the people, the style, and up to three people to tell when a send fails. The default the owner asked for is the first of the month at midnight. The *Schedule* dialog shows when the next send is, and the last twelve.
+An administrator can set the report to go by itself: a day of the month (1 to 28) and a time, the files, the people, the style, and up to three people to tell when a send fails. The default we asked for is the first of the month at midnight. The *Schedule* dialog shows when the next send is, and the last twelve.
 
 How it works, in short. Once a minute a scheduler inside the server asks a small pure function what is due: the report of a month goes on the chosen day of the month after it, at the chosen time, plus ten minutes for Zabbix to hold the last values. A send that fails is tried again after 15 minutes, an hour, and every four hours for a week, and the people to tell get one message after the third failure, one when the portal gives up, one if the portal was not running for the whole week, one that names every older month it skipped because it was off when the slot came (BK-45), and one if the mail server refused some of the addresses of a send that went. Each step is written to the portal's small state file first, so a restart carries on, and a month is sent at least once. [Decision record 15](../../architecture/adr/0015-keep-a-small-state-file-for-recipients-and-the-schedule.md) has the reasons and the price.
 
 What to know about it:
 
-- **It needs a place to keep the schedule.** The hosted copy's compose file mounts a volume for `portal-state.json`. Without it the dialog says the schedule cannot be used, and refuses to save one that would not survive a restart.
+- **It needs a place to keep the schedule.** Each copy's compose file mounts a volume for `portal-state.json`. Without it the dialog says the schedule cannot be used, and refuses to save one that would not survive a restart.
 - **It runs only while the portal runs and can reach Zabbix.** The Mac the portal runs on sleeps and leaves HCML's network, so a send may be made hours or days late; after a week it is marked failed, or missed if the portal never started a try. HCML's server is the proper home (IN-43).
 - **At least once, not exactly once.** A crash at the wrong moment sends a month twice.
 - **Move it with the portal.** Copy `portal-state.json` to the new volume, or set the schedule again, and switch the old one off with `MAIL_SCHEDULE=off` so that two portals do not both send.
@@ -107,6 +109,7 @@ What to know about it:
 | What | File |
 |---|---|
 | The route and the file cache | `server/src/routes/sliExport.ts`, `server/src/services/sliExport.ts` |
+| What was asked for: month, range, hours | `server/src/services/sliAsk.ts` |
 | The document and the writers | `server/src/export/` |
 | The buttons | `web/src/features/sla/ReportDownload.tsx` |
 | The email button and its dialog | `web/src/features/sla/EmailReport.tsx` |

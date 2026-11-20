@@ -1,6 +1,6 @@
 # API documentation
 
-[`openapi.yaml`](openapi.yaml) is the contract for the BFF: 51 endpoints (42 GET, 6 POST, 2 PUT and 1 DELETE), with
+[`openapi.yaml`](openapi.yaml) is the contract for the BFF: 61 endpoints (45 GET, 12 POST, 2 PUT, 1 PATCH and 1 DELETE), with
 every query parameter, both security schemes, every status code and every response schema.
 Fastify's own client errors can come back from any POST and are not repeated per route: 400
 `fst_err_ctp_invalid_json_body` for malformed JSON, and 415 for a content type Fastify has no
@@ -51,7 +51,7 @@ passing everything.
 Expected output:
 
 ```
-openapi.check: 51 endpoints (1 DELETE + 42 GET + 6 POST + 2 PUT), all documented, none extra. Methods and path parameters agree; ...
+openapi.check: 61 endpoints (1 DELETE + 45 GET + 1 PATCH + 12 POST + 2 PUT), all documented, none extra. Methods and path parameters agree; ...
 ```
 
 **Run it after adding a route, and after editing the spec.** It is the reason this document will not
@@ -75,8 +75,8 @@ change its schema in the same commit.
   any more, the live stream included: `EventSource` sends the cookie
   ([ADR-0010](../architecture/adr/0010-session-cookie.md)).
 - A cookie request that changes something needs `X-HCML-CSRF: 1`. Every POST, PUT, PATCH or DELETE that authenticates with the cookie
-  (the schedule and the saved list of recipients are PUT and DELETE), and every sign-in and sign-out, is refused with `403 csrf` without it,
-  or when its `Origin` names another host. A Bearer request needs neither, except to sign in or out.
+  (the schedule and the saved list of recipients are PUT and DELETE), and every sign-in, sign-out and request for an account, is refused with `403 csrf` without it,
+  or when its `Origin` names another host. A Bearer request needs neither, except to sign in or out or to ask for an account.
 - Sign-in returns no token. `POST /api/auth/login` and `POST /api/auth/refresh` answer
   `{ user, expiresIn }` and set the cookie. A script takes the token from `Set-Cookie`. `expiresIn` is the
   session length in seconds: 43200 at the default 12 hours (`SESSION_HOURS`).
@@ -114,4 +114,4 @@ change its schema in the same commit.
 - Three endpoints are not JSON at all: `GET /api/stream` and `POST /api/chat` are
   `text/event-stream`, and their event names and frame payloads are in the operation descriptions.
   `GET /api/sli/export` answers a PDF, an Excel file or a zip of CSV files. It needs `format=pdf`, `format=xlsx` or `format=csv` (there
-  is no default), takes no other parameter than `month` and the style (`decimal`, `date`, `separator`; any other is a 400), is never compressed, and carries `Cache-Control: private, no-store`.
+  is no default), takes no other parameter than `month`, the range (`from`, `to`, `dayHours`, `days`) and the style (`decimal`, `date`, `separator`; any other is a 400), is never compressed, and carries `Cache-Control: private, no-store`.

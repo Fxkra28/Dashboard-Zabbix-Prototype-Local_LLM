@@ -90,16 +90,19 @@ export interface CapacityRow {
 export interface CapacityReport {
   days: number;
   metrics: { key: string; label: string; rows: CapacityRow[] }[];
+  /** Unix seconds when this report was built. The list of busiest interfaces is chosen at that moment, from their latest rate, and only then ranked by the days. */
+  generatedAt: number;
 }
 
-/** Running avg/max per item, folded row by row so a year of trends is never held at once. */
-type Aggregates = Map<string, { sum: number; n: number; max: number }>;
+/** Running avg, max and min per item, folded row by row so a year of trends is never held at once. */
+type Aggregates = Map<string, { sum: number; n: number; max: number; min: number }>;
 
-function addSample(agg: Aggregates, itemid: string, avg: number, max: number): void {
-  const a = agg.get(itemid) ?? { sum: 0, n: 0, max: -Infinity };
+function addSample(agg: Aggregates, itemid: string, avg: number, max: number, min: number = max): void {
+  const a = agg.get(itemid) ?? { sum: 0, n: 0, max: -Infinity, min: Infinity };
   a.sum += avg;
   a.n++;
   a.max = Math.max(a.max, max);
+  a.min = Math.min(a.min, min);
   agg.set(itemid, a);
 }
 
@@ -135,15 +138,15 @@ export async function getCapacity(days: number, top: number): Promise<CapacityRe
   // what Zabbix's PHP can answer (a year in one request was an HTTP 500) and
   // at most `maxParallel` requests run at once, whatever the metric count.
   const trendAgg: Aggregates = new Map();
-  await fetchTrendsSliced<{ itemid: string; value_avg: string; value_max: string }>(
+  await fetchTrendsSliced<{ itemid: string; value_avg: string; value_max: string; value_min: string }>(
     [...new Set(matched.flat().map((i) => i.itemid))],
     from,
     to,
-    ['itemid', 'value_avg', 'value_max'],
+    ['itemid', 'value_avg', 'value_max', 'value_min'],
     {
       parallel: config.sla.maxParallel,
       onRows: (rows) => {
-        for (const r of rows) addSample(trendAgg, r.itemid, Number(r.value_avg), Number(r.value_max));
+        for (const r of rows) addSample(trendAgg, r.itemid, Number(r.value_avg), Number(r.value_max), Number(r.value_min));
       },
     },
   );
@@ -176,7 +179,7 @@ export async function getCapacity(days: number, top: number): Promise<CapacityRe
         });
         if (!hist.length) source = 'none';
         agg = new Map();
-        for (const h of hist) addSample(agg, h.itemid, Number(h.value), Number(h.value));
+        for (const h of hist) addSample(agg, h.itemid, Number(h.value), Number(h.value), Number(h.value));
       }
 
       const t = m.transform ?? ((v: number) => v);
@@ -186,7 +189,8 @@ export async function getCapacity(days: number, top: number): Promise<CapacityRe
           const a = agg.get(i.itemid)!;
           const host = i.hosts?.[0];
           const avg = a.n ? t(a.sum / a.n) : 0;
-          const max = Number.isFinite(a.max) ? t(a.max) : 0;
+          // A disk that reports its free space (FortiGate): its peak use is 100 less the lowest free value it had, which is the aggregate minimum of the free item. The maximum of the free item is the lowest use (BK-93).
+          const max = m.transform ? (Number.isFinite(a.min) ? t(a.min) : 0) : Number.isFinite(a.max) ? a.max : 0;
           return {
             metric: m.key,
             label: m.label,
@@ -195,7 +199,6 @@ export async function getCapacity(days: number, top: number): Promise<CapacityRe
             host: host?.name ?? '',
             name: i.name,
             units: i.units || '%',
-            // For free→used the aggregate max of free is the minimum of used.
             avg,
             max: m.transform ? Math.max(avg, max) : max,
             source,
@@ -228,7 +231,8 @@ export async function getCapacity(days: number, top: number): Promise<CapacityRe
   });
 
   metrics.push(await interfaceUtilisation(from, to, top));
-  return { days, metrics };
+  // When the report was built: the busiest interfaces are those of that moment (below), and the page says so (BK-92).
+  return { days, metrics, generatedAt: Math.floor(Date.now() / 1000) };
 }
 
 /**
@@ -289,7 +293,7 @@ async function interfaceUtilisation(
       onRows: (rows) => {
         trendRows += rows.length;
         for (const r of rows) {
-          const a = agg.get(r.itemid) ?? { sum: 0, n: 0, max: 0 };
+          const a = agg.get(r.itemid) ?? { sum: 0, n: 0, max: 0, min: 0 };
           a.sum += Number(r.value_avg);
           a.n++;
           a.max = Math.max(a.max, Number(r.value_max));

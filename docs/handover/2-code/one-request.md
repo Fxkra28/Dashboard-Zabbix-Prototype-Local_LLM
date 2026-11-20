@@ -4,7 +4,7 @@
 |---|---|---|---|
 | Developers | about 5 min | [The folders of the server](../1-folders/server.md) | [Server: the core and the clients](server-core-and-clients.md) |
 
-This page follows one request from the browser to Zabbix and back, in the order the code runs it. It is the map of the server chapters that come after it. Each step says where it is in the code and which chapter walks through it. The request is an ordinary read, `GET /api/hosts/overview`, asked by a signed-in viewer.
+This page follows one request from the browser to Zabbix and back, in the order the code runs it. It is the map of the server chapters that come after it. Each step says where it is in the code and which chapter walks through it. The request is an ordinary read, `GET /api/hosts/overview`, asked by a signed-in guest.
 
 The repository already has a sequence diagram of the same path, [ServerFlow](../../flow/ServerFlow.pdf), and the nine flows in words in [the flow page](../../flow/README.md). This page does not repeat them. It adds the code behind each step, and the checks that a diagram has no room for.
 

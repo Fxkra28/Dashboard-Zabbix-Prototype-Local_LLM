@@ -227,7 +227,7 @@ describe('the Host check hook', () => {
     const index = readFileSync(new URL('../index.ts', import.meta.url), 'utf8');
     const hook = index.indexOf('registerHostCheck(app)');
     expect(hook).toBeGreaterThan(-1);
-    for (const later of ['await app.register(cors', 'await registerRateLimit(app)', 'await setupAuth(app)', 'await app.register(hostRoutes)']) {
+    for (const later of ['await app.register(cors', 'await registerRateLimit(app)', 'await setupAuth(app, userDirectory())', 'await app.register(hostRoutes)']) {
       expect(index.indexOf(later), later).toBeGreaterThan(hook);
     }
   });

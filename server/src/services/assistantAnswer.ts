@@ -49,31 +49,47 @@ export function cleanAnswer(raw: string): string {
  * send `delta.reasoning` frames with empty `content`: those are dropped, so
  * only what the reader should see is yielded. A frame that carries `usage` (a gateway asked for it with `stream_options`) goes to `onCounts`.
  */
-export async function* readOpenAiStream(body: ReadableStream<Uint8Array>, onCounts?: (counts: ModelCounts) => void): AsyncGenerator<string> {
+export async function* readOpenAiStream(
+  body: ReadableStream<Uint8Array>,
+  onCounts?: (counts: ModelCounts) => void,
+  onFinish?: (info: { truncated: boolean }) => void,
+): AsyncGenerator<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
+  // The reason the model gave for stopping, if any: `length` is an answer cut at the token limit, and a stream that ends with neither a reason nor [DONE] was cut short (BK-91).
+  let finish: string | null = null;
   try {
     for (;;) {
       const { value, done } = await reader.read();
-      if (done) return;
-      buf += decoder.decode(value, { stream: true });
+      // At the end, what is left is a last line with no newline after it, and it is a line all the same: a server may close the connection right after `data: [DONE]`.
+      buf += done ? `${decoder.decode()}\n` : decoder.decode(value, { stream: true });
       let nl: number;
       while ((nl = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, nl).trimEnd();
         buf = buf.slice(nl + 1);
         if (!line.startsWith('data:')) continue;
         const data = line.slice(5).trim();
-        if (data === '[DONE]') return;
-        let frame: { choices?: { delta?: { content?: string | null } }[]; usage?: { total_tokens?: number; prompt_tokens?: number; completion_tokens?: number } | null };
+        if (data === '[DONE]') {
+          onFinish?.({ truncated: finish === 'length' });
+          return;
+        }
+        let frame: { choices?: { delta?: { content?: string | null }; finish_reason?: string | null }[]; usage?: { total_tokens?: number; prompt_tokens?: number; completion_tokens?: number } | null };
         try {
           frame = JSON.parse(data);
         } catch {
           continue; // a partial or malformed frame; the next one carries on
         }
         if (frame.usage) onCounts?.({ total: frame.usage.total_tokens, prompt: frame.usage.prompt_tokens, completion: frame.usage.completion_tokens });
+        const reason = frame.choices?.[0]?.finish_reason;
+        if (reason) finish = reason;
         const piece = frame.choices?.[0]?.delta?.content;
         if (piece) yield piece;
+      }
+      if (done) {
+        if (finish === null) throw new AiUpstreamError(AI_MESSAGE.stopped, `${config.ai.model} ended its stream before [DONE] or a finish reason`);
+        onFinish?.({ truncated: finish === 'length' });
+        return;
       }
     }
   } finally {
@@ -85,7 +101,7 @@ type Message = { role: string; content: string };
 
 const sizeOf = (messages: Message[]) => messages.reduce((n, m) => n + m.content.length, 0);
 
-async function* streamOpenAiCompatible(messages: Message[], signal: AbortSignal, onUsage?: OnUsage): AsyncGenerator<string> {
+async function* streamOpenAiCompatible(messages: Message[], signal: AbortSignal, onUsage?: OnUsage, onFinish?: AnswerOptions['onFinish']): AsyncGenerator<string> {
   let counts: ModelCounts | null = null;
   let answered = 0;
   let started = false;
@@ -105,7 +121,7 @@ async function* streamOpenAiCompatible(messages: Message[], signal: AbortSignal,
     );
     if (!res.body) throw new AiUpstreamError(AI_MESSAGE.unusable, `${config.ai.model}: HTTP ${res.status} empty response`);
     started = true;
-    for await (const piece of readOpenAiStream(res.body, (c) => (counts = c))) {
+    for await (const piece of readOpenAiStream(res.body, (c) => (counts = c), onFinish)) {
       answered += piece.length;
       yield piece;
     }
@@ -121,6 +137,7 @@ async function* streamOllama(
   signal: AbortSignal,
   onStats?: (stats: OllamaStats) => void,
   onUsage?: OnUsage,
+  onFinish?: AnswerOptions['onFinish'],
 ): AsyncGenerator<string> {
   let counts: ModelCounts | null = null;
   let answered = 0;
@@ -136,6 +153,7 @@ async function* streamOllama(
     const onDone = (stats: OllamaStats) => {
       counts = { prompt: stats.promptEvalCount, completion: stats.evalCount };
       onStats?.(stats);
+      onFinish?.({ truncated: stats.doneReason === 'length' });
     };
     for await (const piece of readOllamaStream(res.body, onDone)) {
       answered += piece.length;
@@ -151,6 +169,7 @@ async function* streamAnthropic(
   turns: ChatTurn[],
   signal: AbortSignal,
   onUsage?: OnUsage,
+  onFinish?: AnswerOptions['onFinish'],
 ): AsyncGenerator<string> {
   // What the hosted API says it billed: input from the first event, output from the last.
   // A reader who stops early, or a stream with no counts, is charged by size instead.
@@ -164,7 +183,10 @@ async function* streamAnthropic(
     );
     for await (const event of stream) {
       if (event.type === 'message_start') input = billedTokens({ ...event.message.usage, output_tokens: 0 });
-      else if (event.type === 'message_delta') output = event.usage.output_tokens;
+      else if (event.type === 'message_delta') {
+        output = event.usage.output_tokens;
+        if (event.delta?.stop_reason) onFinish?.({ truncated: event.delta.stop_reason === 'max_tokens' });
+      }
       else if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
         answered += event.delta.text.length;
         yield event.delta.text;
@@ -189,6 +211,17 @@ export interface AnswerOptions {
   onStats?: (stats: OllamaStats) => void;
   /** Tokens the answer was billed, once, when it ends however it ends, for the hosted API and for a model outside the network (limits.ts `chargeTo`). */
   onUsage?: OnUsage;
+  /** The language the user chose, which decides a message that the word lists cannot place. */
+  language?: 'en' | 'id' | null;
+  /** The line that names the parts of the estate this user's pages do not show (`withheldLine`), or null for a user who is shown all of it. */
+  withheld?: string | null;
+  /** Called once when the model has ended its answer, with whether it stopped at its token limit and so ends mid-thought (BK-91). */
+  onFinish?: (info: { truncated: boolean }) => void;
+}
+
+/** The system text of one question: the snapshot first, which is unchanged while the snapshot is, then the focus and language lines that differ per question. */
+export function chatSystem(snapshot: string, latest: string, { focus, language, withheld }: Pick<AnswerOptions, 'focus' | 'language' | 'withheld'> = {}): string {
+  return [systemText(snapshot), withheld, focus, languageReminder(latest, language)].filter(Boolean).join('\n\n');
 }
 
 /**
@@ -204,12 +237,12 @@ export async function* streamAnswer(
   turns: ChatTurn[],
   snapshot: string,
   signal?: AbortSignal,
-  { focus, onStats, onUsage }: AnswerOptions = {},
+  { focus, onStats, onUsage, language, withheld, onFinish }: AnswerOptions = {},
 ): AsyncGenerator<string> {
   if (!config.ai.enabled) throw new AiDisabledError();
 
   const latest = [...turns].reverse().find((t) => t.role === 'user')?.content ?? '';
-  const system = [systemText(snapshot), focus, languageReminder(latest)].filter(Boolean).join('\n\n');
+  const system = chatSystem(snapshot, latest, { focus, language, withheld });
   const local = config.ai.provider === 'openai-compatible';
 
   // One local model request at a time, and AI_MAX_CONCURRENT hosted ones (ai.ts).
@@ -221,12 +254,12 @@ export async function* streamAnswer(
 
   try {
     if (!local) {
-      yield* streamAnthropic(system, turns, combined, onUsage);
+      yield* streamAnthropic(system, turns, combined, onUsage, onFinish);
       return;
     }
     const messages = [{ role: 'system', content: system }, ...turns];
-    if (await usesOllamaNative()) yield* streamOllama(messages, combined, onStats, onUsage);
-    else yield* streamOpenAiCompatible(messages, combined, onUsage);
+    if (await usesOllamaNative()) yield* streamOllama(messages, combined, onStats, onUsage, onFinish);
+    else yield* streamOpenAiCompatible(messages, combined, onUsage, onFinish);
   } catch (err) {
     // The timeout covers the whole answer, not just the first byte, so one that fires mid-stream
     // becomes a readable error instead of the bare DOMException ("The operation was aborted due to

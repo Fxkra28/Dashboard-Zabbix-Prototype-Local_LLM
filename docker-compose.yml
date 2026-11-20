@@ -32,7 +32,7 @@ services:
     environment:
       # HCML's Zabbix. Where the name does not lead to its LAN address, docker-compose.override.yml
       # maps it for this machine only, so the certificate is still checked against the name.
-      ZBX_URL: ${ZBX_URL:-https://zabbix.hcml.co.id/zabbix/api_jsonrpc.php}
+      ZBX_URL: ${ZBX_URL:-https://zabbix.example.com/zabbix/api_jsonrpc.php}
       # Canonical name. ZBX_TOKEN is a deprecated alias that trips a startup
       # warning on every boot, so it is deliberately not what compose passes.
       ZABBIX_API_TOKEN: ${ZABBIX_API_TOKEN:-}
@@ -86,7 +86,7 @@ services:
       SLI_ZBX_PARALLEL: ${SLI_ZBX_PARALLEL:-4}
       # Spans the SLA figures treat as hours with no data, such as a collector cut off from the network.
       SLA_NO_DATA_WINDOWS: ${SLA_NO_DATA_WINDOWS:-}
-      # This copy exists so estate data never leaves the machine, so the
+      # This copy exists so no question about the estate leaves the machine, so the
       # provider is fixed rather than a default: a missing or mistyped
       # AI_PROVIDER in .env used to fall back to "anthropic", and a key exported
       # in the shell would then have been used. No Anthropic
@@ -114,8 +114,9 @@ services:
       AI_KEEP_ALIVE: ${AI_KEEP_ALIVE:-30m}
       AI_OLLAMA_NATIVE: ${AI_OLLAMA_NATIVE:-auto}
       AI_NUM_CTX: ${AI_NUM_CTX:-8192}
-      AI_TEMPERATURE: ${AI_TEMPERATURE:-0.7}
-      AI_TOP_P: ${AI_TOP_P:-0.8}
+      # Empty: the model's own card decides (clients/ai.ts `modelProfile`), and config.ts's 0.7 / 0.8 stand for a model it does not know. Setting one overrules the card.
+      AI_TEMPERATURE: ${AI_TEMPERATURE:-}
+      AI_TOP_P: ${AI_TOP_P:-}
       # Caps on Explain and the Assistant (server/src/clients/limits.ts).
       # Per signed-in user a minute, calls in flight at once, and tokens a day
       # (0 turns a budget off; only the hosted API is counted).
@@ -124,10 +125,21 @@ services:
       AI_MAX_CONCURRENT: ${AI_MAX_CONCURRENT:-4}
       AI_DAILY_TOKENS_PER_USER: ${AI_DAILY_TOKENS_PER_USER:-500000}
       AI_DAILY_TOKENS_TOTAL: ${AI_DAILY_TOKENS_TOTAL:-2000000}
-      # No MAIL_ settings here, on purpose: this copy exists so that nothing leaves the machine, so it never emails a report.
-      # hcml-portal passes them. compose-env.test.ts pins the difference (ADR-0014).
-      # Where the portal keeps the web check figures of the months that have closed (services/closedWebStore.ts, ADR 0016): the volume at the bottom of this file.
-      # No recipients or schedule here: this copy never emails.
+      # Emailing the SLA report (server/src/core/mailConfig.ts), as in hcml-portal (FR-56). All blank = off, and administrators read a note instead of the Email button.
+      # The login is a secret: it goes in .env, never in this file. The report is the one thing this copy sends out; no question goes to a model outside this machine.
+      MAIL_PROVIDER: ${MAIL_PROVIDER:-}
+      MAIL_HOST: ${MAIL_HOST:-}
+      MAIL_PORT: ${MAIL_PORT:-}
+      MAIL_SECURITY: ${MAIL_SECURITY:-}
+      MAIL_USER: ${MAIL_USER:-}
+      MAIL_PASS: ${MAIL_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-}
+      MAIL_TO: ${MAIL_TO:-}
+      # The domains a report may go to (blank: any), and "off" to keep the monthly send from running on this machine.
+      MAIL_ALLOWED_DOMAINS: ${MAIL_ALLOWED_DOMAINS:-}
+      MAIL_SCHEDULE: ${MAIL_SCHEDULE:-}
+      # Where the portal keeps its small files of its own (core/state.ts, services/closedWebStore.ts): the volume at the bottom of this file.
       PORTAL_STATE_DIR: /data
       # Deployed, not scaffolded: default auth ON here.
       AUTH_ENABLED: ${AUTH_ENABLED:-true}
@@ -147,6 +159,10 @@ services:
       # How long one sign-in lasts, in hours, and the number that ends every session when it is
       # raised. Each default is config.ts's own; a test keeps the two equal.
       SESSION_HOURS: ${SESSION_HOURS:-12}
+      # Requests for an account (FR-62): a form on the sign-in page. Off unless "true"; the two numbers cap what a stranger can leave (server/src/services/accountRequests.ts).
+      ACCOUNT_REQUESTS: ${ACCOUNT_REQUESTS:-}
+      ACCOUNT_REQUESTS_MAX_PENDING: ${ACCOUNT_REQUESTS_MAX_PENDING:-50}
+      ACCOUNT_REQUESTS_PER_ADDRESS: ${ACCOUNT_REQUESTS_PER_ADDRESS:-3}
       SESSION_EPOCH: ${SESSION_EPOCH:-1}
       # The BFF's own copy of its log, in the volume at the bottom of this file, so what was logged outlives a rebuild
       # (core/logFile.ts). The two numbers set how much it keeps: this many files of this many megabytes each.
@@ -166,7 +182,7 @@ services:
       start_period: 15s
     # Least privilege. This container holds both Zabbix tokens and the AI key, so it
     # runs as the image's non-root node user, with every Linux capability dropped, a
-    # read-only root filesystem and no way to gain privileges. It writes only to two volumes, the web check figures of closed months
+    # read-only root filesystem and no way to gain privileges. It writes only to two volumes, its small files of its own
     # at /data and its own copy of the log at /var/log/portal; /tmp is a small in-memory scratch space.
     read_only: true
     tmpfs:
@@ -237,8 +253,10 @@ services:
   #   image: redis:7-alpine
   #   restart: unless-stopped
 
-# The web check figures of the months that have closed (services/closedWebStore.ts), kept as they were when first read. A named volume, so it
-# outlives a rebuild. `docker compose down -v` deletes it, and so does removing the volume by hand; the figures are then taken again from Zabbix.
+# The portal's small files of its own: the users made on the Users page and the requests for an account (security/userStore.ts, security/requestStore.ts),
+# the saved recipients, the monthly schedule and a record of what was sent (core/state.ts), and the web check figures of the months that have closed
+# (services/closedWebStore.ts, ADR 0016).
+# A named volume, so it outlives a rebuild. `docker compose down -v` deletes it, and so does removing the volume by hand.
 volumes:
   portal-state:
 

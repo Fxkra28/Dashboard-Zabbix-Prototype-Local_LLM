@@ -25,16 +25,16 @@ describe('PORTAL_USERS entries (SC-22)', () => {
     expect((await signIn('budi', 'plain-pass')).statusCode).toBe(200);
   });
 
-  it('still reads name:password with no role as a viewer, and a trailing colon the same', async () => {
+  it('still reads name:password with no role as a guest, and a trailing colon the same', async () => {
     const { signIn } = await buildAuthApp({ PORTAL_USERS: 'cici:only-pass,dede:other-pass:' });
-    expect((await signIn('cici', 'only-pass')).json().user).toEqual({ name: 'cici', role: 'viewer' });
-    expect((await signIn('dede', 'other-pass')).json().user).toEqual({ name: 'dede', role: 'viewer' });
+    expect((await signIn('cici', 'only-pass')).json().user).toEqual({ name: 'cici', role: 'guest' });
+    expect((await signIn('dede', 'other-pass')).json().user).toEqual({ name: 'dede', role: 'guest' });
   });
 
-  it('reads an entry whose last part is not a role as before: that part is an unknown role, a viewer, and no warning shows it', async () => {
+  it('reads an entry whose last part is not a role as before: that part is an unknown role, a guest, and no warning shows it', async () => {
     const { signIn, warnings } = await buildAuthApp({ PORTAL_USERS: 'eko:the-pass:vewer,fifi:fine-pass:admin' });
     const eko = await signIn('eko', 'the-pass');
-    expect(eko.json().user).toEqual({ name: 'eko', role: 'viewer' });
+    expect(eko.json().user).toEqual({ name: 'eko', role: 'guest' });
     const all = warnings().join(' ');
     expect(all).toContain('PORTAL_USERS entry for "eko" has an unknown role');
     for (const secret of ['the-pass', 'vewer', 'fine-pass']) expect(all).not.toContain(secret);
@@ -117,17 +117,18 @@ describe('names without regard to case (FR-13)', () => {
   it('lets two entries that differ only by case each sign in with their own password, the spelling typed first', async () => {
     const { signIn, warnings } = await buildAuthApp({ PORTAL_USERS: 'Ana:pass-one:viewer,ana:pass-two:admin' });
     expect((await signIn('ana', 'pass-two')).json().user).toEqual({ name: 'ana', role: 'admin' });
-    expect((await signIn('ANA', 'pass-one')).json().user).toEqual({ name: 'Ana', role: 'viewer' });
-    expect((await signIn('Ana', 'pass-one')).json().user).toEqual({ name: 'Ana', role: 'viewer' });
+    expect((await signIn('ANA', 'pass-one')).json().user).toEqual({ name: 'Ana', role: 'guest' });
+    expect((await signIn('Ana', 'pass-one')).json().user).toEqual({ name: 'Ana', role: 'guest' });
     expect((await signIn('ANA', 'pass-two')).json().user).toEqual({ name: 'ana', role: 'admin' });
     expect(warnings().join(' ')).toContain('differ only by case');
   });
 
   it('when two such entries share a password, signs in the one spelled as typed, and the first for any other case', async () => {
+    // The break-glass account is the first administrator, so it comes first whatever its place in the list; the rule of the name typed first is unchanged.
     const { signIn } = await buildAuthApp({ PORTAL_USERS: 'Ana:same-pass:viewer,ana:same-pass:admin' });
     expect((await signIn('ana', 'same-pass')).json().user).toEqual({ name: 'ana', role: 'admin' });
-    expect((await signIn('Ana', 'same-pass')).json().user).toEqual({ name: 'Ana', role: 'viewer' });
-    expect((await signIn('ANA', 'same-pass')).json().user).toEqual({ name: 'Ana', role: 'viewer' });
+    expect((await signIn('Ana', 'same-pass')).json().user).toEqual({ name: 'Ana', role: 'guest' });
+    expect((await signIn('ANA', 'same-pass')).json().user).toEqual({ name: 'ana', role: 'admin' });
   });
 
   it('counts "ANA" and "ana" as one account for the lock, so changing case does not buy more guesses', async () => {
@@ -235,11 +236,11 @@ describe('the first PORTAL_USERS entry (MT-06)', () => {
   it('replaces PORTAL_USER and PORTAL_PASS, so a new wall account needs the admin listed beside it', async () => {
     const wall = await hashPassword('wall-screen-pass', CHEAP);
     const alone = await buildAuthApp({ PORTAL_USERS: `wall:${wall}:wall`, PORTAL_USER: 'boss', PORTAL_PASS: 'boss-pass' });
-    expect((await alone.signIn('wall', 'wall-screen-pass')).json().user).toEqual({ name: 'wall', role: 'wall' });
+    expect((await alone.signIn('wall', 'wall-screen-pass')).json().user).toEqual({ name: 'wall', role: 'guest' });
     expect((await alone.signIn('boss', 'boss-pass')).statusCode).toBe(401);
     await closeAuthApps();
     const both = await buildAuthApp({ PORTAL_USERS: `boss:boss-pass:admin,wall:${wall}:wall` });
     expect((await both.signIn('boss', 'boss-pass')).json().user).toEqual({ name: 'boss', role: 'admin' });
-    expect((await both.signIn('wall', 'wall-screen-pass')).json().user).toEqual({ name: 'wall', role: 'wall' });
+    expect((await both.signIn('wall', 'wall-screen-pass')).json().user).toEqual({ name: 'wall', role: 'guest' });
   });
 });

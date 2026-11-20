@@ -1,5 +1,5 @@
 import { naturalCompare, type SiteRef } from '../domain/naming.js';
-import type { DataStatus, SliGroup, SliHost, SliReport } from '../sli/engine.js';
+import type { DailyHours, DataStatus, SliGroup, SliHost, SliReport } from '../sli/engine.js';
 import { DEFAULT_STYLE, type ReportStyle } from '../core/reportChoices.js';
 import type { BarChart, Cell, Kpi, Note, ReportDoc, Table, Tone } from './types.js';
 
@@ -105,7 +105,16 @@ const percent = (v: number | null, target: number, style: ReportStyle): Cell =>
   v === null ? noData() : { text: percentText(v, target, style.decimal), n: v, tone: toneOf(v, target) };
 const duration = (seconds: number | null): Cell =>
   seconds === null ? noData() : { text: durationText(seconds), n: seconds };
-const coverage = (c: number): Cell => ({ text: `${Math.round(c * 100)}%`, n: c * 100 });
+/**
+ * The share of the period a device was measured, as the page writes it: a whole number, but never 100 below 100, as the figures are not (BK-83). A device that missed three hours of a month is at 99.6 percent, which
+ * 100% would hide, and the Excel file holds 99.6 too.
+ */
+export const coverageCell = (c: number, style: ReportStyle): Cell => {
+  const pct = c * 100;
+  const whole = Math.round(pct);
+  const text = whole >= 100 && pct < 100 ? `${Math.floor(pct * 10) / 10}%` : `${whole}%`;
+  return { text: style.decimal === 'comma' ? text.replace('.', ',') : text, n: pct };
+};
 
 /** Met, Missed or No data in words, so the verdict never rests on colour. */
 const verdict = (v: number | null, target: number): Cell =>
@@ -157,30 +166,65 @@ const stampText = (z: Zoned, d: DateStyle) => `${dateText(z, d)} ${hourText(z)}`
 /** The last second the figures cover: the month's own end once it has closed. */
 const lastSecond = (r: SliReport) => (r.closed ? r.to - 1 : r.end);
 
+/** A range of days, or a month in the hours of the day: it has no web checks, which are measured by calendar month. */
+const isRange = (r: SliReport) => r.month === null || r.dailyHours !== undefined;
+
+const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const twoDigits = (n: number) => String(n).padStart(2, '0');
+
+/** "Monday to Friday", "Saturday and Sunday" or "every day". Copied from web/src/features/sla/rangeWindow.ts, as the other words are. */
+function daysWords(days: number[] | null): string {
+  const set = [...new Set(days ?? [])].sort((a, b) => a - b);
+  if (set.length === 0 || set.length === 7) return 'every day';
+  const names = set.map((day) => WEEKDAYS[day - 1]!);
+  if (set.length >= 3 && set.every((day, i) => i === 0 || day === set[i - 1]! + 1)) return `${names[0]} to ${names[names.length - 1]}`;
+  return names.length === 1 ? names[0]! : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+/** "08:00 to 17:00, Monday to Friday": the hours the figures were counted in. */
+function hoursWords(h: DailyHours): string {
+  const clock = `${twoDigits(h.start)}:00 to ${twoDigits(h.end)}:00`;
+  const when = h.start === 0 && h.end === 24 ? 'all day' : h.end <= h.start ? `${clock} the next morning` : clock;
+  return `${when}, ${daysWords(h.weekdays)}`;
+}
+
+/** The part of a file name that tells two files of the same days apart: `_0800-1700_d12345`. */
+function hoursTag(h: DailyHours | undefined): string {
+  if (!h) return '';
+  const span = h.start === 0 && h.end === 24 ? '' : `_${twoDigits(h.start)}00-${twoDigits(h.end)}00`;
+  return `${span}${h.weekdays ? `_d${h.weekdays.join('')}` : ''}`;
+}
+
 function subtitleOf(r: SliReport, at: Clock, d: DateStyle): string {
+  const hours = r.dailyHours ? `, ${hoursWords(r.dailyHours)}` : '';
   const month = r.month ? MONTH_RE.exec(r.month) : null;
-  if (month) return `${MONTHS[Number(month[2]) - 1]} ${month[1]}`;
+  if (month) return `${MONTHS[Number(month[2]) - 1]} ${month[1]}${hours}`;
   const first = dateText(at(r.from), d);
   const last = dateText(at(lastSecond(r)), d);
-  return first === last ? first : `${first} to ${last}`;
+  return `${first === last ? first : `${first} to ${last}`}${hours}`;
 }
 
 function periodOf(r: SliReport, other: SliReport, at: Clock, d: DateStyle): string {
   const noun = r.month ? 'Month' : 'Period';
-  if (r.closed) return `${stampText(at(r.from), d)} to ${stampText(at(r.to - 1), d)} (${r.timezone}). ${noun} closed.`;
+  const counted = r.dailyHours ? ` Counted ${hoursWords(r.dailyHours)} (${durationText(r.dailyHours.seconds)}).` : '';
+  if (r.closed) return `${stampText(at(r.from), d)} to ${stampText(at(r.to - 1), d)} (${r.timezone}). ${noun} closed.${counted}`;
   // The two methods are cached on their own clocks, so for a month still running their horizons can
   // differ by minutes. Say so, rather than print one of them for both.
   const horizon =
     Math.abs(r.end - other.end) >= 60
       ? `strict figures to ${stampText(at(r.end), d)}, HCML method to ${stampText(at(other.end), d)}`
       : `to ${stampText(at(r.end), d)}`;
-  return `${noun} so far, ${horizon} (${r.timezone}). Figures are not final.`;
+  return `${noun} so far, ${horizon} (${r.timezone}). Figures are not final.${counted}`;
 }
 
 function fileBaseOf(r: SliReport, at: Clock): string {
-  if (r.month) return reportFileBase(r.month);
-  return reportFileBase(`${isoDay(at(r.from))}_to_${isoDay(at(lastSecond(r)))}`);
+  const tag = hoursTag(r.dailyHours);
+  if (r.month) return reportFileBase(`${r.month}${tag}`);
+  return reportFileBase(`${isoDay(at(r.from))}_to_${isoDay(at(lastSecond(r)))}${tag}`);
 }
+
+/** The name a file of this report is given, before its extension: from the report's own dates and hours, so no request text reaches a header. */
+export const reportFileBaseOf = (r: SliReport): string => fileBaseOf(r, clockIn(r.timezone));
 
 // Tables
 
@@ -249,7 +293,7 @@ function deviceTable(strict: SliReport, hcml: SliReport, style: ReportStyle): Ta
       sli === null ? noData() : duration(h.downtime),
       sli === null ? noData() : count(h.incidents),
       sli === null ? noData() : duration(h.longest),
-      coverage(h.coverage),
+      coverageCell(h.coverage, style),
     ];
   });
   return {
@@ -293,7 +337,7 @@ function pathsTable(strict: SliReport, style: ReportStyle): Table {
         text(legs.join(' · ')),
         percent(sli, target, style),
         sli === null ? noData() : duration(p.downtime),
-        coverage(p.coverage),
+        coverageCell(p.coverage, style),
         verdict(sli, target),
       ];
     });
@@ -323,10 +367,13 @@ function webNote(strict: SliReport, at: Clock, d: DateStyle): string {
 
 function webTable(strict: SliReport, style: ReportStyle, at: Clock): Table {
   const target = strict.target;
+  const range = isRange(strict);
   return {
     title: 'Web checks',
     sheet: 'Web checks',
-    caption: `Strict method only: HCML’s report method does not measure web checks.${webNote(strict, at, style.date)}`,
+    caption: range
+      ? 'Web checks are measured by calendar month, so a file for a range has none: choose a month for them.'
+      : `Strict method only: HCML’s report method does not measure web checks.${webNote(strict, at, style.date)}`,
     columns: [
       { header: 'Scenario', kind: 'text', weight: 6 },
       { header: 'SLA (strict)', kind: 'percent', weight: 2 },
@@ -340,11 +387,11 @@ function webTable(strict: SliReport, style: ReportStyle, at: Clock): Table {
         text(w.name),
         percent(sli, target, style),
         sli === null ? noData() : duration(w.downtime),
-        coverage(w.coverage),
+        coverageCell(w.coverage, style),
         verdict(sli, target),
       ];
     }),
-    empty: 'No web scenarios measured in this period.',
+    empty: range ? 'A range has no web checks: they are measured by calendar month.' : 'No web scenarios measured in this period.',
   };
 }
 
@@ -449,7 +496,7 @@ function readNote(strict: SliReport, style: ReportStyle): Note {
     'Figures show two decimals. One that would round up to the target while falling short shows more, so it never reads as met.',
     'Group and overall figures are the plain average of their devices’ figures, as in HCML’s own reports.',
     'Downtime in a group row adds up the downtime of all its devices, so devices down at the same time count separately.',
-    'Coverage is the share of the month in which the ping check collected data, not counting planned maintenance.',
+    `Coverage is the share of the ${strict.dailyHours ? 'counted hours' : strict.month ? 'month' : 'period'} in which the ping check collected data, not counting planned maintenance.`,
   ];
   if (!strict.closed) lines.push(`This ${strict.month ? 'month' : 'period'} is still running: figures so far.`);
   return { heading: 'How to read this report', lines };
@@ -481,12 +528,15 @@ function computedNote(strict: SliReport, hcml: SliReport, at: Clock, d: DateStyl
   const s = strict.basis;
   const h = hcml.basis;
   const lines = [
-    `${DERIVED_SLA_BANNER}. Computed in the portal from each device’s ICMP triggers, monthly in ${strict.timezone} time; nothing is written to Zabbix.`,
+    `${DERIVED_SLA_BANNER}. Computed in the portal from each device’s ICMP triggers, ${strict.month && !strict.dailyHours ? 'monthly' : 'for the period chosen,'} in ${strict.timezone} time; nothing is written to Zabbix.`,
     `Strict method: a device is down while any of these triggers is in problem: ${s.triggers.join(', ')}. HCML’s method counts only ${h.triggers.join(', ')}.`,
     `Hours in which nothing was collected are ${byMethods(GAP_POLICY[s.gapPolicy], GAP_POLICY[h.gapPolicy])}.`,
     `A device with too little collected data is ${byMethods(NO_DATA_POLICY[s.noDataPolicy], NO_DATA_POLICY[h.noDataPolicy])}.`,
     `Time inside a planned Zabbix maintenance window is ${byMethods(MAINTENANCE_POLICY[s.maintenancePolicy], MAINTENANCE_POLICY[h.maintenancePolicy])}, downtime and total alike.`,
   ];
+  if (strict.dailyHours) {
+    lines.push(`Only ${hoursWords(strict.dailyHours)} were counted, ${durationText(strict.dailyHours.seconds)} in all. Time outside those hours is not measured, down or up.`);
+  }
   if (strict.gaps.length) {
     const seconds = strict.gaps.reduce((n, g) => n + (g.to - g.from), 0);
     lines.push(

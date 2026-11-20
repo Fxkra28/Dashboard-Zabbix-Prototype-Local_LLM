@@ -305,6 +305,40 @@ describe('while a change is under way', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add' })).toBeEnabled());
   });
 
+  // UX-71: Add leaves the box and the Add button where they were, so the next address is typed in the same place; only a button that has gone sends the focus to the toggle.
+  it('puts the focus in the box after an address is added, where the next one is typed, and not on the toggle', async () => {
+    const user = await open();
+    await user.type(screen.getByLabelText('Add an address to the saved list'), 'eko@example.org');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith(['carla@example.org', 'dewi@example.org', 'eko@example.org']));
+    await waitFor(() => expect(screen.getByLabelText('Add an address to the saved list')).toHaveFocus());
+    expect(toggle()).not.toHaveFocus();
+  });
+
+  it('puts it in the box after Enter in the box too', async () => {
+    const user = await open();
+    await user.type(screen.getByLabelText('Add an address to the saved list'), 'eko@example.org{Enter}');
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByLabelText('Add an address to the saved list')).toHaveFocus());
+  });
+
+  it('leaves the focus alone when an address was refused before anything was sent', async () => {
+    const user = await open();
+    await user.type(screen.getByLabelText('Add an address to the saved list'), 'carla@example.org');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('already');
+    expect(save).not.toHaveBeenCalled();
+  });
+
+  // The toggle is for a button that has gone with the address it removed. When the save failed the button is still there, and the focus goes back to it.
+  it('puts the focus back on the Remove button that was pressed when the save failed, since it is still there', async () => {
+    save.mockRejectedValueOnce(new HttpFailure('The list could not be saved.', 400, true));
+    const user = await open();
+    await user.click(screen.getByRole('button', { name: 'Remove carla@example.org from the saved list' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('could not be saved');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove carla@example.org from the saved list' })).toHaveFocus());
+  });
+
   it('puts the focus back on the button that opens the view, since the button that was pressed is gone', async () => {
     const user = await open();
     await user.click(screen.getByRole('button', { name: 'Remove carla@example.org from the saved list' }));

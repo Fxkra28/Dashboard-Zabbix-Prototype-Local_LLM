@@ -3,6 +3,7 @@
 * Status: accepted
 * Deciders: HCML internship project
 * Date: 2026-09-10 (recorded as an ADR 2026-09-22)
+* Amended: 2026-11-17, by [ADR-0017](0017-keep-the-portals-users-in-a-file-of-their-own.md): the roles are now `guest`, `operator` and `admin`, and each person has a list of pages. Where this record says `viewer` or `wall`, read a guest, and for `wall` a guest who has the Network and Links pages. The write still needs `operator`
 
 ## Context and Problem Statement
 
@@ -39,12 +40,10 @@ The gates:
 3. Configuration. With no write token the route returns 503, and `GET /api/health` reports
    `writeBack: false` so the UI hides the buttons instead of offering a call that will fail.
 
-*Amended 20 October 2026 (tracker SC-23).* Gate 1 holds for the portal's code, which uses the read token only
-through `zbx()` and the write token only through `zbxWrite()`. It does not yet hold for the credential: checked on
-13 October, both tokens belong to the built-in `Admin` user, whose role is Super admin, so whoever held the read
-token could write with it. Read again on 3 November on HCML's own Zabbix (the first reading was of the local copy): the
-three tokens that exist belong to users 4 and 12, both with the Super admin role, and the built-in `Admin` owns none. Until the read token belongs to a user whose role allows only the read methods (a change
-in Zabbix, which is HCML's to make), read "cannot write" in this record as "is never used to write", and
+*Amended 20 October 2026.* Gate 1 holds for the portal's code, which uses the read token only
+through `zbx()` and the write token only through `zbxWrite()`. For the credential to hold it as well, the read token
+should belong to a user whose role allows only the read methods (a change in Zabbix, which is HCML's to make). Until
+then, read "cannot write" in this record as "is never used to write", and
 "provably read-only" below as a statement about the code.
 
 Event ids must match `/^\d+$/` before reaching Zabbix, the message is capped at 2,048 characters, the

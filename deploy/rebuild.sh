@@ -2,7 +2,7 @@
 # Rebuild the portals from the commit in this folder, hosted copy first and then the local-model copy
 # beside it, and check what came up (tracker IN-01; the steps are the ones in docs/setup/23).
 #
-#   deploy/rebuild.sh [--dry-run] [--skip-verify] [--allow-dirty] [--mark-good]
+#   deploy/rebuild.sh [--dry-run] [--skip-verify] [--allow-dirty] [--mark-good] [--prune-rollbacks=N]
 #
 #   --dry-run      print every command that would change something, and run none of them
 #   --skip-verify  do not run `npm run verify` first (it takes about five minutes)
@@ -12,6 +12,8 @@
 #                  later run fails. The image is the one each container runs (its id), not whatever :latest names; with no
 #                  container, :latest, which is what `docker compose up` would start.
 #                  Run it once the check that needs a sign-in has passed.
+#   --prune-rollbacks=N  build nothing: keep the newest N rollback-* tags of each image and untag the older ones, which pile up with every rebuild (nine of each so far). N is yours to name
+#                  and is never assumed. A tag that names the image that runs, or last-good, is kept whatever its place, and so are :latest and last-good themselves. Newest means made last, not first in Docker's list.
 #
 # It first asks Docker whether it is installed and running, so that a stopped Docker Desktop is said at once and not after minutes of tests.
 # Docker gets 20 seconds to answer; REBUILD_DOCKER_TIMEOUT sets another number of seconds.
@@ -31,12 +33,15 @@ DRY=0
 VERIFY=1
 DIRTY_OK=0
 MARK=0
+PRUNE=""
+PRUNING=0
 for arg in "$@"; do
   case "$arg" in
     --dry-run) DRY=1 ;;
     --skip-verify) VERIFY=0 ;;
     --allow-dirty) DIRTY_OK=1 ;;
     --mark-good) MARK=1 ;;
+    --prune-rollbacks=*) PRUNING=1; PRUNE=${arg#*=} ;;
     -h | --help)
       sed -n '2,/^set -euo pipefail/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'
       exit 0
@@ -59,7 +64,14 @@ fail() {
 # Print a command, then run it unless this is a dry run.
 run() {
   printf '+ %s\n' "$*"
-  if [ "$DRY" -eq 0 ]; then "$@"; fi
+  if [ "$DRY" -eq 0 ]; then (cd "${RUN_IN:-.}" && "$@"); fi
+}
+# Compose reads a COMPOSE_FILE line of the folder's .env, and takes the names in it from the folder it runs in: so every call that names a copy runs from that copy's folder, and a machine with an
+# overlay (the virtual machine's Ollama) is rebuilt with it and does not leave its model service behind as an orphan (IN-100).
+compose_in() { # folder, then the arguments of docker compose
+  local dir=$1
+  shift
+  (cd "$dir" && docker compose --project-directory "$dir" "$@")
 }
 
 # The name Compose gives a folder's containers and images: the name: line of its docker-compose.yml, else the folder's
@@ -133,6 +145,51 @@ if [ "$MARK" -eq 1 ]; then
   exit 0
 fi
 
+# The rollback tags of an image, newest first: by the second each was made, then by the -2, -3 of its name. Docker's own list is not that order for
+# images made in the same second, as the web images are, and a prune that trusted it could untag the newest way back.
+rollback_tags_newest_first() {
+  local img=$1 tag made n
+  while IFS= read -r tag; do
+    made=$(docker image inspect -f '{{.Metadata.LastTagTime}}' "$img:$tag" 2>/dev/null || true)
+    case $made in 0001-*) made='' ;; esac
+    n=${tag##*-}
+    case $n in *[!0-9]*) n=1 ;; esac
+    printf '%s %05d %s\n' "${made:0:19}" "$((10#$n))" "$tag"
+  done < <(docker image ls --format '{{.Tag}}' "$img" 2>/dev/null | grep -E '^rollback-[0-9]{1,2}[a-z]{3}(-[0-9]+)?$' || true) | LC_ALL=C sort -r | awk '{print $NF}'
+}
+
+# The rollback tags are a tag for each rebuild and each image, and nothing removes them. The number to keep is the owner's to name: a bad number is refused, and none is ever assumed (IN-108).
+if [ "$PRUNING" -eq 1 ]; then
+  case $PRUNE in '' | *[!0-9]* | ???????*) fail "--prune-rollbacks=N needs the number of rollback tags to keep for each image, a whole number of 1 or more; it is \"$PRUNE\"" ;; esac
+  PRUNE=$((10#$PRUNE))
+  [ "$PRUNE" -ge 1 ] || fail "--prune-rollbacks=N needs a whole number of 1 or more: with none kept there would be no way back"
+  REMOVED=0
+  for C in "${COPIES[@]}"; do
+    P=$(project_of "$C")
+    for IMG in "$P-portal-bff" "$P-portal-web"; do
+      # What runs and what last-good names are never untagged: the way back stays whatever number is given.
+      running=$(docker inspect -f '{{.Image}}' "$IMG-1" 2>/dev/null || true)
+      good=$(docker image inspect -f '{{.Id}}' "$IMG:last-good" 2>/dev/null || true)
+      n=0
+      while IFS= read -r tag; do
+        [ -n "$tag" ] || continue
+        n=$((n + 1))
+        [ "$n" -gt "$PRUNE" ] || continue
+        id=$(docker image inspect -f '{{.Id}}' "$IMG:$tag" 2>/dev/null || true)
+        if [ -n "$id" ] && { [ "$id" = "$running" ] || [ "$id" = "$good" ]; }; then
+          say "keeping $IMG:$tag: it names the image that runs, or last-good"
+          continue
+        fi
+        run docker rmi "$IMG:$tag"
+        REMOVED=$((REMOVED + 1))
+      done < <(rollback_tags_newest_first "$IMG")
+    done
+  done
+  say ""
+  if [ "$DRY" -eq 1 ]; then say "Dry run: nothing was changed. $REMOVED tag(s) would be removed, keeping the newest $PRUNE of each image."; else say "Removed $REMOVED rollback tag(s), keeping the newest $PRUNE of each image."; fi
+  exit 0
+fi
+
 # Each copy is a repository of its own (the second since 11 November 2026), so each is judged, labelled and tagged by its own HEAD (IN-81).
 # What goes into the images: server/ and web/, less their tests, and the compose file.
 IMAGE_FILES=(server web docker-compose.yml ':(exclude,glob)**/__tests__/**' ':(exclude,glob)**/*.test.ts' ':(exclude,glob)**/*.test.tsx')
@@ -185,7 +242,7 @@ fi
 for C in "${COPIES[@]}"; do
   say ""
   say "Gate: docker can read the settings of $(basename "$C")"
-  if out=$(docker compose --project-directory "$C" config --quiet 2>&1); then
+  if out=$(compose_in "$C" config --quiet 2>&1); then
     say "  ok"
   elif printf '%s' "$out" | grep -q '\.env'; then
     # No line number in the message makes grep fail, and under pipefail that would end the script with no word.
@@ -216,7 +273,7 @@ archive_logs() { # folder of the copy, its project
     say "  could not make $LOG_ARCHIVE; going on without the logs of $2"
     return 0
   }
-  if (umask 077 && docker compose --project-directory "$1" logs --no-color --timestamps 2>/dev/null | gzip >"$out" && [ "${PIPESTATUS[0]}" -eq 0 ]); then
+  if (umask 077 && compose_in "$1" logs --no-color --timestamps 2>/dev/null | gzip >"$out" && [ "${PIPESTATUS[0]}" -eq 0 ]); then
     # Only this project's files: "hcml-portal-" followed by a digit, so hcml-portal-ollama's are left alone.
     # The newest are by name, which holds the UTC time of the save: a copied folder has new modification times.
     ls -1 -- "$LOG_ARCHIVE"/"$2"-[0-9]*.log.gz 2>/dev/null | sort -r | tail -n +$((LOG_KEEP + 1)) | while IFS= read -r f; do rm -f -- "$f"; done || true
@@ -241,6 +298,12 @@ free_tag() {
 KEPT=()
 # The copies that came up and passed their checks in this run, so that the help can say which copy runs which build.
 BUILT=()
+# What an older image cannot read: the people made on the Users page are in users.json in the volume portal-state (DC-69).
+users_note() {
+  say ""
+  say "Before you go back to an image of before 18 November 2026: the people made on the Users page are in users.json, in the volume portal-state. An image from before 17 November does not read that file, and one from before 18 November cannot read an Argon2id hash (it takes the text for a plain password), so those people cannot sign in until they are added again in .env. Take a copy first with deploy/backup-state.sh."
+}
+
 # Where to go back to. last-good is the build someone marked good with --mark-good; the rollback tags hold the images this run
 # replaced, under the names free_tag gave them; if the run before this one failed, they hold its failed build.
 rollback_help() { # the project that failed
@@ -269,11 +332,13 @@ rollback_help() { # the project that failed
     say ""
     say "The images this run replaced are kept under these tags (setup 23, Rolling back); if the run before this one failed, they are its failed build:"
     for t in "${KEPT[@]}"; do say "  $t"; done
+    users_note
     return
   fi
   say "The images this replaced are kept under these tags (setup 23, Rolling back):"
   for t in "${KEPT[@]}"; do say "  $t"; done
   say "To go back: docker tag <image>:<tag> <image>:latest for each, then docker compose up -d --no-build in that copy"
+  users_note
 }
 
 wait_healthy() {
@@ -315,7 +380,7 @@ for C in "${COPIES[@]}"; do
       say "no $IMG:latest yet, so nothing is kept for a rollback"
     fi
   done
-  if ! run env BUILD_COMMIT="${LABELS[$N]}" BUILD_TIME="$TIME" APK_ROUND="$ROUND" docker compose --project-directory "$C" up -d --build; then
+  if ! RUN_IN="$C" run env BUILD_COMMIT="${LABELS[$N]}" BUILD_TIME="$TIME" APK_ROUND="$ROUND" docker compose --project-directory "$C" up -d --build; then
     say ""
     say "docker compose could not bring $P up."
     rollback_help "$P"
@@ -351,9 +416,9 @@ for C in "${COPIES[@]}"; do
   fi
   say "  bundle: $(curl -s --max-time 20 "$BASE/" | grep -o 'index-[A-Za-z0-9_-]*\.js' | head -1)"
   say "  build:  $(docker inspect -f '{{range .Config.Env}}{{println .}}{{end}}' "$P-portal-bff-1" | grep -E '^BUILD_(COMMIT|TIME)=' | tr '\n' ' ')"
-  # The copy that exists so that nothing leaves the machine is checked for exactly that: no mail, and a model that is local and answers (IN-79).
+  # The copy that exists so that no question leaves the machine is checked for exactly that: a model that is local and answers (IN-79).
   EXPECT=''
-  if [ "$P" = hcml-portal-ollama ]; then EXPECT=' --expect-mail off --expect-ai local'; fi
+  if [ "$P" = hcml-portal-ollama ]; then EXPECT=' --expect-ai local'; fi
   SIGNIN="$SIGNIN
   python3 -I tools/live/signedin_check.py $BASE$EXPECT"
   # A build that starts and is bad must not replace the next copy too: the first copy is the canary.

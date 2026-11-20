@@ -1,6 +1,7 @@
 import { SEVERITIES } from '../../theme';
 import type { HostState, StateReason } from '../../types';
 import { formatValue } from './units';
+import { serverNow } from './clock';
 import { formatDateTime } from './time';
 
 export function severity(level: string | number) {
@@ -16,14 +17,14 @@ export function fmtTime(clock: string | number | undefined): string {
 }
 
 export function ago(clock: string | number): string {
-  const s = Math.floor(Date.now() / 1000 - Number(clock));
+  const s = Math.floor(serverNow() / 1000 - Number(clock));
   return humanizeSeconds(s) + ' ago';
 }
 
 /** Problem duration: from onset to recovery (or now if still open). Zabbix "Duration". */
 export function duration(clock: string | number, rClock?: string | number): string {
   const start = Number(clock);
-  const end = rClock && Number(rClock) > 0 ? Number(rClock) : Math.floor(Date.now() / 1000);
+  const end = rClock && Number(rClock) > 0 ? Number(rClock) : Math.floor(serverNow() / 1000);
   return humanizeSeconds(end - start);
 }
 

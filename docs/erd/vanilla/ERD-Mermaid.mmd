@@ -433,7 +433,7 @@ erDiagram
     subgraph SYSTEM["Admin &amp; system"]
         PORTAL_USER {
             string name PK "parsed from PORTAL_USERS, name:password:role"
-            string pass "plain text or scrypt hash"
+            string pass "plain text, argon2id or scrypt hash"
             string role "viewer, operator or admin"
         }
         STATS {
@@ -504,4 +504,4 @@ erDiagram
     class STATS,TAG_EXPLAINED,TOP_TRIGGER derived
     class METER,TOP_HOST,WEB_SCENARIO derived
     class PORTAL_USER local
-%% source-hash: 55f19fbb457b
+%% source-hash: 51f9325def27

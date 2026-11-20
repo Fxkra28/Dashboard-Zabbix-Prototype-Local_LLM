@@ -45,7 +45,7 @@ occasionally satisfy the shape with empty strings. `assertComplete()` catches th
 
 | Endpoint | Input from Zabbix | Output |
 |---|---|---|
-| `/api/explain/problem?eventid=` | trigger name + `opdata` (this is the notification text), severity, host, age, ack state, and every tag | `summary`, `tagsExplained[]` (a glossary, one row per tag), `businessImpact`, `recommendation` |
+| `/api/explain/problem?eventid=` | trigger name + `opdata` (this is the notification text), severity, host, age, ack state, and its tags (20 at most, each cut short; none to a model outside the machine, SC-72) | `summary`, `tagsExplained[]` (a glossary, one row per tag), `businessImpact`, `recommendation` |
 | `/api/explain/sla?slaid=&serviceid=` | SLO target, period, and per-service SLI / uptime / downtime / error budget | `status`, `plain`, `meetingTarget`, `recommendation` |
 
 One problem endpoint covers both tags and notification wording, because the trigger name plus

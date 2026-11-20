@@ -1,0 +1,107 @@
+/*
+ * Print, and Save as PDF (UX-76). The page itself, in the light colours whichever theme is on screen, without the menu, the top bar and the buttons, and with every table whole:
+ * a box that scrolls prints only what it shows. The SLA page has its own report files, which stay the way to print a report.
+ */
+@media print {
+  :root:root:root {
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f2f5f9;
+    --tint: #e6edf5;
+    --tint-line: #c1d5eb;
+    --text: #1b2733;
+    --muted: #566577;
+    --primary: #2b5584;
+    --primary-strong: #1e3b5c;
+    --mid: #4681c3;
+    --good-text: #207146;
+    --warn-text: #875a17;
+    --danger-text: #b4352d;
+    --neutral-text: #475569;
+    --good-bg: #ecfdf3;
+    --warn-bg: #fff7ec;
+    --danger-bg: #fef2f2;
+    --neutral-bg: #eef2f7;
+    --border: #c3ccd8;
+    --border-strong: #748496;
+    /* What the dark theme also changes, in the light theme's own values, so that no dark value reaches the paper (the ink of a button, the status colours, the series of a chart, the shadows). */
+    --chrome: #0a2540;
+    --chrome-2: #123152;
+    --neu-hi: rgba(255, 255, 255, 0.95);
+    --neu-lo: rgba(150, 166, 190, 0.62);
+    --on-primary: #ffffff;
+    --on-severity: #08182a;
+    --good: #2e9e5b;
+    --good-line: #b7e4c7;
+    --warn: #e8a33d;
+    --warn-line: #f2ddbb;
+    --danger: #e45959;
+    --danger-line: #f5c2c2;
+    --chrome-hover: rgba(255, 255, 255, 0.1);
+    --chrome-active: rgba(255, 255, 255, 0.2);
+    --good-glow: rgba(46, 158, 91, 0.2);
+    --series-1: #2b5584;
+    --series-2: #0f766e;
+    --series-3: #6d4aa8;
+    --series-4: #4a5d75;
+    --focus: #2b5584;
+    --focus-ring: 0 0 0 3px rgba(43, 85, 132, 0.28);
+    --e-1: 0 1px 2px rgba(16, 42, 67, 0.06), 0 6px 20px rgba(16, 42, 67, 0.06);
+    --e-2: 0 8px 24px rgba(16, 42, 67, 0.12);
+    --e-3: 0 24px 60px rgba(16, 42, 67, 0.28);
+    --e-drawer: -12px 0 40px rgba(16, 42, 67, 0.18);
+    --scrim: rgba(16, 42, 67, 0.35);
+  }
+
+  /* `button.btn` and `a.btn`, as the buttons are drawn: a plain `.btn` weighs less than `a.btn` and left the links that look like buttons on the paper. The pager stays: it says where a list stands. */
+  .sidebar,
+  .topbar,
+  .skip-link,
+  .theme-pick,
+  button.btn,
+  a.btn,
+  .chat-compose,
+  .drawer-overlay {
+    display: none;
+  }
+  .app {
+    display: block;
+    min-height: 0;
+  }
+  .content {
+    padding: 0;
+  }
+
+  .table-wrap,
+  .sli-scroll,
+  .sli-unmeasured .table-wrap,
+  .chart-data-scroll,
+  .item-picker-list,
+  .chat-log {
+    max-height: none;
+    overflow: visible;
+  }
+  .sli-scroll thead th {
+    position: static;
+  }
+  /* A printer leaves coloured fills out, and the ink on them is white: these two read in the colour of the text, with an edge instead of a fill. */
+  .chat-msg.user {
+    background: none;
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+  }
+  .type-tile[aria-pressed='true'] {
+    background: none;
+    color: var(--text);
+    border: 2px solid var(--primary);
+    box-shadow: none;
+  }
+  /* A row is not cut between two pages, and a table's head is repeated on each. */
+  tr {
+    break-inside: avoid;
+  }
+  thead {
+    display: table-header-group;
+  }
+}

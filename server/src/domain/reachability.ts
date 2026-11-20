@@ -1,7 +1,7 @@
 import { zbx } from '../clients/zabbix.js';
 import { cached, cacheLogger } from '../core/cache.js';
 import { recentValues, type RecentValue } from './recentValues.js';
-import { parseDelay } from '../sli/engine.js';
+import { pollSeconds } from '../core/delay.js';
 
 /**
  * One reachability state per host, ping first.
@@ -46,7 +46,7 @@ const MIN_FRESH_SECONDS = 600;
 
 /** How old a value of an item with this update interval may be and still be believed: three intervals, never under ten minutes. */
 export function freshWithinS(delay: string | undefined): number {
-  return Math.max(3 * parseDelay(delay), MIN_FRESH_SECONDS);
+  return Math.max(3 * pollSeconds(delay), MIN_FRESH_SECONDS);
 }
 
 /**

@@ -1,0 +1,177 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: 7df96b18c230490a9a0a9e2307226338
+      name: Templates
+  templates:
+    - uuid: 1ff7f62451b0416fa5afecad4e88ed9d
+      template: 'HCML Monitoring Portal'
+      name: 'HCML Monitoring Portal'
+      description: |
+        What to watch on the machine that runs the HCML Monitoring Portal and its local model. The items read deploy/portal-probe.sh through the keys of deploy/zabbix/hcml-portal.conf.
+        Written for Zabbix 7.0 and not yet imported into any Zabbix: import it on a test host first.
+      groups:
+        - name: Templates
+      items:
+        - uuid: 042051b1899a4a26a4d3a405f3eddf60
+          name: 'Portal: answers'
+          key: 'hcml.portal.health'
+          delay: 1m
+          history: 14d
+          trends: 365d
+          value_type: UNSIGNED
+          description: '1 when the portal answers 200 and says it is ok, else 0 (deploy/portal-probe.sh health).'
+          tags:
+            - tag: component
+              value: portal
+          triggers:
+            - uuid: 9cbcdc5c4f314f53a94d5bf42535e819
+              expression: 'max(/HCML Monitoring Portal/hcml.portal.health,#3)=0'
+              name: 'HCML portal does not answer'
+              priority: HIGH
+              description: 'The portal did not answer for three checks in a row. Look at docker compose ps on the machine, and at the proxy.'
+            - uuid: 1d23fb52f86142b79a95c995a9d7006f
+              expression: 'nodata(/HCML Monitoring Portal/hcml.portal.health,5m)=1'
+              name: 'HCML portal health gives no value'
+              priority: HIGH
+              description: 'The item has had no value for five minutes: the agent is down, or the probe is not supported (it stops itself after two seconds, so a portal that accepts the connection and says nothing reads 0, not nothing). Read the agent log.'
+        - uuid: 8e72795a875a4ee89f36ec12e51143ad
+          name: 'Portal: its Zabbix answers'
+          key: 'hcml.portal.zabbix'
+          delay: 1m
+          history: 14d
+          trends: 365d
+          value_type: UNSIGNED
+          description: '1 when the portal says that its own Zabbix answers (health.ready), else 0.'
+          tags:
+            - tag: component
+              value: portal
+          triggers:
+            - uuid: 6968d6db932346a19d98745ab60a1c3e
+              expression: 'max(/HCML Monitoring Portal/hcml.portal.zabbix,#5)=0 and last(/HCML Monitoring Portal/hcml.portal.health)=1'
+              name: 'HCML portal cannot read Zabbix'
+              priority: AVERAGE
+              description: 'The portal answers but says that Zabbix does not: its token, its address, or Zabbix itself.'
+        - uuid: 1b27a4a978ca497fbc6e95281f40cf58
+          name: 'Portal: days left on the certificate'
+          key: 'hcml.portal.cert.days[{$PORTAL.HOST},{$PORTAL.PORT}]'
+          delay: 1h
+          history: 14d
+          trends: 365d
+          description: 'Whole days until the certificate that the name of the portal shows ends (deploy/portal-probe.sh cert-days).'
+          tags:
+            - tag: component
+              value: portal
+          triggers:
+            - uuid: 5f77843800334d189290785cd6183933
+              expression: 'last(/HCML Monitoring Portal/hcml.portal.cert.days[{$PORTAL.HOST},{$PORTAL.PORT}])<{$PORTAL.CERT.WARN}'
+              name: 'HCML portal certificate ends within {$PORTAL.CERT.WARN} days'
+              priority: WARNING
+              description: 'Ask for a new certificate and put it behind the proxy (docs/operations/tls.md).'
+            - uuid: 6d56afb4e80a418fab9d7f67026c29df
+              expression: 'last(/HCML Monitoring Portal/hcml.portal.cert.days[{$PORTAL.HOST},{$PORTAL.PORT}])<{$PORTAL.CERT.CRIT}'
+              name: 'HCML portal certificate ends within {$PORTAL.CERT.CRIT} days'
+              priority: HIGH
+              description: 'People will soon be refused by their browsers.'
+            - uuid: 3abbf75a559b44559771a7970ab0b1c5
+              expression: 'nodata(/HCML Monitoring Portal/hcml.portal.cert.days[{$PORTAL.HOST},{$PORTAL.PORT}],3h)=1'
+              name: 'HCML portal certificate cannot be read'
+              priority: WARNING
+              description: 'No value for three hours: the name does not answer on its port, or the probe is not supported. A certificate nobody can read is one nobody is watching.'
+        - uuid: ef3bc57ca50d4864ab703d4495d81341
+          name: 'Portal: GPU temperature'
+          key: 'hcml.portal.gpu.temp'
+          delay: 1m
+          history: 14d
+          trends: 365d
+          value_type: UNSIGNED
+          description: 'The temperature of the first card, in degrees. Not supported on a machine with no card.'
+          tags:
+            - tag: component
+              value: portal
+          triggers:
+            - uuid: ebd589ede4454ae48e32ff38be3a7c8d
+              expression: 'min(/HCML Monitoring Portal/hcml.portal.gpu.temp,10m)>{$PORTAL.GPU.TEMP.WARN}'
+              name: 'HCML portal GPU has been above {$PORTAL.GPU.TEMP.WARN} degrees for 10 minutes'
+              priority: WARNING
+        - uuid: 28082c8a0a9a4e62a9358bfee722657b
+          name: 'Portal: GPU memory in use'
+          key: 'hcml.portal.gpu.mem.pct'
+          delay: 1m
+          history: 14d
+          trends: 365d
+          value_type: UNSIGNED
+          description: 'The memory in use on the first card, in percent. Not supported on a machine with no card.'
+          tags:
+            - tag: component
+              value: portal
+          triggers:
+            - uuid: e11be5f0191f4bbe8f17c09457949468
+              expression: 'min(/HCML Monitoring Portal/hcml.portal.gpu.mem.pct,30m)>{$PORTAL.GPU.MEM.WARN}'
+              name: 'HCML portal GPU memory has been above {$PORTAL.GPU.MEM.WARN} percent for 30 minutes'
+              priority: WARNING
+              description: 'The model may be spilling onto the processor: see sits on in deploy/model-speed.py.'
+        - uuid: 4409e4c37a1643098a19c2fa30cb5043
+          name: 'Model server: answers'
+          key: 'hcml.portal.ollama'
+          delay: 1m
+          history: 14d
+          trends: 365d
+          value_type: UNSIGNED
+          description: '1 when Ollama answers its list of models on the loopback of the machine, else 0 (deploy/portal-probe.sh ollama). Needs the port that docker-compose.vm.yml publishes on 127.0.0.1.'
+          tags:
+            - tag: component
+              value: model
+          triggers:
+            - uuid: 0f0098a00db244b680e317472ad20fe5
+              expression: 'max(/HCML Monitoring Portal/hcml.portal.ollama,#5)=0'
+              name: 'HCML model server does not answer'
+              priority: AVERAGE
+              description: 'Ollama did not answer for five checks in a row. Every page works without it; the Assistant shows its offline notice. Look at docker compose ps ollama, and at its log.'
+            - uuid: aebf011ce43f405bb0c416878985170d
+              expression: 'nodata(/HCML Monitoring Portal/hcml.portal.ollama,10m)=1'
+              name: 'HCML model server gives no value'
+              priority: WARNING
+              description: 'No value for ten minutes: the agent is down, or the probe is not supported.'
+        - uuid: 4cb2ccbfa74047f492d85ad64eb3a813
+          name: 'Backup: hours since the newest file'
+          key: 'hcml.portal.backup.age[{$PORTAL.BACKUP.DIR}]'
+          delay: 1h
+          history: 14d
+          trends: 365d
+          value_type: UNSIGNED
+          description: 'Whole hours since the newest .tar.gz.enc file of deploy/backup-state.sh in the folder of the backups (deploy/portal-probe.sh backup-age). Not supported when there is none.'
+          tags:
+            - tag: component
+              value: backup
+          triggers:
+            - uuid: 3677026ca00d4a749a13ed7a1835bd76
+              expression: 'last(/HCML Monitoring Portal/hcml.portal.backup.age[{$PORTAL.BACKUP.DIR}])>{$PORTAL.BACKUP.MAX.HOURS}'
+              name: 'HCML portal backup is older than {$PORTAL.BACKUP.MAX.HOURS} hours'
+              priority: WARNING
+              description: 'The daily copy of the users and the state was not made. Run deploy/backup-state.sh by hand and look at the cron line (docs/operations/backup-and-restore.md).'
+            - uuid: 0c96a7bc4fe2461ab1beb57608946039
+              expression: 'nodata(/HCML Monitoring Portal/hcml.portal.backup.age[{$PORTAL.BACKUP.DIR}],3h)=1'
+              name: 'HCML portal backup cannot be read'
+              priority: WARNING
+              description: 'No value for three hours: there is no backup file in the folder, the folder is not there, or the probe is not supported.'
+      macros:
+        - macro: '{$PORTAL.HOST}'
+          value: portal.example.com
+          description: The name people type to reach the portal, for the certificate check.
+        - macro: '{$PORTAL.PORT}'
+          value: '443'
+        - macro: '{$PORTAL.CERT.WARN}'
+          value: '30'
+        - macro: '{$PORTAL.CERT.CRIT}'
+          value: '7'
+        - macro: '{$PORTAL.GPU.TEMP.WARN}'
+          value: '85'
+        - macro: '{$PORTAL.GPU.MEM.WARN}'
+          value: '95'
+        - macro: '{$PORTAL.BACKUP.DIR}'
+          value: /var/backups/hcml
+          description: The folder deploy/backup-state.sh writes to (BACKUP_DIR), for the age of the newest file.
+        - macro: '{$PORTAL.BACKUP.MAX.HOURS}'
+          value: '36'
+          description: How old the newest backup may be before a trigger fires; a daily copy is at most 24 hours old, and a night's delay is allowed for.

@@ -1,0 +1,19 @@
+# Hands the NVIDIA card to the model. Added to the other two files only where deploy/gpu-gate.sh found a card and Docker's NVIDIA runtime. The gate prints the line for the .env of the copy that gives
+# every Compose command, deploy/rebuild.sh and the restore the same files (the docker-compose.override.yml in it only where that file is there):
+#
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.override.yml:docker-compose.vm.yml:docker-compose.vm-gpu.yml
+#
+# A command that names the files with -f works too, but a later `docker compose` without the same -f lines would start the stack without this file.
+#
+# Without a card or the runtime this file makes the start fail, which is meant: leave it out and the model runs on the processor, and deploy/model-speed.py says whether that is fast enough.
+# One card, not all of them: a model of this size gains nothing from a second, and Ollama would split it across two.
+
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

@@ -3,6 +3,7 @@
  * answer's shape, and what a 401 or a failed reply turns into.
  */
 
+import { noteServerTime } from '../shared/lib/clock';
 import { noteStaleCopy } from '../shared/lib/freshness';
 import { assertFits, UnreadableAnswer, type Guard } from '../guards';
 import { CSRF, endSession, goToSignIn } from './session';
@@ -49,6 +50,7 @@ export class HttpFailure extends Error {
 export async function fetchOk(path: string, signal: AbortSignal | undefined): Promise<Response> {
   // Same-origin, so the browser sends the session cookie by itself.
   const res = await fetch(`/bff${path}`, { signal });
+  noteServerTime(res.headers.get('Date'));
 
   if (res.status === 401) {
     endSession();
@@ -124,7 +126,7 @@ export async function request<T>(
  * A write, with the deadline of a read. The timeout says the change may have been made, because the server can finish after the
  * page gave up, and a person who sends it again would otherwise do it twice.
  */
-async function write<T>(method: 'POST' | 'PUT' | 'DELETE', path: string, body: unknown, guard?: Guard<T>, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
+async function write<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body: unknown, guard?: Guard<T>, timeoutMs = REQUEST_TIMEOUT_MS): Promise<T> {
   const abort = new AbortController();
   const timer = setTimeout(() => abort.abort(), timeoutMs);
   try {
@@ -135,6 +137,7 @@ async function write<T>(method: 'POST' | 'PUT' | 'DELETE', path: string, body: u
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: abort.signal,
     });
+    noteServerTime(res.headers.get('Date'));
 
     if (res.status === 401) {
       endSession();
@@ -172,6 +175,7 @@ async function write<T>(method: 'POST' | 'PUT' | 'DELETE', path: string, body: u
 
 export const post = <T>(path: string, body: unknown, guard?: Guard<T>, timeoutMs?: number): Promise<T> => write<T>('POST', path, body, guard, timeoutMs);
 export const put = <T>(path: string, body: unknown, guard?: Guard<T>): Promise<T> => write<T>('PUT', path, body, guard);
+export const patch = <T>(path: string, body: unknown, guard?: Guard<T>): Promise<T> => write<T>('PATCH', path, body, guard);
 export const del = <T>(path: string, guard?: Guard<T>): Promise<T> => write<T>('DELETE', path, undefined, guard);
 
 export const qs = (params: Record<string, string | number | undefined>) => {

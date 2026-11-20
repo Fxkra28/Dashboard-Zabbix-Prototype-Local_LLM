@@ -2,7 +2,7 @@
  * What a host's name says about it, following HCML's own convention (read off their 2026-06/07/08
  * Availability Reports, see setup.md §16):
  *
- *   devices    <site>.<class>[.<seq>] NAME     1.2.1 IDX02CORESWITCH
+ *   devices    <site>.<class>[.<seq>] NAME     1.2.1 TANGO02CORESWITCH
  *   services   <TYPE> : NAME                   INET : SAMPANG WAN 1
  *
  * No HCML host carries a `site` tag, so the name is the most reliable site signal the estate has.

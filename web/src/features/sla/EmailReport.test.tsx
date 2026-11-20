@@ -47,6 +47,8 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 const button = () => screen.findByRole('button', { name: 'Email report' });
+/** What an administrator reads where the buttons would be, while email is off. */
+const OFF_NOTE = 'Email is off in this portal. Its MAIL_ settings are blank, or one of them cannot be used; the start-up log names that one.';
 /** The live region says what is happening, then what happened; it is there, empty, from the start. */
 const said = (dialog: HTMLElement, text: string | RegExp) => waitFor(() => expect(within(dialog).getByRole('status')).toHaveTextContent(text));
 async function open(user = userEvent.setup(), month = '2026-08') {
@@ -75,6 +77,7 @@ describe('who is offered the button', () => {
     await act(async () => undefined);
     expect(screen.queryByRole('button', { name: 'Email report' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Schedule' })).toBeNull();
+    expect(screen.queryByText(/Email is off/)).toBeNull();
     expect(info).not.toHaveBeenCalled();
   });
 
@@ -86,12 +89,27 @@ describe('who is offered the button', () => {
     expect(screen.queryByRole('button', { name: 'Email report' })).toBeNull();
   });
 
-  it('nobody while email is off', async () => {
+  it('no button while email is off, and a note that says why to the administrator who looks for it', async () => {
     info.mockResolvedValue({ enabled: false, from: '', recipients: [], max: 10, allowedDomains: [], kept: false });
     render(<EmailReport month="2026-08" />);
-    await waitFor(() => expect(info).toHaveBeenCalled());
-    await act(async () => undefined);
+    expect(await screen.findByText(OFF_NOTE)).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Email report' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Schedule' })).toBeNull();
+  });
+
+  it('the note goes with the administrator role: it is gone when the person stops being one', async () => {
+    info.mockResolvedValue({ enabled: false, from: '', recipients: [], max: 10, allowedDomains: [], kept: false });
+    const { rerender } = render(<EmailReport month="2026-08" />);
+    await screen.findByText(OFF_NOTE);
+    auth.role = 'operator';
+    rerender(<EmailReport month="2026-08" />);
+    expect(screen.queryByText(OFF_NOTE)).toBeNull();
+  });
+
+  it('no note while email is on', async () => {
+    render(<EmailReport month="2026-08" />);
+    await button();
+    expect(screen.queryByText(/Email is off/)).toBeNull();
   });
 
   it('nobody when the question could not be asked: a failed check must not get in the way', async () => {
@@ -101,6 +119,7 @@ describe('who is offered the button', () => {
     await act(async () => undefined);
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/Email is off/)).toBeNull();
   });
 
   it('is shut while the page is still loading the month', async () => {
@@ -901,3 +920,75 @@ describe('what the Schedule dialog tells the page about the list (FR-37)', () =>
   });
 });
 
+
+describe('for a range of days (FR-60)', () => {
+  const range = { from: 1785517200, to: 1786122000, dayHours: '8-17', days: '1,2,3,4,5', words: '3 Aug 2026, 00:00 to 10 Aug 2026, 00:00, 08:00 to 17:00, Monday to Friday' };
+  let rangeEmail: MockInstance<typeof api.sliRangeEmail>;
+  beforeEach(() => {
+    rangeEmail = vi.spyOn(api, 'sliRangeEmail').mockResolvedValue(sentTo(2, 0, { month: null, from: range.from, to: range.to }));
+  });
+
+  async function openRange(user = userEvent.setup()) {
+    render(<EmailReport range={range} />);
+    await user.click(await button());
+    return { user, dialog: await screen.findByRole('dialog', { name: 'Email the SLA report' }) };
+  }
+
+  it('is offered in a group named for the range in words, with the schedule beside it', async () => {
+    render(<EmailReport range={range} />);
+    const group = await screen.findByRole('group', { name: `Email the SLA report for ${range.words}, both methods` });
+    expect(within(group).getAllByRole('button').map((b) => b.textContent)).toEqual(['Email report', 'Schedule']);
+  });
+
+  it('names the range and the sender in the dialog, and puts the saved recipients in the box', async () => {
+    const { dialog } = await openRange();
+    expect(within(dialog).getByText(`${range.words}, both methods`)).toBeInTheDocument();
+    expect(within(dialog).getByText('portal.reports@example.com')).toBeInTheDocument();
+    expect(within(dialog).getByRole('textbox', { name: 'Send to' })).toHaveValue('ana@example.org\nbudi@example.org');
+    expect(rangeEmail).not.toHaveBeenCalled();
+  });
+
+  it('sends the range through its own call, with the hours, and never as a month', async () => {
+    const { user, dialog } = await openRange();
+    await user.click(within(dialog).getByRole('button', { name: 'Send report' }));
+    expect(rangeEmail).toHaveBeenCalledWith(range, { formats: ['pdf'], to: ['ana@example.org', 'budi@example.org'], remember: false, style: DEFAULT_STYLE });
+    expect(email).not.toHaveBeenCalled();
+    await said(dialog, 'Sent the PDF to 2 people.');
+    expect(within(dialog).queryByRole('button', { name: 'Send report' })).toBeNull();
+  });
+
+  it('says what the BFF refused, and lets the person try again, as for a month', async () => {
+    rangeEmail.mockRejectedValueOnce(new Error('That range ended a moment ago, and Zabbix is still adding its last values. Send it in about 7 minutes.'));
+    const { user, dialog } = await openRange();
+    await user.click(within(dialog).getByRole('button', { name: 'Send report' }));
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('That range ended a moment ago');
+    await user.click(within(dialog).getByRole('button', { name: 'Send report' }));
+    await said(dialog, 'Sent the PDF to 2 people.');
+    expect(rangeEmail).toHaveBeenCalledTimes(2);
+  });
+
+  it('is shut while the page has no range it can ask for', async () => {
+    render(<EmailReport range={range} disabled />);
+    expect(await button()).toBeDisabled();
+  });
+
+  describe('a send that takes long', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('says a range, not a month, that is not loaded yet can take a minute, and names the range when the person leaves it running', async () => {
+      rangeEmail.mockReturnValue(deferred<Sent>().promise);
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      const { dialog } = await openRange(user);
+      await user.click(within(dialog).getByRole('button', { name: 'Send report' }));
+      await said(dialog, 'Sending. A range that is not loaded yet can take a minute.');
+      await act(async () => void vi.advanceTimersByTime(31_000));
+      await user.click(within(dialog).getByRole('button', { name: 'Close, the send continues' }));
+      const note = screen.getByRole('status');
+      expect(note).toHaveTextContent(`The report email for ${range.words} is still being sent.`);
+      expect(note).toHaveTextContent('Last sends in the Schedule dialog');
+    });
+  });
+});

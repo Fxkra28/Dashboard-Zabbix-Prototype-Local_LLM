@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gunzipSync } from 'node:zlib';
@@ -39,12 +39,35 @@ if [ "$1" = info ]; then
   fi
   exit 0
 fi
+# FAKE_COMPOSE_LOG keeps, for each call of compose, the folder it ran in, the COMPOSE_FILE it saw and its arguments (IN-100).
+if [ "$1" = compose ] && [ -n "\${FAKE_COMPOSE_LOG:-}" ]; then echo "$PWD|\${COMPOSE_FILE:-}|$*" >>"$FAKE_COMPOSE_LOG"; fi
 if [ "$1" = image ] && [ "$2" = inspect ]; then
   [ -n "\${FAKE_NO_IMAGES:-}" ] && exit 1
-  case "$3" in *:latest) exit 0 ;; esac
-  if [ -n "\${FAKE_EXISTING:-}" ] && printf '%s' "$3" | grep -Eq "$FAKE_EXISTING"; then exit 0; fi
-  exit 1
+  # With -f '{{.Id}}' the name is the fifth word, and the id is made from it: two tags of one image are told in FAKE_SAME_IMAGE as name=name.
+  name="$3"; if [ "$3" = -f ]; then name="$5"; fi
+  exists=0
+  case "$name" in *:latest) exists=1 ;; esac
+  if [ -n "\${FAKE_EXISTING:-}" ] && printf '%s' "$name" | grep -Eq "$FAKE_EXISTING"; then exists=1; fi
+  [ "$exists" = 1 ] || exit 1
+  # When a rollback tag was made, from its name (<day><month>, and a later rebuild of the day a minute later): what a real docker keeps as LastTagTime.
+  if [ "$3" = -f ] && printf '%s' "$4" | grep -q LastTagTime; then
+    rest="\${name##*:rollback-}"; base="\${rest%%-*}"; n="\${rest#"$base"}"; n="\${n#-}"; d="\${base%[a-z][a-z][a-z]}"; mon="\${base#"$d"}"
+    case "$mon" in oct) m=10 ;; nov) m=11 ;; dec) m=12 ;; *) m=01 ;; esac
+    printf '2026-%s-%02d 10:%02d:00.000000000 +0700 WIB\\n' "$m" "$((10#$d))" "$((10#\${n:-1}))"
+    exit 0
+  fi
+  if [ "$3" = -f ]; then
+    id="sha256:id-of-$name"
+    if [ -n "\${FAKE_SAME_IMAGE:-}" ]; then
+      for pair in $FAKE_SAME_IMAGE; do [ "\${pair%%=*}" = "$name" ] && id="sha256:id-of-\${pair#*=}"; done
+    fi
+    echo "$id"
+  fi
+  exit 0
 fi
+# The rollback tags of an image, newest first (FAKE_TAGS), and the removal of one (FAKE_RMI_LOG).
+if [ "$1" = image ] && [ "$2" = ls ]; then printf '%s\\n' \${FAKE_TAGS:-}; exit 0; fi
+if [ "$1" = rmi ]; then [ -n "\${FAKE_RMI_LOG:-}" ] && echo "$2" >>"$FAKE_RMI_LOG"; exit 0; fi
 if [ "$1" = compose ] && [ "$2" = --project-directory ] && [ "$4" = config ] && [ "$5" = --quiet ]; then
   if [ -n "\${FAKE_BAD_ENV:-}" ] && printf '%s' "$3" | grep -Eq "$FAKE_BAD_ENV"; then
     echo "failed to read $3/.env: line 9: unexpected character \\"s\\" in variable name \\"sekrt\\"" >&2
@@ -78,7 +101,7 @@ fi
 if [ "$1" = inspect ] && [ "$2" = -f ]; then
   [ -n "\${FAKE_NO_CONTAINER:-}" ] && exit 1
   # What a container runs is told by its image id, which is not what the tag :latest names once something has moved it.
-  case "$3" in *Config.Env*) echo "BUILD_COMMIT=test" ;; *.Image*) echo "sha256:image-of-$4" ;; *) echo healthy ;; esac
+  case "$3" in *Config.Env*) echo "BUILD_COMMIT=test" ;; *.Image*) if [ -n "\${FAKE_RUNNING_AS:-}" ]; then echo "sha256:id-of-$FAKE_RUNNING_AS"; else echo "sha256:image-of-$4"; fi ;; *) echo healthy ;; esac
   exit 0
 fi
 if [ "$1" = port ]; then
@@ -475,9 +498,23 @@ describe('deploy/rebuild.sh, as a dry run', () => {
     expect(help).toContain('docker tag <image>:last-good <image>:latest');
     expect(help.indexOf('last-good')).toBeLessThan(help.indexOf('rollback-'));
     expect(help).toContain('if the run before this one failed, they are its failed build');
+    // DC-69: an older image cannot read the users made on the Users page, and the help that tells how to go back says so.
+    expect(help).toContain('users.json');
+    expect(help).toContain('deploy/backup-state.sh');
+    expect(help.indexOf('users.json')).toBeGreaterThan(help.indexOf('docker tag <image>:last-good'));
     // A failed `docker compose up` says the same.
     const up = rebuild(tree('failed-up-after-failed'), ['--skip-verify'], { ...env, FAKE_UP_FAILS: '1' });
     expect(after(up.stdout, 'could not bring')).toContain('hcml-portal-portal-bff:last-good');
+  });
+
+  it('says, where it tells how to go back without a last-good image too, what an older image cannot read (DC-69)', () => {
+    const r = rebuild(tree('failed-plain'), ['--skip-verify'], { FAKE_EXISTING: '^hcml-portal-portal-(bff|web):latest$' });
+    expect(r.status).toBe(1);
+    const help = after(r.stdout, 'Something above failed.');
+    expect(help).toContain('To go back: docker tag <image>:<tag> <image>:latest');
+    expect(help).toContain('users.json');
+    expect(help).toMatch(/before 17 November[^\n]*before 18 November/);
+    expect(help).toContain('deploy/backup-state.sh');
   });
 
   it('does not name a last-good image that does not exist (IN-47)', () => {
@@ -516,6 +553,137 @@ describe('deploy/rebuild.sh, as a dry run', () => {
     rmSync(join(root, '.git'), { recursive: true });
     writeFileSync(join(root, 'server', 'a.ts'), 'changed\n');
     expect(rebuild(root, ['--dry-run', '--skip-verify']).status).toBe(0);
+  });
+});
+
+// IN-100: a machine with overlays (the virtual machine's Ollama) writes COMPOSE_FILE in the .env of the copy. Compose takes the names in it from the folder it runs in, so every call that names
+// a copy runs from that copy's folder, and a rebuild brings up the same files as the first start did.
+describe('deploy/rebuild.sh and a COMPOSE_FILE line (IN-100)', () => {
+  const calls = (log: string) =>
+    readFileSync(log, 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => {
+        const [dir, files, ...rest] = l.split('|');
+        return { dir, files, args: rest.join('|') };
+      });
+
+  it('runs the check of a copy\'s settings from that copy\'s folder, and gives compose the COMPOSE_FILE it was given', () => {
+    const root = tree('compose-file-dry', 'hcml-portal', ['hcml-portal-ollama']);
+    const log = join(scratch, 'compose-file-dry.log');
+    const r = rebuild(root, ['--dry-run', '--skip-verify'], { COMPOSE_FILE: 'docker-compose.yml:docker-compose.vm.yml', FAKE_COMPOSE_LOG: log });
+    expect(r.status, r.stderr).toBe(0);
+    const made = calls(log).filter((c) => c.args.includes('config --quiet'));
+    expect(made.length).toBeGreaterThanOrEqual(2);
+    for (const c of made) {
+      expect(c.files).toBe('docker-compose.yml:docker-compose.vm.yml');
+      // The folder the call ran in is the copy named in its own arguments.
+      expect(realpathSync(c.dir)).toBe(realpathSync(c.args.split(' ')[2]));
+    }
+  });
+
+  it('builds with no -f of its own, which would override the COMPOSE_FILE line, and from the copy\'s folder', () => {
+    const root = tree('compose-file-real', 'hcml-portal', ['hcml-portal-ollama']);
+    const log = join(scratch, 'compose-file-real.log');
+    const r = rebuild(root, ['--skip-verify'], { ...healthy, COMPOSE_FILE: 'docker-compose.yml:docker-compose.vm.yml', FAKE_COMPOSE_LOG: log });
+    expect(r.stdout).toContain('up -d --build');
+    for (const line of r.stdout.split('\n').filter((l) => l.startsWith('+ ') && l.includes('docker compose'))) expect(line).not.toMatch(/ -f /);
+    const up = calls(log).filter((c) => c.args.includes(' up '));
+    expect(up.length).toBeGreaterThanOrEqual(2);
+    for (const c of up) {
+      expect(c.files).toBe('docker-compose.yml:docker-compose.vm.yml');
+      expect(realpathSync(c.dir)).toBe(realpathSync(c.args.split(' ')[2]));
+    }
+    // The logs of the running copy are read from the same folder.
+    for (const c of calls(log).filter((c) => c.args.includes(' logs '))) expect(realpathSync(c.dir)).toBe(realpathSync(c.args.split(' ')[2]));
+  });
+});
+
+// IN-108: the rollback tags pile up, a set for each rebuild. The owner names how many to keep; the way back is never cut.
+describe('deploy/rebuild.sh --prune-rollbacks=N (IN-108)', () => {
+  // Docker lists images made in the same second in no fixed order, as it does the web images, so the list is not the order of the rebuilds.
+  const TAGS = 'rollback-16nov-2 rollback-18nov rollback-12nov rollback-18nov-2 rollback-16nov rollback-16nov-3';
+  const prune = (label: string, n: string, extra: Record<string, string> = {}, args: string[] = []) => {
+    const root = tree(label, 'hcml-portal', ['hcml-portal-ollama']);
+    const log = join(scratch, `${label}.rmi`);
+    const r = rebuild(root, [`--prune-rollbacks=${n}`, ...args], { FAKE_TAGS: TAGS, FAKE_RMI_LOG: log, FAKE_EXISTING: 'rollback-|last-good', ...extra });
+    return { r, removed: existsSync(log) ? readFileSync(log, 'utf8').trim().split('\n') : [] };
+  };
+
+  it.each([[''], ['0'], ['abc'], ['-2'], ['1.5'], ['99999999']])('refuses --prune-rollbacks=%s in words, and removes nothing', (n) => {
+    const { r, removed } = prune(`prune-bad-${n === '' ? 'empty' : n.replace(/[^a-z0-9]/g, '_')}`, n);
+    expect(r.status).toBe(1);
+    expect(r.stderr).toContain('--prune-rollbacks=N');
+    expect(removed).toEqual([]);
+  });
+
+  it('keeps the newest N rollback tags of each image of each copy and untags the older ones', () => {
+    const { r, removed } = prune('prune-three', '3');
+    expect(r.status, r.stderr).toBe(0);
+    // Four images (two copies, two images each), the three newest kept: three older tags go from each.
+    expect(removed).toHaveLength(12);
+    expect(removed).toContain('hcml-portal-portal-bff:rollback-16nov-2');
+    expect(removed).toContain('hcml-portal-ollama-portal-web:rollback-12nov');
+    expect(removed).not.toContain('hcml-portal-portal-bff:rollback-18nov-2');
+    expect(removed).not.toContain('hcml-portal-portal-bff:rollback-16nov-3');
+    expect(r.stdout).toContain('Removed 12 rollback tag(s), keeping the newest 3 of each image.');
+  });
+
+  it('never touches :latest or last-good, which are not rollback tags, nor a tag that only starts like one', () => {
+    // The list holds what a real image can: its other tags, and a name someone gave a tag that is worth keeping. Only what free_tag makes counts and goes.
+    const { removed } = prune('prune-latest', '1', { FAKE_TAGS: 'latest last-good rollback-keep-me rollback-18nov-2 rollback-18nov rollback-16nov rollback-notes' });
+    expect(removed.filter((t) => /:(latest|last-good|rollback-keep-me|rollback-notes)$/.test(t))).toEqual([]);
+    expect(removed.every((t) => /:rollback-\d{1,2}[a-z]{3}(-\d+)?$/.test(t))).toBe(true);
+    // The newest made tag is kept, and the older two go from each of the four images, though rollback-keep-me stands before them in the list.
+    expect(removed).toHaveLength(8);
+    expect(removed).toContain('hcml-portal-portal-bff:rollback-18nov');
+    expect(removed).toContain('hcml-portal-portal-bff:rollback-16nov');
+    expect(removed).not.toContain('hcml-portal-portal-bff:rollback-18nov-2');
+  });
+
+  it('keeps a tag whatever its place when it names the image that runs, and when it names last-good', () => {
+    const { r, removed } = prune('prune-running', '1', { FAKE_RUNNING_AS: 'hcml-portal-portal-bff:rollback-12nov', FAKE_SAME_IMAGE: 'hcml-portal-portal-bff:last-good=hcml-portal-portal-bff:rollback-16nov' });
+    expect(r.status, r.stderr).toBe(0);
+    expect(r.stdout).toContain('keeping hcml-portal-portal-bff:rollback-12nov: it names the image that runs, or last-good');
+    expect(r.stdout).toContain('keeping hcml-portal-portal-bff:rollback-16nov: it names the image that runs, or last-good');
+    expect(removed).not.toContain('hcml-portal-portal-bff:rollback-12nov');
+    expect(removed).not.toContain('hcml-portal-portal-bff:rollback-16nov');
+    expect(removed).toContain('hcml-portal-portal-bff:rollback-16nov-2');
+  });
+
+  it('removes nothing when there are fewer tags than the number kept', () => {
+    const { r, removed } = prune('prune-many', '9');
+    expect(r.status, r.stderr).toBe(0);
+    expect(removed).toEqual([]);
+    expect(r.stdout).toContain('Removed 0 rollback tag(s)');
+  });
+
+  it('says what it would remove and removes none with --dry-run', () => {
+    const { r, removed } = prune('prune-dry', '2', {}, ['--dry-run']);
+    expect(r.status, r.stderr).toBe(0);
+    expect(removed).toEqual([]);
+    expect(r.stdout).toContain('+ docker rmi hcml-portal-portal-bff:rollback-16nov-3');
+    expect(r.stdout).toContain('Dry run: nothing was changed. 16 tag(s) would be removed, keeping the newest 2 of each image.');
+  });
+
+  it('refuses a number that is left out, and does not go on to build, as it would if the empty value were read as no option', () => {
+    const { r, removed } = prune('prune-empty-no-build', '', {}, ['--dry-run']);
+    expect(r.status).toBe(1);
+    expect(r.stdout).not.toContain('Gate:');
+    expect(r.stdout).not.toContain('docker compose');
+    expect(removed).toEqual([]);
+  });
+
+  it('does not take the number as a word of its own: --prune-rollbacks 3 is an unknown option', () => {
+    const r = rebuild(tree('prune-spaced'), ['--prune-rollbacks', '3']);
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain('unknown option');
+  });
+
+  it('is named in its own header, with the point that the number is the owner\'s', () => {
+    const r = rebuild(tree('prune-help'), ['--help']);
+    expect(r.stdout).toContain('--prune-rollbacks=N');
+    expect(r.stdout).toContain('is never assumed');
   });
 });
 
@@ -926,9 +1094,9 @@ describe('deploy/rebuild.sh with Docker stopped (IN-86)', () => {
   });
 });
 
-// IN-79: what the person is sent to check after a build, for the copy that exists so that nothing leaves the machine.
+// IN-79: what the person is sent to check after a build, for the copy that exists so that no question leaves the machine.
 describe('deploy/rebuild.sh and the sign-in check it asks for (IN-79)', () => {
-  it('asks for the local-model copy to be checked as local and without mail, and puts no such words on the hosted copy', () => {
+  it('asks for the local-model copy to be checked for a local model, and puts no such words on the hosted copy', () => {
     const root = tree('hint', 'hcml-portal', ['hcml-portal-ollama'], true);
     const r = rebuild(root, ['--skip-verify'], { ...healthy, FAKE_PORT_BY_COPY: '1' });
     expect(r.status).toBe(0);
@@ -936,7 +1104,8 @@ describe('deploy/rebuild.sh and the sign-in check it asks for (IN-79)', () => {
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain('http://127.0.0.1:8081');
     expect(lines[0]).not.toContain('--expect-ai');
-    expect(lines[1]).toContain('http://127.0.0.1:8082 --expect-mail off --expect-ai local');
+    expect(lines[1]).toContain('http://127.0.0.1:8082 --expect-ai local');
+    expect(lines[1]).not.toContain('--expect-mail');
   });
 
   // DC-33: a password typed on a command line stays in the shell's history, so the hint reads it without echo.

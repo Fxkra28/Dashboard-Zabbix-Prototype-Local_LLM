@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { PageLink } from '../../shared/components/PageLink';
 import { api } from '../../api';
 import { useAsync } from '../../shared/hooks/useAsync';
 import { useDebounced } from '../../shared/hooks/useDebounced';
@@ -83,6 +83,9 @@ export default function LatestData() {
   }, [q.data, q.loading, q.stale, total, page, pages, setPage]);
 
   const graphable = (i: LatestItem) => (i.value_type === '0' || i.value_type === '3') && i.state !== '1';
+  // A character or text item holds words that look like numbers: a serial, a version, a number in a contact field. Only a number item is formatted as one (FR-69).
+  const numeric = (i: LatestItem) => i.value_type === undefined || i.value_type === '0' || i.value_type === '3';
+  const shownValue = (i: LatestItem, value: string | undefined) => (numeric(i) ? fmtValue(value, i.units) : value === undefined || value === '' ? '—' : value);
 
   const noRowsWords =
     total > 0
@@ -226,12 +229,12 @@ export default function LatestData() {
                             <td className="muted mono">{i.key_}</td>
                             <td className="muted">{orNoData(fmtTime(i.lastclock))}</td>
                             <td style={{ fontWeight: 500 }}>
-                              {collected ? orNoData(fmtValue(i.lastvalue, i.units)) : <NoData />}
+                              {collected ? orNoData(shownValue(i, i.lastvalue)) : <NoData />}
                             </td>
                             {/* The dash here says three different things, so a screen reader is told which. */}
                             <td className="muted">
                               {changed ? (
-                                `${fmtValue(i.prevvalue, i.units)} →`
+                                `${shownValue(i, i.prevvalue)} →`
                               ) : !collected || i.prevvalue === undefined ? (
                                 <NoData />
                               ) : graphable(i) ? (
@@ -242,12 +245,13 @@ export default function LatestData() {
                             </td>
                             <td className="sticky-end">
                               {graphable(i) && (
-                                <Link
+                                <PageLink
                                   className="btn ghost sm"
                                   to={`/graphs?hostid=${i.hosts?.[0]?.hostid ?? hostid}&itemid=${i.itemid}`}
+                                  fallback={null}
                                 >
                                   Graph
-                                </Link>
+                                </PageLink>
                               )}
                             </td>
                           </tr>

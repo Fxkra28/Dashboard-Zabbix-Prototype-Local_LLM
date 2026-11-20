@@ -2,7 +2,7 @@
 
 | Who it is for | Reading time | Read first | Read next |
 |---|---|---|---|
-| Developers | about 5 min | [What is still open](open-items.md) | [How the handbook is kept true](how-the-handbook-is-kept-true.md) |
+| Developers | about 5 min | none | [How the handbook is kept true](how-the-handbook-is-kept-true.md) |
 
 The words this project uses in a particular way, in alphabetical order, with the page that explains each. The first group is Zabbix's own vocabulary, which the portal reads and does not change. The words from `docs/setup/28-glossary.md` and part 0's questions and terms are for readers who do not read code. This one is for the person who does.
 
@@ -53,7 +53,7 @@ The words this project uses in a particular way, in alphabetical order, with the
 | Profile | The method the SLA used: `hcml-report`, which reproduces HCML's own figures, or `availability`, the strict one |
 | Rail | The sidebar drawn as a narrow strip. A narrow screen forces it |
 | Reference | The request id shown in an error, to be quoted to whoever reads the log |
-| Role | `viewer`, `wall`, `operator` or `admin`, in that order of rank. The server's rules decide which a route needs |
+| Role | `guest`, `operator` or `admin`, in that order of rank. The server's table of routes decides which a route needs, and which pages (modules) own it |
 | Slice | A window of time, or a set of items, small enough for one Zabbix request. Events and trends are read in slices |
 | Snapshot | The estate as compact plain text, which the Assistant answers from. It is capped in characters, and reused while nothing it describes changes |
 | Stale copy | An answer that is an old copy kept because Zabbix failed, marked in a header. A refreshing copy is an old one shown while a newer one is read |

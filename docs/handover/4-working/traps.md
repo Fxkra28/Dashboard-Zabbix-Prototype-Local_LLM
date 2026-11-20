@@ -52,7 +52,7 @@ Each of these cost time once, and most cost it more than once. They are grouped 
 |---|---|---|
 | The two copies | A shared file edited in one only, and a build that is not what you tested | `npm run check:parity`, and edit the shared tree in `hcml-portal` only |
 | A copy that carries the machine's own file | `docker-compose.override.yml` names an internal address and must not be committed or copied between folders | It is ignored by git on this machine. Check what is staged before every commit |
-| The repository is public | Anything committed is public, including a token, a host name from the estate and a screenshot with real names | No real host name, address or token in a file. Screenshots are anonymised first |
+| The repository is public | Anything committed is public, including a token, a host name from the estate and a screenshot with real names | No real host name, address or token in a file, and no screenshots in the repository |
 | A case-insensitive file system | A link that resolves on a Mac can 404 on a Linux runner | `links.check` matches each segment against the real listing. `os.listdir` tells the true case, and `ls` does not |
 | A build from uncommitted files | The image is named for a commit it does not match | The rebuild script refuses, or labels the build `-dirty` and makes no tag |
 | A `.env` line Docker cannot read | A rebuild once stopped after the images were tagged | The script checks the files first and shows the line number, not Docker's message, which can quote a secret |

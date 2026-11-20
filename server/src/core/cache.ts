@@ -100,6 +100,8 @@ export interface CacheOptions {
   pin?: boolean;
   /** The key is made from what a caller chose: at most MAX_TYPED_ENTRIES such entries, and they are evicted first. */
   typed?: boolean;
+  /** A size the caller can give more truly than the walk of approxBytes, which stops at 500,000 values. The larger of the two is counted. */
+  weigh?: (value: unknown) => number;
   /** With staleMs: mark an answer served from the old value with its age (staleness.ts), so the page can say how old it is. */
   noteAge?: boolean;
   /**
@@ -339,7 +341,7 @@ function untilAborted<T>(promise: Promise<T>, signal: AbortSignal | undefined): 
 
 /** Store a fetched value. One bigger than the whole budget is not kept: it would only empty the cache. */
 function keep(key: string, v: unknown, opts: CacheOptions): void {
-  const bytes = approxBytes(v);
+  const bytes = Math.max(approxBytes(v), opts.weigh?.(v) ?? 0);
   if (bytes > MAX_BYTES) {
     discard(key);
     log?.warn({ key, bytes }, 'cache: value is larger than the whole cache budget; not storing it');

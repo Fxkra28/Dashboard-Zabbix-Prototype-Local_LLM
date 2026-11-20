@@ -59,3 +59,22 @@ describe('the Explain routes', () => {
     await app.close();
   });
 });
+
+describe('the derived SLA explanation and the line of the SLA reads (BK-88)', () => {
+  it('takes a place in it, as the SLA page does, and is refused with a 429 when the person holds four, and the Zabbix SLA takes none', async () => {
+    const { takeSliPlace } = await import('../security/heavyLimit.js');
+    // With sign-in off the caller is the client address, which app.inject gives as 127.0.0.1.
+    const held = Array.from({ length: 4 }, () => takeSliPlace('ip:127.0.0.1'));
+    const app = await buildTestApp(explainRoutes);
+    const derived = await app.inject({ url: '/api/explain/sla?source=derived&month=2026-08&profile=availability' });
+    expect(derived.statusCode).toBe(429);
+    expect(derivedMock).not.toHaveBeenCalled();
+    const zabbix = await app.inject({ url: '/api/explain/sla?slaid=3' });
+    expect(zabbix.statusCode).not.toBe(429);
+    expect(zabbixMock).toHaveBeenCalledTimes(1);
+    for (const release of held) release?.();
+    const after = await app.inject({ url: '/api/explain/sla?source=derived&month=2026-08&profile=availability' });
+    expect(after.statusCode).not.toBe(429);
+    await app.close();
+  });
+});

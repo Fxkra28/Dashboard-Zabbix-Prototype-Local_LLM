@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { isSignedOut, renewSession, sessionTiming } from '../../api';
 
 /** Renew this long before the session ends, or at three quarters of what was left when that comes first. */
@@ -25,9 +25,13 @@ const MIN_GAP_MS = 30_000;
  * against the local clock: a wall PC whose clock is hours off still renews on
  * time. It is checked every minute and whenever the page wakes, gains focus or
  * comes back online. With no known end, which /api/auth/me prevents, it renews
- * straight away.
+ * straight away. `onRenewed` runs after each renewal: a wall screen never reloads, so that is when it can find out what changed.
  */
-export function useSessionRenewal(enabled: boolean): void {
+export function useSessionRenewal(enabled: boolean, onRenewed?: () => void): void {
+  const renewed = useRef(onRenewed);
+  useEffect(() => {
+    renewed.current = onRenewed;
+  });
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
@@ -70,6 +74,7 @@ export function useSessionRenewal(enabled: boolean): void {
       if (outcome === 'renewed') {
         retry = RETRY_MS;
         notBefore = Date.now() + MIN_GAP_MS;
+        renewed.current?.();
       } else {
         notBefore = Date.now() + retry;
         retry = Math.min(retry * 2, RETRY_MAX_MS);

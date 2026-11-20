@@ -76,6 +76,8 @@ export type CapacityMetricKey = 'cpu' | 'memory' | 'disk' | 'ifutil';
 export interface CapacityReport {
   days: number;
   metrics: { key: CapacityMetricKey | (string & {}); label: string; rows: CapacityRow[] }[];
+  /** Unix seconds when the report was built; absent from a BFF that predates it. */
+  generatedAt?: number;
 }
 
 // Alert noise / flapping (Goal 4)

@@ -30,9 +30,9 @@ Zabbix has no idea what a site is. It has no idea what a WAN link is, or what to
 
 It does not watch the network. Zabbix does that, and when Zabbix stops collecting, the portal shows what Zabbix last had and says so. [Can I trust it](can-i-trust-it.md) explains how.
 
-It does not send alerts. There is no email and no message from the portal when a problem appears. The one thing it can email is the monthly SLA report, to the people an administrator chooses, by hand or by itself on a day of each month, once email has been set up, and only in the copy that uses Claude.
+It does not send alerts. There is no email and no message from the portal when a problem appears. The one thing it can email is the monthly SLA report, to the people an administrator chooses, by hand or by itself on a day of each month, once email has been set up, in either copy.
 
-It does not keep history of its own. There is no database behind it. What it knows, it asked Zabbix for a few seconds or minutes ago, and a restart makes it forget. The only things it keeps are its settings, its logs and, in the hosted copy, one small file with the people a report goes to, the monthly schedule and a record of the last 24 sends.
+It does not keep history of its own. There is no database behind it. What it knows, it asked Zabbix for a few seconds or minutes ago, and a restart makes it forget. The only things it keeps are its settings, its logs and, in each copy, one small file with the people a report goes to, the monthly schedule and a record of the last 24 sends.
 
 It does not change how Zabbix monitors. Nobody can add a host, edit a trigger or delete a template from it.
 
@@ -40,7 +40,7 @@ It does not change how Zabbix monitors. Nobody can add a host, edit a trigger or
 
 An operator or an admin can mark a problem as acknowledged, and can close it, from the Problems page. That is the portal's only write. It goes to Zabbix with a message that carries the person's name, because Zabbix files every write under the owner of the token the portal uses and would otherwise not know who clicked. The portal logs each attempt, whether it worked or not, and the server accepts at most 50 problems in one request.
 
-A viewer, and a wall screen, cannot do this at all. If the write is switched off for the whole portal, an operator sees a line that says so, and the control is not offered.
+A guest, and a wall screen, cannot do this at all. If the write is switched off for the whole portal, an operator sees a line that says so, and the control is not offered.
 
 ## Two copies
 
@@ -48,7 +48,7 @@ The portal exists twice, in two folders on the same machine, and the two are the
 
 ## Where it runs
 
-It runs as two small programs, called containers, on a computer that stays on and is on HCML's network. Today that is one developer's Mac; a server of HCML's own is the aim. One serves the pages to the browser. The other talks to Zabbix. People open it in a browser at an address the operator gives them, and sign in. Before anyone outside that machine uses it, a secure connection (TLS) has to be put in front of it; the portal does not provide one itself.
+It runs as two small programs, called containers, on a computer that stays on and is on HCML's network. Today that is our Mac; a server of HCML's own is the aim. One serves the pages to the browser. The other talks to Zabbix. People open it in a browser at an address the operator gives them, and sign in. Before anyone outside that machine uses it, a secure connection (TLS) has to be put in front of it; the portal does not provide one itself.
 
 ## Why these pages exist
 

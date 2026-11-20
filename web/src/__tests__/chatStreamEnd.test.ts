@@ -78,3 +78,26 @@ describe('the end of the Assistant’s stream', () => {
     await expect(run).rejects.toThrow('The model is busy. Try again in a minute.');
   });
 });
+
+describe('what the page sends of its conversation', () => {
+  it('is the role and the words of each turn, and nothing the page keeps for itself (UX-72, UX-73, FR-72)', async () => {
+    const { chatStream } = await load();
+    fetchMock.mockResolvedValueOnce(stream(frame('done', DONE)));
+    await chatStream(
+      [
+        { role: 'user', content: 'Berapa host yang mati?', lang: 'id', forgotten: true },
+        { role: 'assistant', content: 'Dua host.', lang: 'id', cut: 'limit' },
+        { role: 'user', content: 'Dan di Surabaya?' },
+      ],
+      { onToken: () => undefined },
+    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(JSON.parse(init.body as string)).toEqual({
+      messages: [
+        { role: 'user', content: 'Berapa host yang mati?' },
+        { role: 'assistant', content: 'Dua host.' },
+        { role: 'user', content: 'Dan di Surabaya?' },
+      ],
+    });
+  });
+});

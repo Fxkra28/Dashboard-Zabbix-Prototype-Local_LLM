@@ -4,8 +4,10 @@
   // type errors, so without this the tests would drift out of sync silently.
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true
+    "noEmit": true,
+    // The tests reach the scripts that are tested by importing them (scripts/bakeoff/score.ts).
+    "rootDir": "."
   },
-  "include": ["src"],
+  "include": ["src", "scripts/bakeoff"],
   "exclude": []
 }

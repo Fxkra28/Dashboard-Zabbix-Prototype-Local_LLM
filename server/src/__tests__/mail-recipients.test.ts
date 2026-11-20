@@ -175,7 +175,7 @@ describe('splitAddresses', () => {
 
 describe('domainsOf', () => {
   it('lists the domains of the addresses once, in lower case, in the order they appear, and no name', () => {
-    expect(domainsOf(['ana@Example.org', 'budi@hcml.co.id', 'cici@example.ORG'])).toEqual(['example.org', 'hcml.co.id']);
+    expect(domainsOf(['ana@Example.org', 'budi@example.net', 'cici@example.ORG'])).toEqual(['example.org', 'example.net']);
     expect(domainsOf([])).toEqual([]);
   });
 });

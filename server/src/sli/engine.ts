@@ -1,27 +1,25 @@
 import { zbx } from '../clients/zabbix.js';
+import { siteFromHostName } from '../domain/naming.js';
+import type { ZHostMeta } from '../domain/queries.js';
+import { SITE_SIGNALS, siteRefOf } from '../domain/siteOf.js';
 import { config, type SliProfile } from '../core/config.js';
+import { pollSeconds } from '../core/delay.js';
 import { BadRequestError } from '../core/validate.js';
-import {
-  CATEGORY_ORDER,
-  DEVICE_CLASS_LABELS,
-  categoryLabel,
-  deviceClass,
-  naturalCompare,
-  siteFromHostName,
-  wanPairKey,
-  type SiteRef,
-} from '../domain/naming.js';
 import { chunk, fetchEventsSliced, fetchTrendsSliced, mapLimit } from './events.js';
+import { evaluateSli, type SliData, type SliDataHost } from './evaluate.js';
 import { maintenanceByHost } from './maintenance.js';
-import { checkPeriodStart, hourFloor, monthBounds } from './time.js';
+import { intersectIntervals, mergeIntervals, totalSeconds, type Interval } from './intervals.js';
 import {
-  clipIntervals,
-  complementIntervals,
-  intersectIntervals,
-  mergeIntervals,
-  totalSeconds,
-  type Interval,
-} from './intervals.js';
+  categoryFor,
+  coveredFromTrends,
+  DERIVED_LABEL,
+  initialState,
+  wasMeasured,
+  type SliReport,
+  type SliWeb,
+  type TriggerEvent,
+} from './model.js';
+import { checkPeriodStart, hourFloor, monthBounds } from './time.js';
 
 /**
  * The derived SLA: monthly availability per host, computed from the ICMP
@@ -47,228 +45,14 @@ import {
  *
  * In both profiles, time inside a planned Zabbix maintenance window is left
  * out of the measurement, downtime and total alike (maintenance.ts).
- */
-
-export type DataStatus = 'ok' | 'partial' | 'nodata';
-
-export interface SliHost {
-  hostid: string;
-  name: string;
-  hostStatus: string;
-  site: SiteRef | null;
-  category: string;
-  deviceClass: string;
-  triggerids: string[];
-  /** Percent; null when there is too little collected data to say. */
-  sli: number | null;
-  /** Seconds down inside the measured time. */
-  downtime: number;
-  /** Seconds in the window (from → min(to, now)). */
-  window: number;
-  /** Seconds actually measured: the window minus hours with no data and planned maintenance. */
-  covered: number;
-  /** Seconds of the window inside a planned maintenance window, left out of the figure. */
-  maintenance: number;
-  coverage: number;
-  incidents: number;
-  longest: number;
-  dataStatus: DataStatus;
-  /**
-   * False when the host's ICMP has never been collected (`wasMeasured`), judged
-   * from its items as they are now. HCML's method still counts such a host as
-   * 100 %; the figures do not change, this only says so.
-   */
-  measured: boolean;
-  meeting: boolean | null;
-  /** Seconds of downtime the target still allows; negative = missed. */
-  errorBudget: number | null;
-}
-
-export interface SliGroup {
-  key: string;
-  name: string;
-  hosts: number;
-  withData: number;
-  /** Plain mean of the hosts' figures, HCML's own rule for every total. */
-  sli: number | null;
-  downtime: number;
-  meeting: boolean | null;
-  belowTarget: number;
-}
-
-export interface SliPath {
-  key: string;
-  name: string;
-  site: SiteRef | null;
-  legs: { hostid: string; name: string; leg: string; sli: number | null; dataStatus: DataStatus }[];
-  /** Down only while every leg is down: the point of a redundant pair. */
-  sli: number | null;
-  downtime: number;
-  coverage: number;
-  dataStatus: DataStatus;
-}
-
-export interface SliWeb {
-  itemid: string;
-  name: string;
-  sli: number | null;
-  downtime: number;
-  coverage: number;
-  dataStatus: DataStatus;
-}
-
-export interface SliReport {
-  source: 'derived';
-  label: string;
-  profile: SliProfile;
-  month: string | null;
-  from: number;
-  to: number;
-  /** min(to, now): the part of the window that has happened. */
-  end: number;
-  closed: boolean;
-  timezone: string;
-  target: number;
-  basis: {
-    triggers: string[];
-    gapPolicy: 'counted-as-up' | 'excluded';
-    noDataPolicy: 'counted-as-100' | 'excluded';
-    /** Planned maintenance, read from the periods as Zabbix defines them now. */
-    maintenancePolicy: 'excluded';
-  };
-  overall: SliGroup;
-  categories: SliGroup[];
-  sites: SliGroup[];
-  classes: SliGroup[];
-  hosts: SliHost[];
-  wanPaths: SliPath[];
-  web: SliWeb[];
-  /** When the web check figures were taken, as unix seconds, once they are kept for a month that has closed (services/closedWeb.ts). Absent while they can still change. */
-  webTakenAt?: number;
-  /** Estate-wide spans in which (almost) nothing was collected. */
-  gaps: { from: number; to: number }[];
-  /** Spans the setting SLA_NO_DATA_WINDOWS declares not measured, treated as gaps by both profiles. */
-  noDataWindows: { from: number; to: number }[];
-  stats: { zabbixCalls: number; triggers: number; events: number; trendRows: number; ms: number };
-  generatedAt: number;
-}
-
-export const DERIVED_LABEL = 'Derived from ICMP availability triggers';
-
-// Pure parts (unit-tested)
-
-export interface TriggerEvent {
-  clock: number;
-  /** 1 = PROBLEM, 0 = OK. */
-  value: number;
-}
-
-/**
- * Replay one trigger's events across `[from, endClip)`.
  *
- * `initialProblem` is the state the trigger was in when the window opened. A
- * repeated PROBLEM while already in problem is one outage, not two.
+ * Two stages (ADR-0018). This file reads Zabbix for one span, a month or one window, and returns what it read (`readSliData`). evaluate.ts works any
+ * window out from the data of the spans it touches, and does no input or output. `computeSli` is the two in a row, with the web checks.
  */
-export function intervalsFor(
-  events: TriggerEvent[],
-  initialProblem: boolean,
-  from: number,
-  endClip: number,
-): { intervals: Interval[]; incidents: number } {
-  const intervals: Interval[] = [];
-  let open: number | null = initialProblem ? from : null;
-  let incidents = initialProblem ? 1 : 0;
-  for (const ev of events) {
-    if (ev.clock < from || ev.clock > endClip) continue;
-    if (ev.value === 1) {
-      if (open === null) {
-        open = ev.clock;
-        incidents++;
-      }
-    } else if (open !== null) {
-      if (ev.clock > open) intervals.push([open, ev.clock]);
-      open = null;
-    }
-  }
-  if (open !== null && endClip > open) intervals.push([open, endClip]);
-  return { intervals, incidents };
-}
 
-/**
- * The state a trigger was in when the window opened.
- *   - its first event inside the window says it (an OK first = it was in problem);
- *   - a first PROBLEM says it was OK, except for a trigger set to multiple PROBLEM
- *     events, which repeats PROBLEM while in problem: there the last event before
- *     the window decides (`lastBefore`, 1 = PROBLEM, 0 = OK, none = not given);
- *   - with no events inside, a trigger unchanged since before the window is in
- *     its current state;
- *   - one that changed only after the window: the first later event says what
- *     it changed from (`firstLater`, 1 = PROBLEM, 0 = OK).
- */
-export function initialState(
-  eventsInWindow: TriggerEvent[],
-  trigger: { value: string; lastchange: string },
-  end: number,
-  firstLater?: number,
-  lastBefore?: number,
-): boolean {
-  if (eventsInWindow.length) return eventsInWindow[0].value === 1 && lastBefore !== undefined ? lastBefore === 1 : eventsInWindow[0].value === 0;
-  if (Number(trigger.lastchange) < end || firstLater === undefined) return trigger.value === '1';
-  return firstLater === 0;
-}
-
-const mean = (xs: number[]): number | null => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
-
-/** A group's figures from its hosts: the plain mean of those with data. */
-export function aggregate(key: string, name: string, hosts: SliHost[], target: number): SliGroup {
-  const withData = hosts.filter((h) => h.sli !== null);
-  const sli = mean(withData.map((h) => h.sli as number));
-  return {
-    key,
-    name,
-    hosts: hosts.length,
-    withData: withData.length,
-    sli,
-    downtime: hosts.reduce((n, h) => n + h.downtime, 0),
-    meeting: sli === null ? null : sli >= target,
-    belowTarget: hosts.filter((h) => h.meeting === false).length,
-  };
-}
-
-/** Parse a Zabbix update interval ('60', '1m', '5m', '1h', '30s'); macros → 60. */
-export function parseDelay(delay: string | undefined): number {
-  const m = /^\s*(\d+)\s*([smhdw]?)\s*$/.exec(delay ?? '');
-  if (!m) return 60;
-  const unit = { '': 1, s: 1, m: 60, h: 3600, d: 86400, w: 604800 }[m[2] as '' | 's' | 'm' | 'h' | 'd' | 'w'];
-  return Math.max(1, Number(m[1]) * unit);
-}
-
-/**
- * Whether a host's ICMP was ever collected, from its ICMP items as they are
- * now: not when every one has no value (`lastclock` 0) and is not being
- * collected either: unsupported (at HCML: no interface to ping), or on a
- * disabled host. A host with no ICMP item at all is not flagged; nothing says
- * how it is measured.
- */
-export function wasMeasured(items: { state?: string; lastclock?: string }[], hostDisabled: boolean): boolean {
-  if (!items.length) return true;
-  return !items.every((i) => i.lastclock === '0' && (i.state === '1' || hostDisabled));
-}
-
-/**
- * Hours in which an item actually collected data, from its trend rows: an hour
- * counts when at least half of the expected samples arrived.
- */
-export function coveredFromTrends(
-  rows: { clock: number; num: number }[],
-  delaySeconds: number,
-  from: number,
-  end: number,
-): Interval[] {
-  const expected = 3600 / delaySeconds;
-  const hours = rows.filter((r) => r.num >= 0.5 * expected).map((r): Interval => [r.clock, r.clock + 3600]);
-  return intersectIntervals(hours, [[from, end]]);
-}
+export { aggregate, categoryFor, coveredFromTrends, DERIVED_LABEL, initialState, intervalsFor, wasMeasured } from './model.js';
+export type { DailyHours, DataStatus, SliGroup, SliHost, SliPath, SliReport, SliWeb, TriggerEvent } from './model.js';
+export type { SliData } from './evaluate.js';
 
 // Zabbix reads
 
@@ -358,14 +142,13 @@ async function lastEventsBefore(counter: Counter, triggerids: string[], from: nu
   return found;
 }
 
-/** Collected-time intervals per host from its ICMP `icmpping` item, inside `outside` (the window less its declared spans). */
-async function icmpCoverage(
+/** Collected-time intervals per host from its ICMP `icmpping` item over `[from, end)`, before spans declared not measured are taken out (evaluate.ts does that, and finds the estate's gaps). */
+async function readIcmpCoverage(
   counter: Counter,
   icmpItems: ZIcmpItem[],
   from: number,
   end: number,
-  outside: Interval[],
-): Promise<{ byHost: Map<string, Interval[]>; gaps: Interval[] }> {
+): Promise<Map<string, Interval[]>> {
   const items = icmpItems.filter((i) => i.key_ === 'icmpping' || i.key_.startsWith('icmpping['));
 
   // One item per host: the plain `icmpping` if present.
@@ -405,7 +188,7 @@ async function icmpCoverage(
   for (const [itemid, item] of hostByItem) {
     byHost.set(
       item.hostid,
-      coveredFromTrends(rowsByItem.get(itemid) ?? [], parseDelay(item.delay), from, end),
+      coveredFromTrends(rowsByItem.get(itemid) ?? [], pollSeconds(item.delay), from, end),
     );
   }
 
@@ -433,7 +216,7 @@ async function icmpCoverage(
       }
     });
     for (const [itemid, item] of hostByItem) {
-      const delay = parseDelay(item.delay);
+      const delay = pollSeconds(item.delay);
       const extra: Interval[] = [];
       for (const [h, n] of counts.get(itemid) ?? []) {
         const span = Math.min(h + 3600, end) - Math.max(h, tailFrom);
@@ -442,23 +225,7 @@ async function icmpCoverage(
       byHost.set(item.hostid, mergeIntervals([...(byHost.get(item.hostid) ?? []), ...extra]));
     }
   }
-
-  for (const [hostid, iv] of byHost) byHost.set(hostid, intersectIntervals(iv, outside));
-
-  // Estate-wide gaps: hours in which fewer than 10% of the items that collected
-  // anything in the window collected data.
-  const active = [...byHost.values()].filter((iv) => iv.length);
-  const gaps: Interval[] = [];
-  if (active.length) {
-    for (let h = hourFloor(from); h < end; h += 3600) {
-      const s = Math.max(h, from);
-      const e = Math.min(h + 3600, end);
-      const n = active.filter((iv) => totalSeconds(intersectIntervals(iv, [[s, e]])) > 0).length;
-      if (n < 0.1 * active.length) gaps.push([s, e]);
-    }
-  }
-  // A declared span is reported as such, not again as an hour nothing was collected in.
-  return { byHost, gaps: intersectIntervals(mergeIntervals(gaps), outside) };
+  return byHost;
 }
 
 /** Web scenarios on the "Web Monitoring" host, strict profile only. */
@@ -495,7 +262,7 @@ async function webScenarios(
   const historyFloor = now - 31 * 86400;
 
   return mapLimit(items, config.sla.maxParallel, async (item) => {
-    const delay = parseDelay(item.delay);
+    const delay = pollSeconds(item.delay);
     const covered: Interval[] = [];
     const down: Interval[] = [];
     const mixed: number[] = [];
@@ -552,32 +319,15 @@ export interface SliRequest {
   to?: number;
 }
 
-export async function computeSli(req: SliRequest): Promise<SliReport> {
-  const started = Date.now();
-  const now = Math.floor(started / 1000);
+/** The span `[from, to)` as Zabbix has it at `now`: the triggers, their events and the state each began in, the planned maintenance and, in the strict method, the hours with data. */
+export async function readSliData(
+  req: { profile: SliProfile; from: number; to: number; now: number },
+  counter: Counter = { calls: 0, events: 0, trendRows: 0 },
+): Promise<SliData> {
+  const { profile, from, to, now } = req;
   const tz = config.sla.timezone;
-  const target = config.sla.target;
-  const profile = req.profile;
   const strict = profile === 'availability';
-
-  const { from, to } = req.month
-    ? monthBounds(req.month, tz)
-    : { from: req.from as number, to: req.to as number };
-  if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
-    throw new BadRequestError('A month (YYYY-MM) or a from/to window is required.');
-  }
-  checkPeriodStart(from, now);
-
   const end = Math.min(to, now);
-  const closed = to <= now;
-  const window = end - from;
-  // Spans declared not measured (SLA_NO_DATA_WINDOWS) are a gap in both profiles: left out of the strict figure,
-  // counted as up in HCML's, as an hour nothing was collected in is.
-  const declared = mergeIntervals(clipIntervals(config.sla.noDataWindows, from, end));
-  const outsideDeclared = complementIntervals(declared, from, end);
-  // HCML's report clips a problem still open at month end to the last second.
-  const endClip = !strict && closed ? to - 1 : end;
-  const counter: Counter = { calls: 0, events: 0, trendRows: 0 };
   const triggerNames = strict ? config.sla.availabilityTriggers : config.sla.reportTriggers;
 
   // Every host carrying one of the triggers, including disabled hosts, which
@@ -601,10 +351,12 @@ export async function computeSli(req: SliRequest): Promise<SliReport> {
 
   const [parents, icmpItems, events, maintenance] = await Promise.all([
     hostids.length
-      ? counted<{ hostid: string; parentTemplates?: { name: string }[] }[]>(counter, 'host.get', {
+      ? counted<{ hostid: string; parentTemplates?: { name: string }[]; hostgroups?: ZHostMeta['hostgroups']; tags?: ZHostMeta['tags']; inventory?: ZHostMeta['inventory'] }[]>(counter, 'host.get', {
           hostids,
           output: ['hostid'],
           selectParentTemplates: ['name'],
+          // The site by the four signals of the Sites page, asked in the call that is made anyway (BK-103).
+          ...SITE_SIGNALS,
         })
       : Promise.resolve([]),
     // Every ICMP item of the reported hosts, in both profiles: `measured` needs
@@ -638,6 +390,12 @@ export async function computeSli(req: SliRequest): Promise<SliReport> {
   const categoryByHost = new Map(
     parents.map((p) => [p.hostid, categoryFor((p.parentTemplates ?? []).map((t) => t.name))]),
   );
+  const siteByHost = new Map(
+    parents.map((p) => {
+      const meta = hostMeta.get(p.hostid);
+      return [p.hostid, siteRefOf({ hostid: p.hostid, name: meta?.name ?? '', status: meta?.status ?? '0', hostgroups: p.hostgroups, tags: p.tags, inventory: p.inventory })];
+    }),
+  );
 
   const eventsByTrigger = new Map<string, TriggerEvent[]>();
   for (const e of events) {
@@ -668,209 +426,71 @@ export async function computeSli(req: SliRequest): Promise<SliReport> {
     icmpByHost.set(i.hostid, list);
   }
 
-  const coverage = strict ? await icmpCoverage(counter, icmpItems, from, end, outsideDeclared) : undefined;
-  // "Partial" is judged against the time the estate as a whole was collecting:
-  // an hour nobody collected in is the estate's gap, not this host's.
-  const gapSeconds = totalSeconds(coverage?.gaps ?? []) + (strict ? totalSeconds(declared) : 0);
-  const estateSeconds = Math.max(0, window - gapSeconds);
+  const coverage = strict ? await readIcmpCoverage(counter, icmpItems, from, end) : undefined;
 
-  const hosts: SliHost[] = [];
-  const downByHost = new Map<string, Interval[]>();
-  const coveredByHost = new Map<string, Interval[]>();
-  for (const [hostid, meta] of hostMeta) {
-    const all: Interval[] = [];
-    let incidents = 0;
-    for (const t of meta.triggers) {
-      const evs = eventsByTrigger.get(t.triggerid) ?? [];
-      const initial = initialState(evs, t, end, firstLater.get(t.triggerid), lastBefore.get(t.triggerid));
-      const r = intervalsFor(evs, initial, from, endClip);
-      all.push(...r.intervals);
-      incidents += r.incidents;
-    }
-    const merged = mergeIntervals(all);
-    const category = categoryByHost.get(hostid) ?? 'Other';
-
-    // Planned maintenance leaves the measurement entirely, as a no-data hour
-    // does in the strict profile: neither down nor counted in the total.
-    const planned = clipIntervals(maintenance.get(hostid) ?? [], from, end);
-    const plannedSec = totalSeconds(planned);
-    const outsidePlanned = complementIntervals(planned, from, end);
-    const measurable = window - plannedSec;
-
-    let covered: Interval[];
-    if (strict) covered = intersectIntervals(coverage!.byHost.get(hostid) ?? [], outsidePlanned);
-    else covered = outsidePlanned;
-    const measured = intersectIntervals(intersectIntervals(merged, covered), outsideDeclared);
-    const downtime = totalSeconds(measured);
-    const coveredSec = totalSeconds(covered);
-    const cov = measurable > 0 ? coveredSec / measurable : 0;
-    const nodata = strict && (coveredSec === 0 || cov < config.sla.minCoverage);
-    const denominator = strict ? coveredSec : measurable;
-    const sli = nodata || denominator <= 0 ? null : Math.max(0, 100 * (1 - downtime / denominator));
-
-    downByHost.set(hostid, measured);
-    coveredByHost.set(hostid, covered);
-    hosts.push({
-      hostid,
-      name: meta.name,
-      hostStatus: meta.status,
-      site: siteFromHostName(meta.name),
-      category,
-      deviceClass: deviceClass(meta.name, category),
-      triggerids: meta.triggers.map((t) => t.triggerid),
-      sli,
-      downtime,
-      window,
-      covered: coveredSec,
-      maintenance: plannedSec,
-      coverage: cov,
-      incidents,
-      longest: measured.reduce((m, [s, e]) => Math.max(m, e - s), 0),
-      dataStatus: nodata
-        ? 'nodata'
-        : strict && coveredSec < 0.95 * Math.max(0, estateSeconds - plannedSec)
-          ? 'partial'
-          : 'ok',
-      measured: wasMeasured(icmpByHost.get(hostid) ?? [], meta.status === '1'),
-      meeting: sli === null ? null : sli >= target,
-      errorBudget: sli === null ? null : (1 - target / 100) * denominator - downtime,
-    });
+  const initial = new Map<string, boolean>();
+  for (const t of triggers) {
+    initial.set(t.triggerid, initialState(eventsByTrigger.get(t.triggerid) ?? [], t, end, firstLater.get(t.triggerid), lastBefore.get(t.triggerid)));
   }
+  const hosts: SliDataHost[] = [...hostMeta].map(([hostid, meta]) => ({
+    hostid,
+    name: meta.name,
+    status: meta.status,
+    triggerids: meta.triggers.map((t) => t.triggerid),
+    category: categoryByHost.get(hostid) ?? 'Other',
+    site: siteByHost.has(hostid) ? siteByHost.get(hostid)! : siteFromHostName(meta.name),
+    measured: wasMeasured(icmpByHost.get(hostid) ?? [], meta.status === '1'),
+  }));
 
-  hosts.sort(
-    (a, b) =>
-      (a.sli === null ? 1 : 0) - (b.sli === null ? 1 : 0) ||
-      (a.sli ?? 0) - (b.sli ?? 0) ||
-      naturalCompare(a.name, b.name),
-  );
-
-  const group = <K extends string>(keyOf: (h: SliHost) => K, nameOf: (k: K, h: SliHost) => string) => {
-    const buckets = new Map<K, { name: string; hosts: SliHost[] }>();
-    for (const h of hosts) {
-      const k = keyOf(h);
-      const b = buckets.get(k) ?? { name: nameOf(k, h), hosts: [] };
-      b.hosts.push(h);
-      buckets.set(k, b);
-    }
-    return [...buckets.entries()].map(([k, b]) => aggregate(k, b.name, b.hosts, target));
+  return {
+    profile,
+    from,
+    to,
+    end,
+    readAt: now,
+    hosts,
+    initial,
+    events: eventsByTrigger,
+    maintenance,
+    ...(coverage ? { coverage } : {}),
+    stats: { zabbixCalls: counter.calls, triggers: triggers.length, events: counter.events, trendRows: counter.trendRows },
   };
+}
 
-  const categories = group((h) => h.category, (k) => k).sort(
-    (a, b) => rank(CATEGORY_ORDER, a.key) - rank(CATEGORY_ORDER, b.key) || naturalCompare(a.name, b.name),
-  );
-  const sites = group(
-    (h) => (h.site ? `site:${h.site.code}` : 'site:unassigned'),
-    (_k, h) => (h.site ? `${h.site.code} · ${h.site.name}` : 'Unassigned'),
-  ).sort((a, b) => siteRank(a.key) - siteRank(b.key));
-  const classes = group(
-    (h) => h.deviceClass,
-    (k) => DEVICE_CLASS_LABELS[k as keyof typeof DEVICE_CLASS_LABELS] ?? k,
-  ).sort((a, b) => naturalCompare(a.name, b.name));
+/** The window and the method from a request: a month, or `from` and `to`. */
+function windowOf(req: SliRequest, now: number): { from: number; to: number } {
+  const { from, to } = req.month ? monthBounds(req.month, config.sla.timezone) : { from: req.from as number, to: req.to as number };
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from >= to) {
+    throw new BadRequestError('A month (YYYY-MM) or a from/to window is required.');
+  }
+  checkPeriodStart(from, now);
+  return { from, to };
+}
 
-  const wanPaths = buildWanPaths(hosts, downByHost, coveredByHost, window, strict, estateSeconds);
-  const web = strict ? await webScenarios(counter, from, end, now, estateSeconds, outsideDeclared) : [];
+export async function computeSli(req: SliRequest): Promise<SliReport> {
+  const started = Date.now();
+  const now = Math.floor(started / 1000);
+  const strict = req.profile === 'availability';
+  const { from, to } = windowOf(req, now);
+  const counter: Counter = { calls: 0, events: 0, trendRows: 0 };
+
+  const data = await readSliData({ profile: req.profile, from, to, now }, counter);
+  const { estateSeconds, outsideDeclared, ...evaluated } = evaluateSli([data], { from, to });
+  const web = strict ? await webScenarios(counter, from, evaluated.end, now, estateSeconds, outsideDeclared) : [];
 
   return {
     source: 'derived',
     label: DERIVED_LABEL,
-    profile,
+    ...evaluated,
     month: req.month ?? null,
-    from,
-    to,
-    end,
-    closed,
-    timezone: tz,
-    target,
-    basis: {
-      triggers: triggerNames,
-      gapPolicy: strict ? 'excluded' : 'counted-as-up',
-      noDataPolicy: strict ? 'excluded' : 'counted-as-100',
-      maintenancePolicy: 'excluded',
-    },
-    overall: aggregate('overall', 'HCML estate', hosts, target),
-    categories,
-    sites,
-    classes,
-    hosts,
-    wanPaths,
     web,
-    gaps: (coverage?.gaps ?? []).map(([s, e]) => ({ from: s, to: e })),
-    noDataWindows: declared.map(([s, e]) => ({ from: s, to: e })),
     stats: {
       zabbixCalls: counter.calls,
-      triggers: triggers.length,
+      triggers: data.stats.triggers,
       events: counter.events,
       trendRows: counter.trendRows,
       ms: Date.now() - started,
     },
     generatedAt: now,
   };
-}
-
-function rank(order: string[], key: string): number {
-  const i = order.indexOf(key);
-  return i < 0 ? order.length : i;
-}
-
-function siteRank(key: string): number {
-  const code = Number(key.replace('site:', ''));
-  return Number.isFinite(code) ? code : 99;
-}
-
-/**
- * The report category is the monitoring template: a device template when the
- * host has one, "ICMP Ping" for hosts that are only pinged.
- */
-export function categoryFor(parentTemplates: string[]): string {
-  const lower = parentTemplates.map((p) => p.toLowerCase());
-  const device = CATEGORY_ORDER.find((c) => c !== 'ICMP Ping' && lower.includes(c.toLowerCase()));
-  if (device) return device;
-  if (lower.includes('icmp ping')) return 'ICMP Ping';
-  return parentTemplates[0] ? categoryLabel(parentTemplates[0]) : 'Other';
-}
-
-function buildWanPaths(
-  hosts: SliHost[],
-  downByHost: Map<string, Interval[]>,
-  coveredByHost: Map<string, Interval[]>,
-  window: number,
-  strict: boolean,
-  estateSeconds: number,
-): SliPath[] {
-  const byPath = new Map<string, { legs: SliHost[]; legIds: string[] }>();
-  for (const h of hosts) {
-    const key = wanPairKey(h.name);
-    if (!key) continue;
-    const row = byPath.get(key.path) ?? { legs: [], legIds: [] };
-    row.legs.push(h);
-    row.legIds.push(key.leg);
-    byPath.set(key.path, row);
-  }
-  const paths: SliPath[] = [];
-  for (const [path, { legs, legIds }] of byPath) {
-    const nodata = legs.some((l) => l.dataStatus === 'nodata');
-    let covered: Interval[] = coveredByHost.get(legs[0].hostid) ?? [];
-    let down: Interval[] = downByHost.get(legs[0].hostid) ?? [];
-    for (const leg of legs.slice(1)) {
-      covered = intersectIntervals(covered, coveredByHost.get(leg.hostid) ?? []);
-      down = intersectIntervals(down, downByHost.get(leg.hostid) ?? []);
-    }
-    const coveredSec = strict ? totalSeconds(covered) : window;
-    const downtime = totalSeconds(down);
-    const coverage = window > 0 ? Math.min(1, coveredSec / window) : 0;
-    const sli = nodata || coveredSec <= 0 ? null : Math.max(0, 100 * (1 - downtime / coveredSec));
-    paths.push({
-      key: `wan:${path}`,
-      name: path,
-      site: legs[0].site,
-      legs: legs
-        .map((l, i) => ({ hostid: l.hostid, name: l.name, leg: legIds[i], sli: l.sli, dataStatus: l.dataStatus }))
-        .sort((a, b) => naturalCompare(a.leg, b.leg)),
-      sli,
-      downtime,
-      coverage,
-      dataStatus: nodata ? 'nodata' : strict && coveredSec < 0.95 * estateSeconds ? 'partial' : 'ok',
-    });
-  }
-  return paths.sort((a, b) => naturalCompare(a.name, b.name));
 }

@@ -4,7 +4,7 @@ A deep-dive into the architecture, data flow, and the Zabbix-native features thi
 re-implements. Read [README.md](README.md) first for installation and configuration; this document
 explains *how it all fits together* and *why*.
 
-It is the reference you grep, not the one you read front to back: 40 parts, one per subsystem and, from §30, one for each day of changes, each a file in [`docs/setup/`](docs/setup/).
+It is the reference you grep, not the one you read front to back: 29 parts, one per subsystem, each a file in [`docs/setup/`](docs/setup/).
 Sections 14 to 26 are the only written record of why the derived figures are calculated the way they
 are, so they matter most when a number has to be defended.
 
@@ -55,14 +55,3 @@ the code; for *why* the system is shaped this way go to
 | 27 | [Limitations and known gaps](docs/setup/27-limitations-and-known-gaps.md) |
 | 28 | [Glossary](docs/setup/28-glossary.md) |
 | 29 | [HCML's six optimisation goals, indexed](docs/setup/29-hcmls-six-optimisation-goals-indexed.md) |
-| 30 | [What changed on 12 October 2026](docs/setup/30-what-changed-on-12-october-2026.md) |
-| 31 | [What changed on 13 October 2026](docs/setup/31-what-changed-on-13-october-2026.md) |
-| 32 | [What changed on 14 October 2026](docs/setup/32-what-changed-on-14-october-2026.md) |
-| 33 | [What changed on 14 October 2026, the mentor's requests](docs/setup/33-what-changed-on-14-october-2026-the-mentors-requests.md) |
-| 34 | [What changed on 14 October 2026, the follow-ups to the meters](docs/setup/34-what-changed-on-14-october-2026-the-follow-ups-to-the-meters.md) |
-| 35 | [What changed on 15 October 2026, the audit and the Hosts view](docs/setup/35-what-changed-on-15-october-2026-the-audit-and-the-hosts-view.md) |
-| 36 | [What changed on 16 October 2026, the folders](docs/setup/36-what-changed-on-16-october-2026-the-folders.md) |
-| 37 | [What changed on 19 October 2026, the check and six rows](docs/setup/37-what-changed-on-19-october-2026-the-check-and-six-rows.md) |
-| 38 | [What changed on 19 and 20 October 2026, the splits, the linter and the screenshots](docs/setup/38-what-changed-on-19-and-20-october-2026-the-splits-the-linter-and-the-screenshots.md) |
-| 39 | [What changed on 22 October 2026, the answers, the restart policies and the rebuild](docs/setup/39-what-changed-on-22-october-2026-the-answers-the-restart-policies-and-the-rebuild.md) |
-| 40 | [What changed from 26 to 30 October 2026, the new look, option B, the speed fix and the checks that followed](docs/setup/40-what-changed-from-26-to-30-october-2026-the-new-look-option-b-the-speed-fix-and-the-checks.md) |

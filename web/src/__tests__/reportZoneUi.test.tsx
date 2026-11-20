@@ -44,9 +44,11 @@ describe('MonthSelect', () => {
     unmount();
 
     render(<MonthSelect rolling value="2026-07" onChange={() => undefined} />);
-    expect(screen.getAllByRole('option')).toHaveLength(14);
+    // The twelve months, the two windows and the range view (ADR-0018).
+    expect(screen.getAllByRole('option')).toHaveLength(15);
     expect(screen.getByRole('option', { name: 'Last 7 days' })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'Last 30 days' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Range and hours of the day' })).toBeInTheDocument();
   });
 });
 

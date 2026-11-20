@@ -29,6 +29,10 @@ describe('.gitignore', () => {
     ['/pic/', 'screenshots with real host names'],
     ['HCML_SLA_Report_*', 'a downloaded report names every device'],
     ['*.log.[0-9]*', 'the rotated copies of the server log (bff.log.1 and up), which hold the names typed at sign-in and addresses'],
+    ['users.json*', 'the portal\'s users with their password hashes, and the copies of the file (.prev, .repaired-<time>, .broken-<time>) (SC-66)'],
+    ['closed-months.json*', 'the web check figures of closed months, and the copies of that file (SC-66)'],
+    ['requests.json*', 'the requests for an account, which hold the names and reasons that strangers typed, and the copies of that file (FR-62)'],
+    ['*.broken-*', 'a state file the portal put aside because it could not read it (SC-66)'],
   ])('lists %s (%s)', (entry) => {
     expect(lines).toContain(entry);
   });
@@ -61,6 +65,18 @@ describe('.gitignore, as git reads it', () => {
     'HCML_SLA_Report_2026-10.pdf',
     'server/bff.log',
     'server/bff.log.1',
+    'users.json',
+    'server/users.json',
+    'server/users.json.prev',
+    'server/users.json.broken-1790000000000',
+    'server/users.json.repaired-1790000000000',
+    'closed-months.json',
+    'server/closed-months.json.prev',
+    'server/portal-state.json.broken-1790000000000',
+    'requests.json',
+    'server/requests.json',
+    'server/requests.json.prev',
+    'server/requests.json.broken-1790000000000',
   ])('leaves %s out of git add -A', (path) => {
     expect(status(path), path).toBe(0);
   });

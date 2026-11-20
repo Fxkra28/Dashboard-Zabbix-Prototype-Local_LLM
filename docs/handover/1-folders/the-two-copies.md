@@ -13,7 +13,7 @@ One thing decides it: which model writes the plain-language answers.
 | | `hcml-portal` | `hcml-portal-ollama` |
 |---|---|---|
 | Who answers Explain and the Assistant | Hosted Claude, over the internet, through the Anthropic API | A model running on the host machine, reached through Ollama's OpenAI-compatible address |
-| What leaves the machine | The text of a problem or an SLA figure, and the Assistant's snapshot of the estate, when someone asks, and the monthly report by email, when an administrator sends it and email is set up | Nothing. The fonts are served from the site in both copies, so nothing is fetched from outside either, and this copy never emails a report: its compose file passes no mail settings |
+| What leaves the machine | The text of a problem or an SLA figure, and the Assistant's snapshot of the estate, when someone asks, and the monthly report by email, when an administrator sends it and email is set up | No question and no summary of the estate. The monthly report by email can still go, when an administrator sends it and email is set up. The fonts are served from the site in both copies, so nothing is fetched from outside either |
 | Address | Port 8081 on the loopback address | Port 8082 on the loopback address |
 | Session cookie | `hcml_session` | `hcml_session_ollama` |
 | Under git | Yes. CI is set up here (it has not run yet, IN-30), and the `live-<date>` tag of this copy is cut here | Yes, a repository of its own since 11 November 2026, with the same CI file and its own `live-<date>` tag. Its shared files are still written by copying them from the other |
@@ -29,15 +29,14 @@ The settings that carry the difference are few. In `docker-compose.yml` they are
 | File | Why it differs |
 |---|---|
 | `README.md` | Each describes its own copy: its model, its port, its tests. |
-| `AUDIT_REPORT.md` | Each records the audits from its own copy's point of view. |
 | `docker-compose.yml` | The origin, the port, the cookie name and the model settings, as above. |
 | `docs/index.md` | The opening says which copy it is in. |
 | `docs/api/openapi.yaml` | The description of the server addresses. Everything else in it is the same. |
 | `docs/architecture/adr/0005-provider-neutral-ai-layer.md` | The consequences of the decision for each copy. |
 | `docs/flow/README.md`, `docs/flow/DataFlow.mmd`, `docs/flow/DataFlow.pdf` | Where the data goes depends on who writes the answer. |
 | `docs/schema/README.md`, `docs/schema/CDM.mmd`, `docs/schema/CDM.pdf`, `docs/schema/ERD.mmd`, `docs/schema/ERD.pdf`, `docs/schema/PDM.mmd`, `docs/schema/PDM.pdf` | The model draws the answer in red in the hosted copy, because its text leaves the machine. |
-| `docs/setup/11-running-deploying.md` | The web port in three lines, the sentence about rebuilding, and the sentence about what the copy keeps on a volume. |
-| `docs/setup/19-authentication-rbac.md` | The cookie name, and the admin row: the local-model copy has no email, so it says so. |
+| `docs/setup/11-running-deploying.md` | The web port in three lines and the sentence about rebuilding. |
+| `docs/setup/19-authentication-rbac.md` | The cookie name. |
 
 Four more files differ and are never opened by any tool: `.env`, `.env.example`, `server/.env` and `server/.env.example`. They hold settings, and the real ones hold secrets. One more file exists in the local-model copy only: `docs/README_copy.md`, a snapshot of its README from September, kept for reference and not maintained.
 

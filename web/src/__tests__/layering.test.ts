@@ -19,8 +19,9 @@ const MAY_IMPORT: Record<string, string[]> = {
   network: ['graphs', 'hosts'],
   problems: ['assistant'],
   reports: [],
-  shell: ['assistant'],
+  shell: ['assistant', 'auth'],
   sla: ['assistant'],
+  users: [],
 };
 
 // Every shipped source as text, keyed by its path from here ('../features/hosts/Hosts.tsx'). Tests, fixtures and CSS are left out.

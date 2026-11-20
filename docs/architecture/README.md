@@ -4,7 +4,7 @@ The system at rest, the system in motion, and why it is shaped the way it is.
 
 ## Why it is the way it is
 
-[Architecture Decision Records](adr/): fifteen decisions in MADR format, each with what was
+[Architecture Decision Records](adr/): nineteen decisions in MADR format, each with what was
 considered, what was chosen, and what it cost. Start with
 [ADR-0001](adr/0001-bff-over-zabbix-api.md) if you are new; it explains why there is a portal at all.
 
@@ -41,13 +41,13 @@ portal owns no database ([ADR-0003](adr/0003-no-database.md)).
 
 ## The contract
 
-[`../api/openapi.yaml`](../api/openapi.yaml), all 51 endpoints, both security schemes, every status
+[`../api/openapi.yaml`](../api/openapi.yaml), all 61 endpoints, both security schemes, every status
 code and response schema. Checked against the code by `npx tsx tools/check/openapi.check.ts`, and against the web app's types by
 `web/src/__tests__/openapiTypes.test.ts` (the types in `web/src/generated/openapi.ts` are made from it).
 
 ## The subsystems in prose
 
-[`../../setup.md`](../../setup.md), 40 parts, one per subsystem and one for each day of changes. §1 is the big picture and §2
+[`../../setup.md`](../../setup.md), 29 parts, one per subsystem. §1 is the big picture and §2
 traces a request end to end: the same ground as `ServerFlow`, in words. **§§14 to 26 are the only
 written record of how the derived figures are computed**; if you are changing the SLA engine, read §25
 first.

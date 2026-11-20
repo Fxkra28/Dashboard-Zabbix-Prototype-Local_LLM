@@ -218,7 +218,8 @@ a.btn.sm {
 }
 
 /* Modal (acknowledge / close write-back) */
-.drawer-overlay:has(.modal) {
+/* A class, not :has(), which a browser at the floor the build declares does not know: the dialogs stuck to the right edge as a tall panel (UX-77). */
+.drawer-overlay.centered {
   align-items: center;
   justify-content: center;
 }
@@ -299,6 +300,7 @@ a.btn.sm {
   padding: var(--s-2) var(--s-3);
   border: 1px solid var(--border-strong);
   border-radius: var(--r-md);
+  background: var(--surface);
   resize: vertical;
   width: 100%;
   color: var(--text);
@@ -321,6 +323,15 @@ a.btn.sm {
   height: 16px;
   min-width: auto;
   margin: 0;
+}
+/* The pages of a user flow in columns; the note under the legend takes the full row. */
+.user-modules {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  column-gap: var(--s-4);
+}
+.user-modules > p {
+  grid-column: 1 / -1;
 }
 
 /* Notices */

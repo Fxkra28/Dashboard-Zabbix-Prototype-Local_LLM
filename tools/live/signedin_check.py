@@ -5,7 +5,7 @@
         [--expect-mail on|off|any] [--expect-ai local|hosted|any] [--expect-zabbix on|any] [--only-mail] [--only-health] [--month YYYY-MM]
 
 The account must be an administrator: email and the monthly schedule are for administrators. `--expect-mail on` is for a copy that
-has its MAIL_ settings (the hosted one), `off` for one that holds them back (the local-model copy), `any` takes either.
+has its MAIL_ settings, `off` for one that holds them back, `any` takes either.
 `--expect-zabbix on` (the default) fails a portal that cannot read Zabbix, which answers /api/ready with a 503; `any` is for an image tried
 where Zabbix cannot be reached, such as a laptop off HCML's network, and then says what Zabbix answered and passes.
 `--only-mail` runs the sign-in and the email, schedule and CSV checks alone, which is quick when they are the question.

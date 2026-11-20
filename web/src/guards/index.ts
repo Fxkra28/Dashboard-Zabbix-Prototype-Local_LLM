@@ -39,3 +39,5 @@ export {
 export { problemExplanationGuard, slaExplanationGuard } from './assistant';
 
 export { meGuard } from './auth';
+
+export { requestInfoGuard, requestsGuard, userResultGuard, usersGuard } from './users';

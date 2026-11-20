@@ -57,7 +57,10 @@ const activates = (e: React.KeyboardEvent) => e.key === 'Enter' || e.key === ' '
 
 export default function Network() {
   const devicesQ = useAsync<NetDevice[]>(() => api.netDevices(), [], 30_000);
-  const isAdmin = roleAllows(useAuth().role, 'admin');
+  const { role, can, me } = useAuth();
+  const isAdmin = roleAllows(role, 'admin');
+  // The traffic of a port is a graph, which the Graphs page owns: a person who has Network and not Graphs would open a panel of refusals (FR-71).
+  const mayGraph = can('graphs');
   // Device, filters and page live in the URL, so Back from a graph lands on the same view.
   const [hostid, setHostid] = useUrlState<string>('hostid', '');
   const [search, setSearch] = useUrlState<string>('q', '', { debounceMs: 300 });
@@ -127,7 +130,7 @@ export default function Network() {
   // Rows still on screen from the previous device or filter can't be opened:
   // they would graph the wrong device's port under this one's name.
   const openPort = (r: NetInterface) => {
-    if (portsQ.stale || !(r.itemids.in || r.itemids.out)) return;
+    if (!mayGraph || portsQ.stale || !(r.itemids.in || r.itemids.out)) return;
     setPort(r);
     if (port?.index !== r.index) revealTraffic();
   };
@@ -261,6 +264,7 @@ export default function Network() {
                 </div>
               </FieldGroup>
             </div>
+            {me && !mayGraph && <p className="muted ports-graph-note">The traffic graph of a port is on the Graphs page, which is not on your account. Ask an administrator to add it.</p>}
             <Async
               loading={portsQ.loading}
               error={portsQ.error}
@@ -303,7 +307,7 @@ export default function Network() {
                         <tbody>
                           {res.rows.map((r) => {
                             const sel = port?.index === r.index;
-                            const canGraph = !!(r.itemids.in || r.itemids.out);
+                            const canGraph = mayGraph && !!(r.itemids.in || r.itemids.out);
                             return (
                               // The interface name is the keyboard path, a real button; the row click only widens the target for a mouse.
                               <tr
@@ -363,7 +367,7 @@ export default function Network() {
             </Async>
           </div>
 
-          {port && (
+          {port && mayGraph && (
             <div className="panel" ref={trafficPanel}>
               <div className="panel-head">
                 <h2 tabIndex={-1} data-reveal-focus>

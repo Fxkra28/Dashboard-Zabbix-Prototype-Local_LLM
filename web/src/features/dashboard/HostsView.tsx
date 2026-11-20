@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { Link } from 'react-router-dom';
+import { PageLink } from '../../shared/components/PageLink';
 import type { HostsViewQuery } from './useHostsView';
 import type { DevicesResponse, TopHostsMetric, WebMonitoringResponse } from '../../types';
 import { BUSY, HOT, NO_WEB_WORDS, WALL_FAILURES, WALL_TOP_ROWS, WEB_SUB, availability, emptyTopWords, failureWords, percentUp, usageWords } from './hostsFigures';
@@ -42,9 +42,9 @@ function Counts({ data, wall }: { data: DevicesResponse; wall: boolean }) {
                 {wall || t.total === 0 ? (
                   <div className={`kind-tile${t.total === 0 ? ' empty' : ''}`}>{body}</div>
                 ) : (
-                  <Link className="kind-tile" to={`/devices?type=${c.key}`}>
+                  <PageLink className="kind-tile" to={`/devices?type=${c.key}`} fallback={<div className="kind-tile">{body}</div>}>
                     {body}
-                  </Link>
+                  </PageLink>
                 )}
               </li>
             );
@@ -83,7 +83,7 @@ function WebPanel({ w, wall }: { w: WebMonitoringResponse; wall: boolean }) {
               {listed.map((f) => (
                 <li key={f.itemid} className="web-failure">
                   <span>
-                    {wall ? f.host : <Link to={`/graphs?hostid=${f.hostid}&itemid=${f.itemid}`}>{f.host}</Link>} · {f.name}
+                    {wall ? f.host : <PageLink to={`/graphs?hostid=${f.hostid}&itemid=${f.itemid}`}>{f.host}</PageLink>} · {f.name}
                   </span>
                   <span className="muted">
                     {failureWords(f)}, {formatClockLabeled(f.clock * 1000, true)}
@@ -111,7 +111,7 @@ function TopList({ m, wall }: { m: TopHostsMetric; wall: boolean }) {
         <ol className="top-list">
           {rows.map((r) => (
             <li key={r.hostid} className="top-row">
-              <span className="top-host">{wall ? r.host : <Link to={`/graphs?hostid=${r.hostid}&itemid=${r.itemid}`}>{r.host}</Link>}</span>
+              <span className="top-host">{wall ? r.host : <PageLink to={`/graphs?hostid=${r.hostid}&itemid=${r.itemid}`}>{r.host}</PageLink>}</span>
               <span className="top-value">{usageWords(r.value)}</span>
               <span className="top-bar" aria-hidden="true">
                 <span className={`top-fill${r.value >= HOT ? ' hot' : r.value >= BUSY ? ' busy' : ''}`} style={{ width: `${Math.min(100, Math.max(0, r.value))}%` }} />

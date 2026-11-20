@@ -19,7 +19,7 @@ This page is how the running portals are looked after: what is on the machine, h
 | Images tagged `latest` | What runs now | |
 | Images tagged `rollback-<day><month>` | What ran before each rebuild | |
 | `~/.local/state/hcml-portal-watch` | The watcher's state and log, when it is installed | |
-| The `portal-state` volume | The hosted copy's saved report recipients, the monthly schedule and a record of the last 24 sends, at `/data` in its server container | No |
+| The `portal-state` volume | Each copy's saved report recipients, the monthly schedule and a record of the last 24 sends (`portal-state.json`), the web check figures of closed months (`closed-months.json`) and the users with the hashes of their passwords (`users.json`, and `users.json.prev`), at `/data` in its server container | No |
 | The `portal-logs` volume | The server's own copy of its log, ten files of 20 MB by default, at `/var/log/portal` in the server container of each copy | No |
 | `~/.local/state/hcml-portal-logs` | The compressed logs of the containers that `deploy/rebuild.sh` replaced | No |
 
@@ -38,7 +38,7 @@ This page is how the running portals are looked after: what is on the machine, h
 - For each copy, the hosted one first, it saves the logs of the running containers, since a new container starts with an empty Docker log (the server's own copy in the `portal-logs` volume stays). It tags the images it replaces `rollback-<day><month>`, then `docker compose up -d --build` with the commit and the time as build arguments, and waits up to 180 seconds for both containers to be healthy.
 - Then it asks as an anonymous caller: health answers 200, the meters 401, `/.env` and `/.git/config` 404, and the page carries a content-security policy. It prints the bundle name and the build. A copy that fails any of this stops the run before the next copy is touched, so one copy can run the new build while the other still runs the old one; the help it prints says which.
 - For each copy with a clean tree it makes the local tag `live-<date>` in that copy's own repository, and prints the command that would push it. It never pushes it.
-- It cannot sign in, so it prints the one check that needs a person: `tools/live/signedin_check.py` against each portal, with your name and password read into your own shell (`read -rs`, so that the password stays out of its history), and for the local-model copy `--expect-mail off --expect-ai local`, which fails when that copy could email or when its model is outside the network (IN-79). The check also fails a portal that cannot read Zabbix; `--expect-zabbix any` is for an image tried where Zabbix cannot be reached (IN-91). Open the Dashboard and Problems on each portal as well.
+- It cannot sign in, so it prints the one check that needs a person: `tools/live/signedin_check.py` against each portal, with your name and password read into your own shell (`read -rs`, so that the password stays out of its history), and for the local-model copy `--expect-ai local`, which fails when its model is outside the network (IN-79). The check also fails a portal that cannot read Zabbix; `--expect-zabbix any` is for an image tried where Zabbix cannot be reached (IN-91). Open the Dashboard and Problems on each portal as well.
 
 ## Going back
 
@@ -47,7 +47,7 @@ If a rebuild fails or a build proves bad, the previous images are tagged `rollba
 1. `docker tag <image>:last-good <image>:latest` for each of the two images, or the rollback tag the script names when it names no `last-good`.
 2. `docker compose up -d --no-build` in that copy's folder.
 
-The rule keeps the two newest rollback tags of each image. Delete older ones only when the owner says so, because each is a way back.
+The rule keeps the two newest rollback tags of each image. Delete older ones only when we say so, because each is a way back.
 
 ## Knowing one has stopped
 
@@ -65,7 +65,7 @@ After a start the server reads the slow views once, one at a time, so that the f
 
 ## What to back up
 
-The portal keeps no estate data, but it does keep its settings, and nothing else holds a copy: the `.env` files, which git ignores because they hold passwords and tokens. Make an encrypted copy after every change to a user, a role, a token, `JWT_SECRET` or a setting, and keep it off the machine, with its passphrase somewhere else. In the hosted copy the volume `portal-state` holds one more file worth keeping, `portal-state.json` (the saved addresses and the schedule): copy it out before any `docker compose down -v`. The recipe, with the `openssl` commands, the checks that a copy opens, and how to restore from it, is [backup and restore](../../operations/backup-and-restore.md). The `docker-compose.override.yml` of each folder holds an address and no secret, and a plain copy saves asking HCML IT for the address again. Each folder is a git repository with a remote, so its source is safe once it is pushed; what git leaves out is the `.env` files and the override, which the copies above are for.
+The portal keeps no estate data, but it does keep two things that nothing else holds a copy of: the `.env` files, which git ignores because they hold passwords and tokens, and the volume `portal-state`, which holds `users.json` (every account made on the Users page, with the hash of its password), `portal-state.json` (the saved addresses and the schedule) and `closed-months.json` (the web check figures of closed months), in both copies, and `requests.json` when the form for an account is on. Back up the `.env` files and the volume together: `deploy/backup-state.sh --env` makes two encrypted files with one passphrase, one for the `.env` files and one for the volume. Make a copy after every change to a user, a role, a token, `JWT_SECRET` or a setting, keep it off the machine, with its passphrase somewhere else, and take one before any `docker compose down -v`, which deletes the volume and every account on it. The recipe, with the scripts first and the `openssl` commands as the fallback, the checks that a copy opens, and how to restore from it, is [backup and restore](../../operations/backup-and-restore.md). The `docker-compose.override.yml` of each folder holds an address and no secret, and a plain copy saves asking HCML IT for the address again. Each folder is a git repository with a remote, so its source is safe once it is pushed; what git leaves out is the `.env` files and the override, which the copies above are for.
 
 ## Logs, and finding one request
 

@@ -85,6 +85,10 @@ const isPlaceholderKey = (v: string | undefined) => /^your_/i.test((v ?? '').tri
 const aiKeyPlaceholders = aiKeys.filter(([, value]) => isPlaceholderKey(value)).map(([name]) => name);
 const aiApiKey = aiKeys.map(([, value]) => value || '').find((v) => v && !isPlaceholderKey(v)) ?? '';
 const aiBaseUrl = process.env.AI_BASE_URL || '';
+const aiModel = process.env.AI_MODEL || (aiProvider === 'anthropic' ? 'claude-sonnet-4-6' : 'qwen3:8b');
+
+/** A model name that Ollama sends to ollama.com once it is signed in (`gpt-oss:120b-cloud`, `kimi-k2:cloud`), whatever address it is asked at (SC-70). */
+export const isCloudModelName = (model: string): boolean => /(^|[:_-])cloud$/i.test(model.trim());
 
 /**
  * `auto` asks the server whether it is Ollama (see ai.ts `usesOllamaNative`);
@@ -384,6 +388,15 @@ export const config = {
      * report to any address. Off unless this is "true"; it never reaches the container (compose-env.test.ts).
      */
     allowEmailWithoutAuth: (process.env.ALLOW_EMAIL_WITHOUT_AUTH ?? '').trim().toLowerCase() === 'true',
+    /**
+     * Requests for an account (FR-62): a form on the sign-in page that leaves a pending request for an administrator to approve or refuse. Off unless ACCOUNT_REQUESTS is "true",
+     * and it needs the data folder and sign-in. It is the one public route that writes to disk, so it is capped: this many pending at once, and this many requests from one address in a day.
+     */
+    accountRequests: {
+      enabled: (process.env.ACCOUNT_REQUESTS ?? '').trim().toLowerCase() === 'true',
+      maxPending: Math.min(500, Math.max(1, Math.floor(envNum('ACCOUNT_REQUESTS_MAX_PENDING', 50)))),
+      perAddressPerDay: Math.min(50, Math.max(1, Math.floor(envNum('ACCOUNT_REQUESTS_PER_ADDRESS', 3)))),
+    },
   },
   /**
    * Plain-language layer. Optional: unconfigured, the portal still serves every data endpoint and
@@ -405,7 +418,7 @@ export const config = {
      * Questions and estate data leave this machine's own network: the hosted Anthropic backend does, and so does a model on any
      * host that is not local (core/localHost.ts). The UI says so next to every AI answer; a model inside shows nothing (SC-53).
      */
-    external: aiProvider === 'anthropic' || (aiBaseUrl !== '' && !isLocalBaseUrl(aiBaseUrl)),
+    external: aiProvider === 'anthropic' || (aiBaseUrl !== '' && (!isLocalBaseUrl(aiBaseUrl) || isCloudModelName(aiModel))),
     /** The local-model copy's compose file sets this: it promises that nothing leaves, so assertConfig refuses an outside model. */
     localOnly: (process.env.AI_LOCAL_ONLY ?? '').trim().toLowerCase() === 'true',
     /** The owner's word that an outside model is meant, even in a local-only copy. */
@@ -413,7 +426,7 @@ export const config = {
     apiKey: aiApiKey,
     /** Base URL of an OpenAI-compatible server, e.g. http://localhost:11434/v1 */
     baseUrl: aiBaseUrl,
-    model: process.env.AI_MODEL || (aiProvider === 'anthropic' ? 'claude-sonnet-4-6' : 'qwen3:8b'),
+    model: aiModel,
     /**
      * The SDK defaults to a 10-minute timeout and 2 retries, sane for a batch
      * job, far too long for a request a human is waiting on behind a button.
@@ -456,6 +469,9 @@ export const config = {
      */
     temperature: envNum('AI_TEMPERATURE', 0.7),
     topP: envNum('AI_TOP_P', 0.8),
+    /** Whether the owner set them: a model's own card (clients/ai.ts `modelProfile`) is used for what is not set. */
+    temperatureSet: (process.env.AI_TEMPERATURE ?? '').trim() !== '',
+    topPSet: (process.env.AI_TOP_P ?? '').trim() !== '',
     /**
      * What Explain and the Assistant may spend (limits.ts, ai.ts). The per-minute and concurrency
      * numbers are at least 1, since 0 would refuse every call. A daily token budget of 0, or less,
@@ -714,10 +730,15 @@ export function assertConfig(warn: (msg: string) => void): void {
   // This copy promises that no question leaves the machine; an address in .env must not undo that without a word (SC-53).
   if (config.ai.localOnly && config.ai.enabled && config.ai.external) {
     if (!config.ai.allowRemote) {
+      // A model named for the cloud is outside whatever address it is asked at: Ollama forwards it to ollama.com (SC-70).
       throw new Error(
-        'This copy is set to send nothing away (AI_LOCAL_ONLY), but its AI model is outside this machine and its own network. ' +
-          'Point AI_BASE_URL at a local model, for example http://host.docker.internal:11434/v1, or set AI_ALLOW_REMOTE=true to accept ' +
-          'that every question and a summary of the estate go to that model. The page then says so beside every answer.',
+        config.ai.provider === 'openai-compatible' && isCloudModelName(config.ai.model)
+          ? 'This copy is set to send nothing away (AI_LOCAL_ONLY), but its AI model is a cloud one: Ollama sends a model named like that to ollama.com. ' +
+              'Name a model that runs on this machine in AI_MODEL, or set AI_ALLOW_REMOTE=true to accept that every question and a summary of the estate go to ollama.com. ' +
+              'The page then says so beside every answer.'
+          : 'This copy is set to send nothing away (AI_LOCAL_ONLY), but its AI model is outside this machine and its own network. ' +
+              'Point AI_BASE_URL at a local model, for example http://host.docker.internal:11434/v1, or set AI_ALLOW_REMOTE=true to accept ' +
+              'that every question and a summary of the estate go to that model. The page then says so beside every answer.',
       );
     }
     warn(

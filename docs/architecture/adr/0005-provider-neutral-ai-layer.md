@@ -3,6 +3,7 @@
 * Status: accepted
 * Deciders: HCML internship project
 * Date: 2026-09-18 (recorded as an ADR 2026-09-22)
+* Amended: 2026-11-19: what the Assistant reads for a question goes beyond the snapshot ([ADR-0019](0019-let-the-portal-read-what-a-question-needs.md), built 18 November), and a model name ending in `-cloud` is refused while `AI_LOCAL_ONLY` is on, since a signed-in Ollama can forward such a model off the machine while the address still reads as local (SC-70); the model requests are sent with `redirect: 'error'`, so that an answer from a local address cannot send the portal on to another
 
 ## Context and Problem Statement
 
@@ -31,15 +32,15 @@ rather than assert an answer?
 Chosen: **one provider-neutral layer (`server/src/clients/ai.ts`), switched by `AI_PROVIDER`, deployed as two
 repositories that share a byte-identical source tree.**
 
-`hcml-portal` runs hosted Claude. `hcml-portal-ollama` runs `qwen3:8b` on the host. `server/src` and
+`hcml-portal` runs hosted Claude. `hcml-portal-ollama` runs a local model on the host: the code's default for that backend is `qwen3:8b`, and `AI_MODEL` in `.env` names the one that runs (`gemma4:12b` since 18 November 2026, IN-96). `server/src` and
 `web/src` are byte-identical between them: verified with `diff -rq`, not by eye. Which model
 answers is a line of `.env`.
 
 ### This copy's perspective
 
-**This is `hcml-portal-ollama`: the plain-language layer is `qwen3:8b` running on this host, and
+**This is `hcml-portal-ollama`: the plain-language layer is a local model running on this host (the one `AI_MODEL` names in `.env`), and
 nothing about the estate leaves the machine.** Explain and the assistant send the same data the
-sibling sends to Anthropic (host names, trigger text, the estate snapshot) but it travels to
+sibling sends to Anthropic (host names, trigger text, the estate snapshot, and what a question reads beyond it, [ADR-0019](0019-let-the-portal-read-what-a-question-needs.md)) but it travels to
 `localhost:11434` and stops there. For that reason the line the sibling shows under every AI answer,
 naming Anthropic as the external service, never appears here. The per-user limits on Explain and the
 assistant (10 calls a minute each) are the same in both copies; the daily token budget counts the
@@ -63,7 +64,7 @@ cold start.
 
 ### Negative Consequences
 
-* **Two deployments to keep in step, forever.** The divergence is now 22 files and both READMEs state
+* **Two deployments to keep in step, forever.** The divergence is now 21 files and both READMEs state
   the count, so both have to be updated whenever it changes, and that count has already drifted once
   (audit finding DOC-10).
 * **`AI_PROVIDER` falls back to `anthropic` for any unrecognised value, with only a warning in the

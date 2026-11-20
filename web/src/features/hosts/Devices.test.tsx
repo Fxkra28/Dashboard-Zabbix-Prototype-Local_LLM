@@ -5,7 +5,8 @@ import { BrowserRouter } from 'react-router-dom';
 import { api } from '../../api';
 import { resetAuthProbe } from '../../shared/hooks/useAuth';
 import Devices from './Devices';
-import type { Device, DevicesResponse, Role } from '../../types';
+import type { Device, DevicesResponse } from '../../types';
+import { meFor, type Kind } from '../../__tests__/accounts';
 
 /** The Devices page: a tile for each kind of device that is also the filter of the list under it. Read-only: a device is added in Zabbix. */
 
@@ -45,9 +46,9 @@ const DEVICES: Device[] = [
 
 const response = (devices = DEVICES): DevicesResponse => ({ classes: CLASSES, devices });
 
-function signedInAs(role: Role) {
+function signedInAs(kind: Kind) {
   resetAuthProbe();
-  vi.spyOn(api, 'me').mockResolvedValue({ authEnabled: true, user: { name: 'x', role }, expiresIn: 3600, pages: {} } as never);
+  vi.spyOn(api, 'me').mockResolvedValue(meFor(kind));
 }
 function open(url = '/devices') {
   window.history.replaceState(null, '', url);

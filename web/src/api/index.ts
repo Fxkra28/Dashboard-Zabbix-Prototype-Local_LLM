@@ -16,6 +16,7 @@ import { problemsApi } from './problems';
 import { reportsApi } from './reports';
 import { shellApi } from './shell';
 import { slaApi } from './sla';
+import { usersApi } from './users';
 import { goToSignIn, isSignedOut, lastKnownUser, userOrRoleChanged } from './session';
 
 export const api = {
@@ -29,9 +30,10 @@ export const api = {
   ...reportsApi,
   ...slaApi,
   ...assistantApi,
+  ...usersApi,
 };
 
-export { recordSession, sessionTiming, isSignedOut, AUTH_CHANGED, goToSignIn, renewSession, login, logout, onSessionChange } from './session';
+export { recordSession, sessionTiming, isSignedOut, AUTH_CHANGED, goToSignIn, renewSession, login, logout, onSessionChange, userOrRoleChanged } from './session';
 export { withSignal, HttpFailure } from './client';
 export { fileNameFrom, reportFileName } from './sla';
 export type { AvailabilityQuery, ReportFormat } from './sla';

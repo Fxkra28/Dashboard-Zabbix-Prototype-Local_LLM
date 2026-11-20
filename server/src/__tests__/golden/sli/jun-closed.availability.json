@@ -1,0 +1,570 @@
+{
+ "source": "derived",
+ "label": "Derived from ICMP availability triggers",
+ "profile": "availability",
+ "from": 1780246800,
+ "to": 1782838800,
+ "end": 1782838800,
+ "closed": true,
+ "timezone": "Asia/Jakarta",
+ "target": 99,
+ "basis": {
+  "triggers": [
+   "Unavailable by ICMP ping",
+   "High ICMP ping loss"
+  ],
+  "gapPolicy": "excluded",
+  "noDataPolicy": "excluded",
+  "maintenancePolicy": "excluded"
+ },
+ "overall": {
+  "key": "overall",
+  "name": "HCML estate",
+  "hosts": 11,
+  "withData": 9,
+  "sli": 98.76386116079323,
+  "downtime": 280313,
+  "meeting": false,
+  "belowTarget": 5
+ },
+ "categories": [
+  {
+   "key": "Cisco IOS by SNMP",
+   "name": "Cisco IOS by SNMP",
+   "hosts": 4,
+   "withData": 4,
+   "sli": 98.0396979279646,
+   "downtime": 198241,
+   "meeting": false,
+   "belowTarget": 3
+  },
+  {
+   "key": "ICMP Ping",
+   "name": "ICMP Ping",
+   "hosts": 4,
+   "withData": 2,
+   "sli": 98.88464285060753,
+   "downtime": 55604,
+   "meeting": false,
+   "belowTarget": 1
+  },
+  {
+   "key": "Generic by SNMP",
+   "name": "Generic by SNMP",
+   "hosts": 2,
+   "withData": 2,
+   "sli": 99.47333651703279,
+   "downtime": 26468,
+   "meeting": true,
+   "belowTarget": 1
+  },
+  {
+   "key": "FortiGate by SNMP",
+   "name": "FortiGate by SNMP",
+   "hosts": 1,
+   "withData": 1,
+   "sli": 100,
+   "downtime": 0,
+   "meeting": true,
+   "belowTarget": 0
+  }
+ ],
+ "sites": [
+  {
+   "key": "site:1",
+   "name": "1 · Jakarta",
+   "hosts": 2,
+   "withData": 2,
+   "sli": 98.0180910669192,
+   "downtime": 100459,
+   "meeting": false,
+   "belowTarget": 1
+  },
+  {
+   "key": "site:3",
+   "name": "3 · SSB / Sampang",
+   "hosts": 2,
+   "withData": 2,
+   "sli": 98.88464285060753,
+   "downtime": 55604,
+   "meeting": false,
+   "belowTarget": 1
+  },
+  {
+   "key": "site:4",
+   "name": "4 · FPSO KAS3 & BD-WHP",
+   "hosts": 1,
+   "withData": 1,
+   "sli": 98.94667303406558,
+   "downtime": 26468,
+   "meeting": false,
+   "belowTarget": 1
+  },
+  {
+   "key": "site:5",
+   "name": "5 · Pasuruan / GMS",
+   "hosts": 2,
+   "withData": 2,
+   "sli": 98.70748683906578,
+   "downtime": 65354,
+   "meeting": false,
+   "belowTarget": 1
+  },
+  {
+   "key": "site:6",
+   "name": "6 · Sumenep",
+   "hosts": 1,
+   "withData": 1,
+   "sli": 100,
+   "downtime": 0,
+   "meeting": true,
+   "belowTarget": 0
+  },
+  {
+   "key": "site:7",
+   "name": "7 · Sapudi",
+   "hosts": 1,
+   "withData": 1,
+   "sli": 98.70763589988842,
+   "downtime": 32428,
+   "meeting": false,
+   "belowTarget": 1
+  },
+  {
+   "key": "site:9",
+   "name": "9 · MBH",
+   "hosts": 1,
+   "withData": 0,
+   "sli": null,
+   "downtime": 0,
+   "meeting": null,
+   "belowTarget": 0
+  },
+  {
+   "key": "site:unassigned",
+   "name": "Unassigned",
+   "hosts": 1,
+   "withData": 0,
+   "sli": null,
+   "downtime": 0,
+   "meeting": null,
+   "belowTarget": 0
+  }
+ ],
+ "classes": [
+  {
+   "key": "access-point",
+   "name": "Access points",
+   "hosts": 2,
+   "withData": 2,
+   "sli": 99.47333651703279,
+   "downtime": 26468,
+   "meeting": true,
+   "belowTarget": 1
+  },
+  {
+   "key": "firewall",
+   "name": "Firewalls",
+   "hosts": 1,
+   "withData": 1,
+   "sli": 100,
+   "downtime": 0,
+   "meeting": true,
+   "belowTarget": 0
+  },
+  {
+   "key": "repeater",
+   "name": "Radio repeaters",
+   "hosts": 1,
+   "withData": 0,
+   "sli": null,
+   "downtime": 0,
+   "meeting": null,
+   "belowTarget": 0
+  },
+  {
+   "key": "switch",
+   "name": "Switches",
+   "hosts": 4,
+   "withData": 4,
+   "sli": 98.0396979279646,
+   "downtime": 198241,
+   "meeting": false,
+   "belowTarget": 3
+  },
+  {
+   "key": "wan-link",
+   "name": "WAN links",
+   "hosts": 2,
+   "withData": 2,
+   "sli": 98.88464285060753,
+   "downtime": 55604,
+   "meeting": false,
+   "belowTarget": 1
+  },
+  {
+   "key": "web",
+   "name": "Web services",
+   "hosts": 1,
+   "withData": 0,
+   "sli": null,
+   "downtime": 0,
+   "meeting": null,
+   "belowTarget": 0
+  }
+ ],
+ "hosts": [
+  {
+   "hostid": "101",
+   "name": "1.2.1 TANGO02CORESWITCH",
+   "hostStatus": "0",
+   "site": {
+    "code": 1,
+    "name": "Jakarta"
+   },
+   "category": "Cisco IOS by SNMP",
+   "deviceClass": "switch",
+   "triggerids": [
+    "1011",
+    "1012"
+   ],
+   "sli": 96.0361821338384,
+   "downtime": 100459,
+   "window": 2592000,
+   "covered": 2534400,
+   "maintenance": 0,
+   "coverage": 0.9777777777777777,
+   "incidents": 14,
+   "longest": 16853,
+   "dataStatus": "ok",
+   "measured": true,
+   "meeting": false,
+   "errorBudget": -75114.99999999997
+  },
+  {
+   "hostid": "108",
+   "name": "5.2 BRAVO-SW02",
+   "hostStatus": "0",
+   "site": {
+    "code": 5,
+    "name": "Pasuruan / GMS"
+   },
+   "category": "Cisco IOS by SNMP",
+   "deviceClass": "switch",
+   "triggerids": [
+    "1081",
+    "1082"
+   ],
+   "sli": 98.11538461538461,
+   "downtime": 47628,
+   "window": 2592000,
+   "covered": 2527200,
+   "maintenance": 0,
+   "coverage": 0.975,
+   "incidents": 7,
+   "longest": 12270,
+   "dataStatus": "ok",
+   "measured": true,
+   "meeting": false,
+   "errorBudget": -22355.999999999978
+  },
+  {
+   "hostid": "104",
+   "name": "INET : SAMPANG WAN 2",
+   "hostStatus": "0",
+   "site": {
+    "code": 3,
+    "name": "SSB / Sampang"
+   },
+   "category": "ICMP Ping",
+   "deviceClass": "wan-link",
+   "triggerids": [
+    "1041",
+    "1042"
+   ],
+   "sli": 98.1523349436393,
+   "downtime": 45896,
+   "window": 2592000,
+   "covered": 2484000,
+   "maintenance": 0,
+   "coverage": 0.9583333333333334,
+   "incidents": 5,
+   "longest": 17081,
+   "dataStatus": "ok",
+   "measured": true,
+   "meeting": false,
+   "errorBudget": -21055.999999999978
+  },
+  {
+   "hostid": "111",
+   "name": "7.1 DELTA-RT01",
+   "hostStatus": "0",
+   "site": {
+    "code": 7,
+    "name": "Sapudi"
+   },
+   "category": "Cisco IOS by SNMP",
+   "deviceClass": "switch",
+   "triggerids": [
+    "1111",
+    "1112"
+   ],
+   "sli": 98.70763589988842,
+   "downtime": 32428,
+   "window": 2592000,
+   "covered": 2509200,
+   "maintenance": 0,
+   "coverage": 0.9680555555555556,
+   "incidents": 5,
+   "longest": 13540,
+   "dataStatus": "ok",
+   "measured": true,
+   "meeting": false,
+   "errorBudget": -7335.999999999978
+  },
+  {
+   "hostid": "102",
+   "name": "4.3.3 FPSO ARUBA 3",
+   "hostStatus": "0",
+   "site": {
+    "code": 4,
+    "name": "FPSO KAS3 & BD-WHP"
+   },
+   "category": "Generic by SNMP",
+   "deviceClass": "access-point",
+   "triggerids": [
+    "1021",
+    "1022"
+   ],
+   "sli": 98.94667303406558,
+   "downtime": 26468,
+   "window": 2592000,
+   "covered": 2512800,
+   "maintenance": 0,
+   "coverage": 0.9694444444444444,
+   "incidents": 7,
+   "longest": 15987,
+   "dataStatus": "ok",
+   "measured": true,
+   "meeting": false,
+   "errorBudget": -1339.9999999999782
+  },
+  {
+   "hostid": "107",
+   "name": "5.1 BRAVO-SW01",
+   "hostStatus": "0",
+   "site": {
+    "code": 5,
+    "name": "Pasuruan / GMS"
+   },
+   "category": "Cisco IOS by SNMP",
+   "deviceClass": "switch",
+   "triggerids": [
+    "1071",
+    "1072"
+   ],
+   "sli": 99.29958906274696,
+   "downtime": 17726,
+   "window": 2592000,
+   "covered": 2530800,
+   "maintenance": 0,
+   "coverage": 0.9763888888888889,
+   "incidents": 6,
+   "longest": 7493,
+   "dataStatus": "ok",
+   "measured": true,
+   "meeting": true,
+   "errorBudget": 7582.000000000022
+  },
+  {
+   "hostid": "103",
+   "name": "INET : SAMPANG WAN 1",
+   "hostStatus": "0",
+   "site": {
+    "code": 3,
+    "name": "SSB / Sampang"
+   },
+   "category": "ICMP Ping",
+   "deviceClass": "wan-link",
+   "triggerids": [
+    "1031",
+    "1032"
+   ],
+   "sli": 99.61695075757576,
+   "downtime": 9708,
+   "window": 2592000,
+   "covered": 2534400,
+   "maintenance": 0,
+   "coverage": 0.9777777777777777,
+   "incidents": 4,
+   "longest": 5920,
+   "dataStatus": "ok",
+   "measured": true,
+   "meeting": true,
+   "errorBudget": 15636.000000000022
+  },
+  {
+   "hostid": "105",
+   "name": "1.1 ALPHA-FW01",
+   "hostStatus": "0",
+   "site": {
+    "code": 1,
+    "name": "Jakarta"
+   },
+   "category": "FortiGate by SNMP",
+   "deviceClass": "firewall",
+   "triggerids": [
+    "1051",
+    "1052"
+   ],
+   "sli": 100,
+   "downtime": 0,
+   "window": 2592000,
+   "covered": 2502000,
+   "maintenance": 0,
+   "coverage": 0.9652777777777778,
+   "incidents": 0,
+   "longest": 0,
+   "dataStatus": "ok",
+   "measured": true,
+   "meeting": true,
+   "errorBudget": 25020.000000000022
+  },
+  {
+   "hostid": "109",
+   "name": "6.1 CHARLIE-AP01",
+   "hostStatus": "0",
+   "site": {
+    "code": 6,
+    "name": "Sumenep"
+   },
+   "category": "Generic by SNMP",
+   "deviceClass": "access-point",
+   "triggerids": [
+    "1092",
+    "1091"
+   ],
+   "sli": 100,
+   "downtime": 0,
+   "window": 2592000,
+   "covered": 2520000,
+   "maintenance": 0,
+   "coverage": 0.9722222222222222,
+   "incidents": 0,
+   "longest": 0,
+   "dataStatus": "ok",
+   "measured": true,
+   "meeting": true,
+   "errorBudget": 25200.000000000022
+  },
+  {
+   "hostid": "106",
+   "name": "9.9 DMR REPEATER",
+   "hostStatus": "1",
+   "site": {
+    "code": 9,
+    "name": "MBH"
+   },
+   "category": "ICMP Ping",
+   "deviceClass": "repeater",
+   "triggerids": [
+    "1062"
+   ],
+   "sli": null,
+   "downtime": 0,
+   "window": 2592000,
+   "covered": 0,
+   "maintenance": 0,
+   "coverage": 0,
+   "incidents": 2,
+   "longest": 0,
+   "dataStatus": "nodata",
+   "measured": false,
+   "meeting": null,
+   "errorBudget": null
+  },
+  {
+   "hostid": "110",
+   "name": "WEB : PORTAL",
+   "hostStatus": "0",
+   "site": null,
+   "category": "ICMP Ping",
+   "deviceClass": "web",
+   "triggerids": [
+    "1102",
+    "1101"
+   ],
+   "sli": null,
+   "downtime": 0,
+   "window": 2592000,
+   "covered": 0,
+   "maintenance": 0,
+   "coverage": 0,
+   "incidents": 0,
+   "longest": 0,
+   "dataStatus": "nodata",
+   "measured": false,
+   "meeting": null,
+   "errorBudget": null
+  }
+ ],
+ "wanPaths": [
+  {
+   "key": "wan:SAMPANG",
+   "name": "SAMPANG",
+   "site": {
+    "code": 3,
+    "name": "SSB / Sampang"
+   },
+   "legs": [
+    {
+     "hostid": "103",
+     "name": "INET : SAMPANG WAN 1",
+     "leg": "1",
+     "sli": 99.61695075757576,
+     "dataStatus": "ok"
+    },
+    {
+     "hostid": "104",
+     "name": "INET : SAMPANG WAN 2",
+     "leg": "2",
+     "sli": 98.1523349436393,
+     "dataStatus": "ok"
+    }
+   ],
+   "sli": 100,
+   "downtime": 0,
+   "coverage": 0.9361111111111111,
+   "dataStatus": "partial"
+  }
+ ],
+ "gaps": [],
+ "noDataWindows": [],
+ "month": "2026-06",
+ "web": [
+  {
+   "itemid": "w1",
+   "name": "Portal",
+   "sli": 100,
+   "downtime": 0,
+   "coverage": 1,
+   "dataStatus": "ok"
+  },
+  {
+   "itemid": "w2",
+   "name": "Zabbix",
+   "sli": 100,
+   "downtime": 0,
+   "coverage": 1,
+   "dataStatus": "ok"
+  }
+ ],
+ "stats": {
+  "zabbixCalls": 12,
+  "triggers": 21,
+  "events": 99,
+  "trendRows": 7931,
+  "ms": 0
+ },
+ "generatedAt": 0
+}

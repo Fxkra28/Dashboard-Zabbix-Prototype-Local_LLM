@@ -25,8 +25,8 @@ Three hard rules drive the whole design (from the original build brief, `myown/d
 §0, outside both repos, so quoted rather than linked):
 
 1. The browser never calls Zabbix. Only the BFF has the API token.
-2. Read-only, least privilege. The portal reads with a dedicated read-only token (HCML's deployment does
-   not meet this yet: its tokens belong to a Super admin, tracker SC-23). The single
+2. Read-only, least privilege. The portal reads with a dedicated read-only token (the token should belong to a
+   user whose role allows only the read methods). The single
    exception is acknowledge/close, which uses a separate write token and is off unless
    configured. See [§20](20-acknowledge-close-write-back.md#20-acknowledge--close-write-back).
 3. Cache everything. Every Zabbix call hits its server + DB, so responses are cached with short TTLs.

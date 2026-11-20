@@ -19,7 +19,7 @@ How does the portal send a file by email, to whom, and under whose control, when
 * The portal keeps nothing ([ADR-0003](0003-no-database.md)), so nothing can remember what was sent, and nothing in this decision may need that.
 * A mistake in a setting must not stop the portal from showing monitoring data.
 * It must be testable without a real mail account, because none was available.
-* The two portals share one source tree, and one of them exists so that nothing leaves the machine: the feature has to be absent there, not only off.
+* The two portals share one source tree, and one of them exists so that nothing leaves the machine: the feature has to be absent there, not only off. (Reversed on 16 November, FR-56: see the consequences below.)
 
 ## Considered Options
 
@@ -54,7 +54,7 @@ Chosen: **SMTP through `nodemailer`, administrator only, off until the settings 
 
 * **A ninth dependency,** and the only library behind the report features. `nodemailer` has none of its own, is MIT-0 licensed, and a runtime audit on 4 November 2026 found nothing. ADR-0011 avoided libraries for the file formats because a reader's quirks are the library's job; here the quirks (TLS, STARTTLS, AUTH, MIME encoding, header injection) are exactly the ones a hand-written client would get wrong.
 * **HCML's own mail cannot be used yet.** It waits for HCML's Microsoft 365 administrator.
-* **Estate data can now leave the machine by email, in `hcml-portal`.** `hcml-portal-ollama` exists so that nothing leaves the machine, so its compose file passes none of the mail settings (the owner's word, 4 November) and a test pins the difference. In `hcml-portal` the feature is off until a mail account is named, and then only an administrator can send.
+* **Estate data can now leave the machine by email.** On 4 November `hcml-portal-ollama` held the mail settings back so that nothing would leave its machine (the owner's word). On 16 November the owner asked for them there too (FR-56), and a test now pins that both compose files pass them. In `hcml-portal-ollama` the report is then the one way estate data can leave, since its questions go to a model on the machine itself. In both copies the feature is off until a mail account is named, and then only an administrator can send.
 * **A real mail server has been reached once.** On 9 November 2026 Gmail accepted the login and two reports, and both landed in the recipient's spam folder (tracker IN-62). The Yahoo, Zoho and iCloud settings come from the providers' help pages and from third-party guides, and were tried only against a stand-in server.
 * **No schedule.** *Left out on the morning of 4 November*, because a monthly send needs somewhere to remember what was sent and a host that stays up, and the Mac that runs the portal was down for 37 hours after a restart in October (tracker IN-43). *Built that afternoon,* with a small state file and a retry for a week: [ADR-0015](0015-keep-a-small-state-file-for-recipients-and-the-schedule.md).
 

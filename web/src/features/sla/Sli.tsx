@@ -106,6 +106,9 @@ export const ROLLING_WINDOWS = [
   { key: 'd30', days: 30, label: 'Last 30 days' },
 ] as const;
 
+/** The period value that opens the range view: any window of whole hours, and the hours of the day that count (ADR-0018). */
+export const RANGE_PERIOD = 'range';
+
 /** The days of a window key such as `d7`; null for anything else, a month included. */
 export const rollingDays = (period: string): number | null => ROLLING_WINDOWS.find((w) => w.key === period)?.days ?? null;
 
@@ -119,7 +122,7 @@ export function MonthSelect({
   value: string;
   onChange: (m: string) => void;
   label?: string;
-  /** Offer the last 7 and 30 days before the months. */
+  /** Offer the last 7 and 30 days before the months, and the range and hours after them. */
   rolling?: boolean;
 }) {
   const zone = useReportTimeZone(); // the list follows the server's zone once it is known
@@ -143,6 +146,9 @@ export function MonthSelect({
               ))}
             </optgroup>
             <optgroup label={`Calendar month (${zone})`}>{months}</optgroup>
+            <optgroup label="Any range">
+              <option value={RANGE_PERIOD}>Range and hours of the day</option>
+            </optgroup>
           </>
         ) : (
           months

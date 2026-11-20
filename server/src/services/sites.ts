@@ -1,7 +1,7 @@
 import { cached } from '../core/cache.js';
-import { config } from '../core/config.js';
 import { cachedProblems, openProblems, getHostsWithMeta, type ZHostMeta } from '../domain/queries.js';
-import { siteFromHostName } from '../domain/naming.js';
+import type { SiteRef } from '../domain/naming.js';
+import { resolveSite, SITE_SIGNALS, siteOfName, siteRefOf, type SiteSource } from '../domain/siteOf.js';
 import {
   getIcmpByHost,
   hostState,
@@ -19,8 +19,6 @@ import {
  * Read-only: it derives sites from what Zabbix already knows, and never writes.
  */
 
-/** Where a host's site name came from, weakest last. */
-export type SiteSource = 'tag' | 'name' | 'inventory' | 'group';
 
 export interface SiteHost {
   hostid: string;
@@ -69,38 +67,13 @@ export interface SitesResponse {
   coverage: { hosts: number; tag: number; name: number; inventory: number; group: number };
 }
 
-/**
- * Resolve one host to a site, most explicit signal first:
- *   1. a `site` host tag:       deliberate, unambiguous
- *   2. the site code in the name, HCML's own convention (`4.3.3 FPSO ARUBA 3`
- *      is site 4); no HCML host carries a site tag, so this is what places
- *      most of the estate, where host groups ("ARUBA", "FIREWALL DEVICES HCML")
- *      describe the kind of device rather than where it is
- *   3. inventory site_city/location, Zabbix's own field for this
- *   4. a host group:            always present, so this always resolves
- */
-export function resolveSite(host: ZHostMeta): { site: string; source: SiteSource } {
-  const tag = host.tags?.find((t) => t.tag === config.site.tag)?.value?.trim();
-  if (tag) return { site: tag, source: 'tag' };
 
-  const named = siteFromHostName(host.name);
-  if (named) return { site: named.name, source: 'name' };
+/** The host as the page is given it: its fields and its `site`, without the tags, the groups and the inventory that the site was read from (BK-94). */
+export { resolveSite, SITE_SIGNALS, siteOfName, siteRefOf, type SiteSource };
 
-  // Zabbix returns [] (not an object) for a host with inventory disabled.
-  const inv = Array.isArray(host.inventory) ? undefined : host.inventory;
-  const fromInventory = inv?.site_city?.trim() || inv?.location?.trim();
-  if (fromInventory) return { site: fromInventory, source: 'inventory' };
-
-  const groups = host.hostgroups ?? [];
-  const prefix = config.site.groupPrefix;
-  if (prefix) {
-    const match = groups.find((g) => g.name.startsWith(prefix));
-    if (match) return { site: match.name.slice(prefix.length).trim(), source: 'group' };
-  } else if (groups[0]) {
-    return { site: groups[0].name, source: 'group' };
-  }
-
-  return { site: 'Unassigned', source: 'group' };
+export function withSite<H extends ZHostMeta>(host: H): Omit<H, 'hostgroups' | 'tags' | 'inventory'> & { site: SiteRef | null } {
+  const { hostgroups: _groups, tags: _tags, inventory: _inventory, ...plain } = host;
+  return { ...plain, site: siteRefOf(host) };
 }
 
 export async function getSites(): Promise<SitesResponse> {

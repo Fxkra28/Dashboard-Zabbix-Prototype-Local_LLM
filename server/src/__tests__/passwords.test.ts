@@ -1,19 +1,33 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { SCRYPT_DEFAULTS, hashPassword, isCommon, isGuessable, parseStoredPassword, verifyPassword } from '../security/passwords.js';
+import { ARGON2_DEFAULTS, ARGON2_SUPPORTED, COMMON_PASSWORDS, SCRYPT_DEFAULTS, decoyVerify, hashPassword, isCommon, isGuessable, isHash, needsRehash, parseStoredPassword, passwordProblem, verifyPassword } from '../security/passwords.js';
 
 /**
- * Password storage: plain text as before, or a self-describing scrypt hash,
+ * Password storage: plain text as before, or a self-describing Argon2id or scrypt hash,
  * compared on digests of equal length. Every password here is made up for the test.
  */
 const verify = (stored: string, candidate: string) => verifyPassword(parseStoredPassword(stored), candidate);
 // A small cost keeps the tests quick; the settings travel inside each hash.
 const CHEAP = { N: 1024, r: 8, p: 1 };
+const CHEAP_ARGON = { m: 64, t: 1, p: 1 };
 
 describe('hashPassword', () => {
-  it('writes scrypt.N.r.p.salt.hash with the cost settings in the text, and nothing PORTAL_USERS or compose would misread', async () => {
+  it('writes argon2id.m.t.p.salt.hash at the OWASP setting when no cost is given, with the settings in the text and nothing PORTAL_USERS or compose would misread', async () => {
     const h = await hashPassword('correct horse: battery, staple');
+    const a = /^argon2id\.(\d+)\.(\d+)\.(\d+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(h);
+    expect(a, h).not.toBeNull();
+    expect({ m: Number(a![1]), t: Number(a![2]), p: Number(a![3]) }).toEqual(ARGON2_DEFAULTS);
+    expect(Buffer.from(a![4], 'base64url')).toHaveLength(16);
+    expect(Buffer.from(a![5], 'base64url')).toHaveLength(32);
+    expect(h).not.toMatch(/[:,$\s]/);
+    expect(h).not.toContain('horse');
+    expect(await verify(h, 'correct horse: battery, staple')).toBe(true);
+    expect(await verify(h, 'correct horse: battery, stapl')).toBe(false);
+  });
+
+  it('writes scrypt.N.r.p.salt.hash with the cost settings in the text, and nothing PORTAL_USERS or compose would misread', async () => {
+    const h = await hashPassword('correct horse: battery, staple', SCRYPT_DEFAULTS);
     const m = /^scrypt\.(\d+)\.(\d+)\.(\d+)\.([A-Za-z0-9_-]+)\.([A-Za-z0-9_-]+)$/.exec(h);
     expect(m, h).not.toBeNull();
     expect({ N: Number(m![1]), r: Number(m![2]), p: Number(m![3]) }).toEqual(SCRYPT_DEFAULTS);
@@ -39,6 +53,76 @@ describe('hashPassword', () => {
     const dearer = await hashPassword('new-entry', { N: 2048, r: 8, p: 2 });
     expect(dearer.startsWith('scrypt.2048.8.2.')).toBe(true);
     expect(await verify(dearer, 'new-entry')).toBe(true);
+  });
+});
+
+describe('Argon2id', () => {
+  it('has Argon2 in the Node the portal ships on, which is what makes it the default', () => {
+    expect(ARGON2_SUPPORTED).toBe(true);
+  });
+
+  it('keeps the cost it was made with, gives a new salt each time, and verifies each', async () => {
+    const [a, b] = [await hashPassword('same-password', CHEAP_ARGON), await hashPassword('same-password', CHEAP_ARGON)];
+    expect(a.startsWith('argon2id.64.1.1.')).toBe(true);
+    expect(a).not.toBe(b);
+    expect(await verify(a, 'same-password')).toBe(true);
+    expect(await verify(b, 'same-password')).toBe(true);
+    const dearer = await hashPassword('new-entry', { m: 128, t: 2, p: 2 });
+    expect(dearer.startsWith('argon2id.128.2.2.')).toBe(true);
+    expect(await verify(dearer, 'new-entry')).toBe(true);
+  });
+
+  it('is read as a hash of its own kind, and refused when it is not a usable one', async () => {
+    const good = await hashPassword('read-me', CHEAP_ARGON);
+    expect(parseStoredPassword(good)).toMatchObject({ kind: 'argon2id', params: CHEAP_ARGON });
+    expect(isHash(parseStoredPassword(good))).toBe(true);
+    const [, m, t, p, salt, hash] = good.split('.');
+    const unusable = [
+      `argon2id.${m}.${t}.${p}.${salt}`,
+      `argon2id.0.${t}.${p}.${salt}.${hash}`,
+      `argon2id.4.${t}.1.${salt}.${hash}`,
+      `argon2id.9999999.${t}.${p}.${salt}.${hash}`,
+      `argon2id.${m}.0.${p}.${salt}.${hash}`,
+      `argon2id.${m}.11.${p}.${salt}.${hash}`,
+      `argon2id.${m}.${t}.0.${salt}.${hash}`,
+      `argon2id.${m}.${t}.17.${salt}.${hash}`,
+      `argon2id.${m}.${t}.${p}.${salt.slice(0, 4)}.${hash}`,
+      `argon2id.${m}.${t}.${p}.${salt}.${hash.slice(0, 8)}`,
+      'argon2id.',
+    ];
+    for (const entry of unusable) expect(parseStoredPassword(entry).kind, entry).toBe('invalid');
+    expect(await verifyPassword({ kind: 'invalid' }, 'argon2id.')).toBe(false);
+    expect(parseStoredPassword('Argon2id.x').kind).toBe('plain');
+  });
+
+  it('is told apart from a wrong password of the same length, and from scrypt', async () => {
+    const h = await hashPassword('Tr0ub4dor&3', CHEAP_ARGON);
+    for (const wrong of ['', 'tr0ub4dor&3', 'Tr0ub4dor&3 ', 'Tr0ub4dor&']) expect(await verify(h, wrong), JSON.stringify(wrong)).toBe(false);
+    expect(await verify(await hashPassword('Tr0ub4dor&3', CHEAP), 'Tr0ub4dor&3')).toBe(true);
+  });
+
+  it('is judged by the start-up checks like any hash: guessable and common ones are found', async () => {
+    expect(isGuessable(await hashPassword('', CHEAP_ARGON))).toBe(true);
+    expect(isGuessable(await hashPassword('admin', CHEAP_ARGON))).toBe(true);
+    expect(isGuessable(await hashPassword('a-long-real-password', CHEAP_ARGON))).toBe(false);
+    expect(isCommon(await hashPassword('secret', CHEAP_ARGON))).toBe(true);
+    expect(isCommon(await hashPassword('a-long-real-password', CHEAP_ARGON))).toBe(false);
+  });
+
+  it('costs an unknown name the same kind of check as a known one', async () => {
+    await expect(decoyVerify('anything')).resolves.toBeUndefined();
+  });
+});
+
+describe('needsRehash', () => {
+  it('rewrites plain text, an Argon2id hash weaker than the default and every scrypt hash, and leaves the rest', async () => {
+    expect(needsRehash(parseStoredPassword('plain-pass'))).toBe(true);
+    expect(needsRehash(parseStoredPassword(await hashPassword('x-password', CHEAP_ARGON)))).toBe(true);
+    expect(needsRehash(parseStoredPassword(await hashPassword('x-password', CHEAP)))).toBe(true);
+    expect(needsRehash(parseStoredPassword(await hashPassword('x-password', ARGON2_DEFAULTS)))).toBe(false);
+    expect(needsRehash(parseStoredPassword(await hashPassword('x-password', { m: ARGON2_DEFAULTS.m * 2, t: 2, p: 2 })))).toBe(false);
+    // A scrypt hash at its own defaults is rewritten as Argon2id at the next sign-in on a Node that has it (SC-60): its check takes four times as long as the others.
+    expect(needsRehash(parseStoredPassword(await hashPassword('x-password', SCRYPT_DEFAULTS)))).toBe(ARGON2_SUPPORTED);
   });
 });
 
@@ -160,5 +244,58 @@ describe('scripts/hash-password.ts', () => {
       expect(res.stdout).toBe('');
       expect(res.stderr).toContain('No password given');
     }
+  });
+});
+
+describe('passwordProblem (SC-58, SC-71)', () => {
+  // A hash-shaped text is the password the person typed, not a stored one: reading it as a hash made the server work the hash out at the cost it names (4.6 s and 5.2 s).
+  const SALT = 'A'.repeat(22);
+  const KEY = 'A'.repeat(43);
+  it.each([
+    ['an Argon2id one', `argon2id.131072.3.1.${SALT}.${KEY}`],
+    ['a scrypt one', `scrypt.131072.8.1.${SALT}.${KEY}`],
+  ])('does not work out %s a person types as a new password', (_what, shaped) => {
+    const started = performance.now();
+    expect(passwordProblem(shaped)).toBeNull();
+    expect(performance.now() - started).toBeLessThan(250);
+  });
+
+  it.each(['12345678', 'qwerty123', 'password1', 'Zabbix123', 'aaaaaaaa', 'administrator', 'Password123', 'Welcome2026!', 'P@ssw0rd', 'Admin2026', 'november2026', 'qwertyuiop', 'iloveyou', '1qaz2wsx', 'Passw0rd!!', 'Monitoring2026'])('refuses %s, a password people guess', (candidate) => {
+    expect(passwordProblem(candidate), candidate).toMatch(/anyone can guess|list of passwords/);
+  });
+
+  it.each(['correct horse battery staple', 'k7#Qv9!mTz2w', 'a-long-password-1', 'blue-kettle-ripple-48', 'secretive-ocelot-17', 'zabbix-2026-long-one'])('accepts %s', (candidate) => {
+    expect(passwordProblem(candidate), candidate).toBeNull();
+  });
+
+  it('refuses a password that holds the company name, whatever the case', () => {
+    expect(passwordProblem('Hcml-blue-kettle-48')).toMatch(/hcml/i);
+    expect(passwordProblem('blue-kettle-HCML-48')).toMatch(/hcml/i);
+  });
+
+  it('refuses a password that holds the sign-in name, whatever the case, and only when the name is known', () => {
+    expect(passwordProblem('blue-ANA.PUTRI-48', { name: 'ana.putri' })).toMatch(/sign-in name/);
+    expect(passwordProblem('blue-ana.putri-48')).toBeNull();
+    expect(passwordProblem('blue-kettle-ripple-48', { name: 'ana.putri' })).toBeNull();
+  });
+
+  it('keeps the old rules: too short, too long, empty, admin', () => {
+    expect(passwordProblem('short')).toMatch(/at least 8/);
+    expect(passwordProblem('x'.repeat(257))).toMatch(/at most 256/);
+    expect(passwordProblem('')).toMatch(/at least 8/);
+  });
+
+  it('holds a few hundred words, each of eight characters or more, in lower case, once', () => {
+    expect(COMMON_PASSWORDS.length).toBeGreaterThanOrEqual(200);
+    expect(new Set(COMMON_PASSWORDS).size).toBe(COMMON_PASSWORDS.length);
+    for (const word of COMMON_PASSWORDS) {
+      expect(word.length, word).toBeGreaterThanOrEqual(8);
+      expect(word, word).toBe(word.toLowerCase());
+    }
+  });
+
+  it('still tries a stored hash against the five words only, so the start-up stays quick', async () => {
+    expect(isCommon(await hashPassword('password1', CHEAP))).toBe(false);
+    expect(isCommon('password1')).toBe(true);
   });
 });

@@ -284,9 +284,9 @@ describe('.github/dependabot.yml (SC-17, SC-21)', () => {
   const file = readFileSync(root('.github/dependabot.yml'), 'utf8');
   const entries = [...file.matchAll(/- package-ecosystem: (\S+)\n\s+directory: (\S+)/g)].map((m) => `${m[1]} ${m[2]}`);
 
-  it('is version 2 and covers the actions, both npm projects and both Dockerfiles', () => {
+  it('is version 2 and covers the actions, both npm projects, both Dockerfiles and the compose files, which name the model server\'s image (IN-104)', () => {
     expect(file).toMatch(/^version: 2$/m);
-    expect(entries.sort()).toEqual(['docker /server', 'docker /web', 'github-actions /', 'npm /server', 'npm /web']);
+    expect(entries.sort()).toEqual(['docker /server', 'docker /web', 'docker-compose /', 'github-actions /', 'npm /server', 'npm /web']);
   });
 
   it('points only at folders that hold what its ecosystem reads', () => {
@@ -295,6 +295,7 @@ describe('.github/dependabot.yml (SC-17, SC-21)', () => {
       const where = dir === '/' ? '' : dir.slice(1);
       if (kind === 'npm') expect(existsSync(root(`${where}/package.json`)), entry).toBe(true);
       if (kind === 'docker') expect(existsSync(root(`${where}/Dockerfile`)), entry).toBe(true);
+      if (kind === 'docker-compose') expect(existsSync(root('docker-compose.vm.yml')), entry).toBe(true);
       if (kind === 'github-actions') expect(existsSync(root('.github/workflows')), entry).toBe(true);
     }
   });

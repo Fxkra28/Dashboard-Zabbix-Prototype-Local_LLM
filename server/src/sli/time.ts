@@ -30,6 +30,11 @@ function offsetSeconds(utcSeconds: number, tz: string): number {
   return asUtc - utcSeconds;
 }
 
+/** Whether `utcSeconds` is a whole second that falls on the hour by the clock of `tz`: its minutes and seconds there are both zero. */
+export function isWholeHour(utcSeconds: number, tz: string): boolean {
+  return Number.isInteger(utcSeconds) && (utcSeconds + offsetSeconds(utcSeconds, tz)) % 3600 === 0;
+}
+
 /** The instant the wall clock in `tz` reads `hour`:`minute` on `day` of `month` (1 to 12) of `year`, as Unix seconds. */
 export function zonedTime(year: number, month: number, day: number, hour: number, minute: number, tz: string): number {
   const guess = Date.UTC(year, month - 1, day, hour, minute) / 1000;

@@ -465,7 +465,7 @@ Tests: `freshness.test.ts`.
 
 ## What a name says
 
-HCML names its hosts by a convention. Devices are `<site>.<class>[.<seq>] NAME`, such as `1.2.1 IDX02CORESWITCH`, and services are `<TYPE> : NAME`, such as `INET : SAMPANG WAN 1`. No HCML host carries a site tag, so the name is the most reliable site signal the estate has. HCML applies the convention unevenly, so the class of a device is read from its monitoring template first when the name is no help. All of it lives in `server/src/domain/naming.ts`.
+HCML names its hosts by a convention. Devices are `<site>.<class>[.<seq>] NAME`, such as `1.2.1 TANGO02CORESWITCH`, and services are `<TYPE> : NAME`, such as `INET : SAMPANG WAN 1`. No HCML host carries a site tag, so the name is the most reliable site signal the estate has. HCML applies the convention unevenly, so the class of a device is read from its monitoring template first when the name is no help. All of it lives in `server/src/domain/naming.ts`.
 
 ### siteFromHostName
 
@@ -500,6 +500,27 @@ export function siteFromHostName(name: string): SiteRef | null {
 2. `INET :` and `SERVER :` services have no number. The words after the colon are matched, on word boundaries, against each site's aliases, so `SAMPANG`, `SSB` and `SAM` all mean site 3.
 3. Anything else belongs to no site and gives null: `WEB :` services, `INTERNET` and the Zabbix server itself.
 4. The browser cannot import server code, so `web/src/shared/lib/sites.ts` holds a copy. `copiedHelpers.test.ts` in the web tests runs both on a list of names and fails when they differ, so a change to one has to be made in the other. `site-naming.test.ts` holds the server side.
+
+### resolveSite and siteRefOf
+
+`server/src/domain/siteOf.ts`. Says which site a host belongs to when we can ask more than its name. `resolveSite` tries four signals in order: a `site` tag on the host, the site code in its name, its inventory (`site_city`, then `location`) and its host group. `siteRefOf` turns the answer into one of HCML's fourteen sites, with its code.
+
+<!-- gen:snippet server/src/domain/siteOf.ts#siteRefOf sha=aecdd26bdd73 -->
+`server/src/domain/siteOf.ts:51-55`
+
+```ts
+export function siteRefOf(host: ZHostMeta): SiteRef | null {
+  const { site, source } = resolveSite(host);
+  if (source === 'name') return siteFromHostName(host.name);
+  return siteOfName(site);
+}
+```
+<!-- /gen -->
+
+1. When the name says the site, the code comes from `siteFromHostName`, as above. When a tag, the inventory or a group says it, `siteOfName` finds the site that the words name, by its name or one of its aliases, and a word that names none of the fourteen gives null: such a host has no code, and sits under its words in the Sites view.
+2. `SITE_SIGNALS` is what a host list asks Zabbix for besides the host, its groups, its tags and the two inventory fields, so that one call serves the four signals.
+3. The Sites, Hosts, Devices and Network pages found a host's site this way from BK-94. The SLA reading and the Assistant went on reading the name alone until BK-103, so a host whose site tag disagreed with its name sat under one site on the Hosts page and under another in the SLA tables and in what the Assistant said. `readSliData` now asks for the signals in the call it already makes for the templates (no new call), and the Assistant takes the site of a host from the Sites view (`siteByHostName`). A host that the Sites view does not hold falls back to its name.
+4. The code lives in the domain folder, below the services, because the SLA engine reads it and the engine must not import a service. `services/sites.ts` exports the same names again for the callers that import them from there. `site-resolver.test.ts` and `sli-fixes.test.ts` hold the rules, and `chat.test.ts` holds the Assistant's side.
 
 ### deviceClass
 
@@ -542,8 +563,8 @@ The same file holds `naturalCompare`, which sorts `1.2.2` before `1.2.10`, `cate
 
 `server/src/services/hosts.ts`. Every host with its state and its open problems.
 
-<!-- gen:snippet server/src/services/hosts.ts#getHostOverview sha=61495f6d2fdb -->
-`server/src/services/hosts.ts:50-74`
+<!-- gen:snippet server/src/services/hosts.ts#getHostOverview sha=ac5d0c3e768b -->
+`server/src/services/hosts.ts:55-80`
 
 ```ts
 export async function getHostOverview() {
@@ -551,6 +572,7 @@ export async function getHostOverview() {
     zbx<ZHost[]>('host.get', {
       output: ['hostid', 'name', 'status', 'maintenance_status'],
       selectInterfaces: ['ip', 'type', 'available'],
+      ...SITE_SIGNALS,
       sortfield: 'name',
     }),
     cachedProblems().then(openProblems),
@@ -566,7 +588,7 @@ export async function getHostOverview() {
   }
 
   return hosts.map((h) => ({
-    ...h,
+    ...withSite(h),
     ...hostState(h, icmp.get(h.hostid)),
     problems: counts[h.hostid] ?? { total: 0, bySeverity: {} },
   }));
@@ -575,16 +597,16 @@ export async function getHostOverview() {
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/hosts.ts#hostsOverviewView sha=1b6db486697c -->
-`server/src/services/hosts.ts:219-219`
+`server/src/services/hosts.ts:227-227`
 
 ```ts
 export const hostsOverviewView = () => cached('hosts:overview', 15_000, getHostOverview, SLOW_VIEW);
 ```
 <!-- /gen -->
 
-1. It makes three reads at the same time: all hosts with their interfaces, the shared problem list reduced to the open problems, and the ping readings.
+1. It makes three reads at the same time: all hosts with their interfaces and, for the site, their tags, groups and inventory (`SITE_SIGNALS`), the shared problem list reduced to the open problems, and the ping readings.
 2. It counts the open problems of each host, and by severity.
-3. Each host leaves with its own fields, the `state` and `reason` from `hostState`, and its problem counts.
+3. Each host leaves with its own fields and its `site`, resolved by the four signals of the Sites page (`withSite`, BK-94), without the tags, groups and inventory it was read from, then the `state` and `reason` from `hostState`, and its problem counts.
 4. `hostsOverviewView` is what the route, the Devices page and the warm-up call. It holds the answer for 15 seconds and serves it stale for ten minutes, the `SLOW_VIEW` rule from the cache.
 
 Tests: `devices-route.test.ts` and `routes.test.ts`.
@@ -594,7 +616,7 @@ Tests: `devices-route.test.ts` and `routes.test.ts`.
 `server/src/services/hosts.ts`. The items of one host, which fill the picker on the Graphs page, or the named items of any host, which resolve a deep link. The search text is trimmed, and the cache key is `typed` because a caller makes it. Searching is limited to 120 a minute for each person (`security/searchLimit.ts`).
 
 <!-- gen:snippet server/src/services/hosts.ts#isGraphable sha=d0ccca9d2631 -->
-`server/src/services/hosts.ts:36-39`
+`server/src/services/hosts.ts:37-40`
 
 ```ts
 export const isGraphable = (i: ZItem) =>
@@ -605,7 +627,7 @@ export const isGraphable = (i: ZItem) =>
 <!-- /gen -->
 
 <!-- gen:snippet server/src/services/hosts.ts#findItems sha=2aa8e7fca21f -->
-`server/src/services/hosts.ts:111-137`
+`server/src/services/hosts.ts:119-145`
 
 ```ts
 export function findItems({ hostid, itemids, search, graphable }: ItemQuery) {
@@ -638,7 +660,7 @@ export function findItems({ hostid, itemids, search, graphable }: ItemQuery) {
 ```
 <!-- /gen -->
 
-1. The cache key holds the host, the search text, the graphable flag and the item ids, so each different question is kept 30 seconds on its own. The list is the same for every role, and the route cuts the interface items for a viewer after this cache, so one entry serves all.
+1. The cache key holds the host, the search text, the graphable flag and the item ids, so each different question is kept 30 seconds on its own. The list is the same for every account, and the route cuts the interface items for one without the Network page after this cache, so one entry serves all.
 2. `graphable` asks Zabbix for numeric items only (value type 0, float, or 3, unsigned integer) that are enabled and supported, and `isGraphable` checks the answer again. A line chart cannot draw anything else.
 3. It leaves out `lastvalue` and `lastclock` on purpose. Zabbix looks each one up on its own, 30 ms to 0.5 s for an item on HCML's, and a host of 609 graphable items took 20 to 32 seconds (tracker row BK-25). The picker needs names and ids, and the last values come from `/api/latest`.
 4. `webitems: true` includes the web scenarios' items, which the Latest data page shows too.
@@ -650,7 +672,7 @@ Tests: `graphs.test.ts`.
 `server/src/services/hosts.ts`. One page of the Latest data table, paged on the server. A page past the last is the last page, and `page` in the answer says which one it is. The search text is trimmed, and both keys are `typed`.
 
 <!-- gen:snippet server/src/services/hosts.ts#getLatestPage sha=8fc3f49bad68 -->
-`server/src/services/hosts.ts:160-194`
+`server/src/services/hosts.ts:168-202`
 
 ```ts
 export function getLatestPage({ filter, hostid, groupid, needle: typedNeedle, page, pageSize, hide }: LatestPageQuery) {
@@ -692,7 +714,7 @@ export function getLatestPage({ filter, hostid, groupid, needle: typedNeedle, pa
 <!-- /gen -->
 
 1. The first read is light. It asks for the id, name and key of every matching item, up to `LATEST_ID_LIMIT`, 20,000, narrowed by the host or the group (Zabbix needs one of them to bound the result), and by the search text, which matches the name or the key. It sorts them naturally by name and marks each one that is an interface item (`isNetworkKey`). That list is kept 15 seconds under its own key, so turning pages does not repeat it.
-2. For a viewer (`hide`), the interface items are taken out before anything is counted. The total and the pages are then right, and the page is kept apart from an operator's (`v` and `o` in the key).
+2. For an account without the Network page (`hide`), the interface items are taken out before anything is counted. The total and the pages are then right, and the page is kept apart from the full one (`v` and `o` in the key).
 3. Only then does it cut the page and make the second read: `item.get` for the ids of that page alone, with the full fields (`LATEST_OUTPUT`) and the host.
 4. `truncated` is true when the list reached the limit, so the screen can say it shows only part of the items. `getLatestItems`, in the same file, is the older read without a page that returns the first 500, kept for older callers.
 

@@ -65,6 +65,21 @@ describe('ErrorState (UX-49)', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
+  // FR-71: the BFF's refusal of a route that belongs to a page the account lacks is worded as calmly as a role refusal.
+  it('words a refusal of a page the account lacks as a status, with no Try again and no Couldn’t load data', () => {
+    render(<ErrorState message="Your account does not have Graphs. Ask an administrator for access." onRetry={() => undefined} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Your account does not have Graphs');
+    expect(screen.getByRole('status')).toHaveTextContent('Ask one to add it');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/Couldn’t load data/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+
+  it('names every page of a refusal that lists two', () => {
+    render(<ErrorState message="Your account does not have Hosts or Graphs or Latest data. Ask an administrator for access." />);
+    expect(screen.getByRole('status')).toHaveTextContent('Your account does not have Hosts or Graphs or Latest data');
+  });
+
   it('is reached by the keyboard, and says what it does in its own name', async () => {
     const retry = vi.fn();
     render(<ErrorState message="Failed to fetch" onRetry={retry} />);
@@ -85,6 +100,16 @@ describe('Async and the retry (UX-49)', () => {
     );
     await userEvent.setup().click(screen.getByRole('button', { name: 'Try again' }));
     expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows no retry for an answer that asking again cannot change (FR-67)', () => {
+    render(
+      <Async loading={false} error="The start must be before the end." data={null} onRetry={() => undefined} retryable={false}>
+        {() => <div>data</div>}
+      </Async>,
+    );
+    expect(screen.getByText('The start must be before the end.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
   it('shows no retry while a failed poll keeps the last good data on screen, with its own note', () => {

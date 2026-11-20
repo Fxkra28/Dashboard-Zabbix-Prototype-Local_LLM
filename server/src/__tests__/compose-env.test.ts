@@ -23,9 +23,8 @@ const NOT_PASSED: Record<string, string> = {
   ALLOW_EMAIL_WITHOUT_AUTH: 'a local-dev opt-in; the container always signs in, so it must never reach it (tracker SC-43)',
 };
 
-/** The report email's settings: hcml-portal passes them, hcml-portal-ollama holds them back so that nothing leaves the machine. */
+/** The report email's settings: both copies pass them (FR-56). */
 const MAIL_VARS = ['MAIL_PROVIDER', 'MAIL_HOST', 'MAIL_PORT', 'MAIL_SECURITY', 'MAIL_USER', 'MAIL_PASS', 'MAIL_FROM', 'MAIL_FROM_NAME', 'MAIL_TO', 'MAIL_ALLOWED_DOMAINS', 'MAIL_SCHEDULE'];
-for (const v of MAIL_VARS) NOT_PASSED[v] = 'hcml-portal-ollama passes no mail settings on purpose: nothing leaves the machine there (tracker FR-26)';
 
 /** What makes hcml-portal-ollama refuse a model outside this machine's network. hcml-portal may use the hosted API, so it has no promise to keep. */
 const LOCAL_ONLY_VARS = ['AI_LOCAL_ONLY', 'AI_ALLOW_REMOTE'];
@@ -101,6 +100,8 @@ const SAME_AS_CONFIG: Record<string, (c: Config) => unknown> = {
   AI_NUM_CTX: (c) => c.ai.numCtx,
   AI_TEMPERATURE: (c) => c.ai.temperature,
   AI_TOP_P: (c) => c.ai.topP,
+  ACCOUNT_REQUESTS_MAX_PENDING: (c) => c.auth.accountRequests.maxPending,
+  ACCOUNT_REQUESTS_PER_ADDRESS: (c) => c.auth.accountRequests.perAddressPerDay,
   AI_CHAT_PER_MINUTE: (c) => c.ai.limits.chatPerMinute,
   AI_EXPLAIN_PER_MINUTE: (c) => c.ai.limits.explainPerMinute,
   AI_MAX_CONCURRENT: (c) => c.ai.limits.maxConcurrent,
@@ -138,10 +139,10 @@ describe('docker-compose.yml and the BFF (tracker IN-04)', () => {
     expect(missing, 'read by the BFF, but compose never passes them: ignored in Docker').toEqual([]);
   });
 
-  it('passes the mail settings in hcml-portal and holds them back in hcml-portal-ollama, which exists so that nothing leaves the machine', () => {
+  it('passes the mail settings in both copies, so that an administrator of either can email the report (FR-56)', () => {
     const local = /^name: hcml-portal-ollama\s*$/m.test(readFileSync(root('docker-compose.yml'), 'utf8'));
     const have = passed();
-    for (const v of MAIL_VARS) expect(have.has(v), `${v} in ${local ? 'hcml-portal-ollama' : 'hcml-portal'}`).toBe(!local);
+    for (const v of MAIL_VARS) expect(have.has(v), `${v} in ${local ? 'hcml-portal-ollama' : 'hcml-portal'}`).toBe(true);
   });
 
   // IN-79: what hcml-portal-ollama exists to guarantee was pinned by nothing, so a lost line would have shipped.
@@ -165,7 +166,7 @@ describe('docker-compose.yml and the BFF (tracker IN-04)', () => {
   });
 
   it('gives both copies a folder for their state, the one the portal-state volume is mounted at, and declares the volume (IN-59, BK-60)', () => {
-    // The local-model copy sends no email, but it keeps the web check figures of closed months there (ADR 0016).
+    // Both copies keep the saved list, the schedule and the web check figures of closed months there (ADR 0015, ADR 0016).
     const text = readFileSync(root('docker-compose.yml'), 'utf8');
     expect(passed().has('PORTAL_STATE_DIR')).toBe(true);
     const line = /^ {6}PORTAL_STATE_DIR: (.*)$/m.exec(text)?.[1];
@@ -211,8 +212,15 @@ describe('docker-compose.yml and the BFF (tracker IN-04)', () => {
       compared.push(name);
     }
     // The twelve that were missing are among those compared.
-    for (const v of ['SLO_TARGET', 'SLA_TIMEZONE', 'SLI_PROFILE', 'SLI_MIN_COVERAGE', 'AI_KEEP_ALIVE', 'AI_NUM_CTX', 'AI_TOP_P']) {
+    for (const v of ['SLO_TARGET', 'SLA_TIMEZONE', 'SLI_PROFILE', 'SLI_MIN_COVERAGE', 'AI_KEEP_ALIVE', 'AI_NUM_CTX']) {
       expect(compared, v).toContain(v);
     }
+  });
+
+  it('leaves the sampling empty in compose, so that the model\'s own card decides and a setting in .env overrules it (clients/ai.ts modelProfile)', () => {
+    const sampling = Object.fromEntries(passed()).AI_TOP_P;
+    expect(sampling, 'AI_TOP_P is passed on').toBeDefined();
+    expect(sampling.fallback === '' || sampling.fallback === null, 'AI_TOP_P has no default in compose').toBe(true);
+    expect(Object.fromEntries(passed()).AI_TEMPERATURE.fallback === '' || Object.fromEntries(passed()).AI_TEMPERATURE.fallback === null).toBe(true);
   });
 });

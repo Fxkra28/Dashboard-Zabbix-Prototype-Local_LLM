@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { PageLink } from '../../shared/components/PageLink';
 import { api, streamUrl } from '../../api';
 import { problemListGuard } from '../../guards';
 import { useAsync } from '../../shared/hooks/useAsync';
@@ -14,6 +14,7 @@ import { Async } from '../../shared/components/states';
 import { CollectorNotice } from '../../shared/components/CollectorNotice';
 import { AckPill } from './AckPill';
 import { changeKey } from './liveChange';
+import { isResolved, matchingWords } from './counts';
 import { Field, FieldSpacer } from '../../shared/components/Field';
 import { ProblemExplainPanel } from '../assistant/ExplainPanel';
 import AckDialog from './AckDialog';
@@ -44,7 +45,6 @@ type Sent = {
   late?: boolean;
 };
 
-const isResolved = (p: Problem) => Boolean(p.r_eventid && p.r_eventid !== '0');
 
 /** The tags after the fourth, as the table prints the first four: "tag5: v5, tag6". */
 const moreTags = (tags: { tag: string; value: string }[]) =>
@@ -112,9 +112,6 @@ export default function Problems() {
       return true;
     });
   }, [q.data, minSev, search, ackFilter]);
-  // Zabbix keeps a resolved problem in the list for five minutes, so the count says how many are still open.
-  const justResolved = filtered.filter(isResolved).length;
-
   const resolved = isResolved;
   const waiting = (p: Problem) => {
     const asked = sent[p.eventid];
@@ -230,8 +227,7 @@ export default function Problems() {
           {/* Before the list is in, "0 matching" would say there are no problems. */}
           {q.data && (
             <span className="pill">
-              {filtered.length} matching
-              {justResolved > 0 && `: ${filtered.length - justResolved} open, ${justResolved} just resolved`}
+              {matchingWords(filtered)}
             </span>
           )}
         </FieldSpacer>
@@ -310,7 +306,7 @@ export default function Problems() {
                           </td>
                           <td className="muted">
                             {p.hostid ? (
-                              <Link to={`/graphs?hostid=${p.hostid}`}>{p.host || 'Unknown host'}</Link>
+                              <PageLink to={`/graphs?hostid=${p.hostid}`}>{p.host || 'Unknown host'}</PageLink>
                             ) : (
                               p.host || <NoData />
                             )}

@@ -1,14 +1,17 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { Link, Navigate, Outlet, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
 import Sidebar, { PAGE_TITLES } from './Sidebar';
 import ErrorBoundary from './ErrorBoundary';
 import TodayDate from './TodayDate';
 import { Loading } from '../../shared/components/states';
-import { useAuth, resetAuthProbe } from '../../shared/hooks/useAuth';
+import NoAccess from './NoAccess';
+import ChangePassword from '../auth/ChangePassword';
+import { useAuth, resetAuthProbe, recheckAccess } from '../../shared/hooks/useAuth';
 import { useTheme, useSidebarRail, type Theme } from './useUiPrefs';
 import { logout } from '../../api';
 import { focusMain } from '../../shared/hooks/useDialogFocus';
 import { useSessionRenewal } from './useSessionRenewal';
+import { useAccessWatch } from './useAccessWatch';
 import { useWallMode } from './useWallMode';
 import { usePageTitle } from './usePageTitle';
 import { useTopBarHeight } from './useTopBarHeight';
@@ -16,24 +19,68 @@ import { useTopBarHeight } from './useTopBarHeight';
 /** What a page learns from the shell, via useOutletContext. */
 export type LayoutContext = { wall: boolean; exitWall: () => void };
 
-/** A page's menu name, or null for an address that is not a page. The router ignores case and a trailing slash, so this does too. */
+/** The address as the router reads it: it ignores case and a trailing slash. */
+const keyOf = (pathname: string): string => pathname.replace(/\/+$/, '').toLowerCase() || '/';
+
+/** Pages that are not in the menu but have a title of their own. */
+const OUTSIDE_THE_MENU: Record<string, string> = { '/account': 'Account' };
+
+/** A page's menu name, or its own title when it is outside the menu, or null for an address that is not a page. */
 export function titleFor(pathname: string): string | null {
-  const path = pathname.replace(/\/+$/, '').toLowerCase() || '/';
-  return PAGE_TITLES[path] ?? null;
+  const key = keyOf(pathname);
+  return PAGE_TITLES[key] ?? OUTSIDE_THE_MENU[key] ?? null;
 }
 
 export default function Layout() {
   const { pathname } = useLocation();
+  const navigationType = useNavigationType();
   const navigate = useNavigate();
-  const { me, role } = useAuth();
+  const { me, role, pages } = useAuth();
+  // The form that a temporary password forces is swapped for the page in the same render as the answer, so the words that say the password was changed are kept here (UX-71).
+  const [passwordChanged, setPasswordChanged] = useState(false);
   const title = titleFor(pathname) ?? 'Page not found';
+  // A page of the menu that this user does not have (ADR-0017): the server refuses its data too, so it says so instead of drawing a page of refusals.
+  const key = keyOf(pathname);
+  const denied = pages !== null && key in PAGE_TITLES && !(key in pages);
+  const firstPage = pages ? Object.keys(PAGE_TITLES).find((p) => p in pages) : undefined;
   usePageTitle(title);
 
   // The route the session landed on, which decides the sidebar's first width.
   const landing = useRef(pathname).current;
+
+  // After a link in the content, or Back, the control that was pressed has left with the old page and focus would fall to the body: the next Tab would start at the skip link again, and a
+  // screen reader would hear nothing of the new page. So focus goes to the main area, on a change of page and not on the first one or on a change of the address's query (UX-80).
+  // The password was just changed: the page that opens now is where the person goes on from, and the words above it are read (UX-71).
+  const noticeUp = passwordChanged && !me?.mustChange;
+  useEffect(() => {
+    if (!noticeUp) return;
+    focusMain();
+    const id = setTimeout(() => setPasswordChanged(false), 10_000);
+    return () => clearTimeout(id);
+  }, [noticeUp]);
+  const shownPath = useRef(pathname);
+  useEffect(() => {
+    if (shownPath.current === pathname) return;
+    shownPath.current = pathname;
+    // A redirect replaces the address: it is the first page being found, not a move the person made, and the first Tab must still reach the skip link.
+    if (navigationType === 'REPLACE') return;
+    focusMain();
+  }, [pathname, navigationType]);
+  // The page was added to the account while its notice was up: the Check again button that was pressed has gone with the notice, so focus goes to the page. A move to another page has its rule above.
+  const deniedAt = useRef<string | null>(null);
+  useEffect(() => {
+    if (denied) {
+      deniedAt.current = pathname;
+      return;
+    }
+    const was = deniedAt.current;
+    deniedAt.current = null;
+    if (was !== null && was === pathname) focusMain();
+  }, [denied, pathname]);
   const [collapsed, toggleRail, railForced] = useSidebarRail(landing);
   const [theme, setTheme] = useTheme();
-  useSessionRenewal(Boolean(me?.authEnabled));
+  useSessionRenewal(Boolean(me?.authEnabled), () => void recheckAccess());
+  useAccessWatch(Boolean(me?.authEnabled));
 
   const { wall, enter: enterWall, exit: exitWall } = useWallMode();
   const wallToggle = useRef<HTMLButtonElement>(null);
@@ -104,6 +151,11 @@ export default function Layout() {
                 </button>
               )}
               {role && <span className={`role-chip ${role}`}>{role}</span>}
+              {me?.authEnabled && (
+                <Link className="btn ghost sm" to="/account">
+                  Account
+                </Link>
+              )}
               <label className="theme-pick">
                 <span className="sr-only">Colour theme</span>
                 <select name="theme" value={theme} onChange={(e) => setTheme(e.target.value as Theme)}>
@@ -129,12 +181,22 @@ export default function Layout() {
           </header>
         )}
         <main id="main" className="content">
+          {/* Always there, so that a reader that watches it announces the words when they come. */}
+          <div role="status">{passwordChanged && !me?.mustChange && <p className="notice">Your password was changed.</p>}</div>
           {/* Pages are lazy-loaded (see App.tsx). The boundary sits here rather
               than around the router so the chrome never blanks between pages.
               The error boundary is keyed by path, so leaving a crashed page resets it. */}
           <ErrorBoundary key={pathname}>
             <Suspense fallback={<Loading />}>
-              <Outlet context={{ wall, exitWall } satisfies LayoutContext} />
+              {me?.mustChange ? (
+                <ChangePassword forced onDone={() => setPasswordChanged(true)} />
+              ) : denied && key === '/' && firstPage ? (
+                <Navigate to={firstPage} replace />
+              ) : denied ? (
+                <NoAccess page={title} first={firstPage ? { to: firstPage, label: PAGE_TITLES[firstPage] } : null} />
+              ) : (
+                <Outlet context={{ wall, exitWall } satisfies LayoutContext} />
+              )}
             </Suspense>
           </ErrorBoundary>
         </main>

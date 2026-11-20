@@ -28,7 +28,7 @@ export async function buildTestApp(...plugins: RoutePlugin[]): Promise<FastifyIn
 /** Zabbix returns everything as strings: fixtures must too, or they hide bugs. */
 export const zHost = (over: Partial<Record<string, unknown>> = {}) => ({
   hostid: '10689',
-  name: '1.2.1 IDX02CORESWITCH',
+  name: '1.2.1 TANGO02CORESWITCH',
   status: '0',
   maintenance_status: '0',
   interfaces: [{ ip: '10.0.0.1', type: '2', available: '1' }],

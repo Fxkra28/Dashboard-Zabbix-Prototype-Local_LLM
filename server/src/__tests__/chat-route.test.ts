@@ -1,13 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
 import Fastify from 'fastify';
 import { buildTestApp } from './helpers/app.js';
 import { chatRoutes } from '../routes/chat.js';
-import { getSnapshot, streamAnswer, systemText } from '../services/assistant.js';
+import { buildFocus, getSnapshot, streamAnswer, systemText, warmFor } from '../services/assistant.js';
+import { topHostsView } from '../services/topHosts.js';
 import { AI_MESSAGE, AiDisabledError, AiUpstreamError, prefillModel, warmModel } from '../clients/ai.js';
 import { ZabbixApiError, ZabbixAuthError, ZabbixTimeoutError } from '../clients/zabbix.js';
 import { genReqId, registerRequestId } from '../http/requestId.js';
 import { registerErrorHandler } from '../http/errors.js';
 import { AJV_OPTIONS } from '../core/schemas.js';
+import { takeHeavyPlace } from '../security/heavyLimit.js';
 
 /**
  * POST /api/chat as the browser sees it: validation, then a text/event-stream
@@ -26,7 +30,15 @@ vi.hoisted(() => {
 
 vi.mock('../services/assistant.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../services/assistant.js')>();
-  return { ...actual, getSnapshot: vi.fn(), streamAnswer: vi.fn() };
+  // `buildFocus` is the real one, watched for what it is asked.
+  // `warmFor` waits for slow views, which assistant-warm.test.ts tests; here it is only watched.
+  return { ...actual, getSnapshot: vi.fn(), streamAnswer: vi.fn(), buildFocus: vi.fn(actual.buildFocus), warmFor: vi.fn(async () => undefined) };
+});
+vi.mock('../services/topHosts.js', () => ({ topHostsView: vi.fn(async () => ({ generatedAt: 0, metrics: [] })) }));
+// The real line of the heavy reports, watched, so that a test can hand the route a place of its own.
+vi.mock('../security/heavyLimit.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../security/heavyLimit.js')>();
+  return { ...actual, takeHeavyPlace: vi.fn(actual.takeHeavyPlace) };
 });
 vi.mock('../clients/ai.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../clients/ai.js')>();
@@ -62,6 +74,98 @@ function frames(body: string): { event: string; data: unknown }[] {
       return { event, data: JSON.parse(data) };
     });
 }
+
+describe('POST /api/chat: what a user is given to ask about (ADR-0017)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  async function ask(user: { role: string; modules: string[] } | null) {
+    vi.mocked(getSnapshot).mockResolvedValue(snapshot('SNAPSHOT'));
+    vi.mocked(streamAnswer).mockImplementation(async function* () {
+      yield 'Fine.';
+    });
+    const { config } = await import('../core/config.js');
+    const before = config.auth.enabled;
+    config.auth.enabled = user !== null;
+    try {
+      const app = Fastify({ genReqId, logger: false, ajv: AJV_OPTIONS });
+      // What the guard of auth.ts leaves on the request once it has let a user in.
+      app.addHook('onRequest', async (req) => void (user && (req.user = user as never)));
+      registerRequestId(app);
+      registerErrorHandler(app);
+      await app.register(chatRoutes);
+      await app.ready();
+      await app.inject({ method: 'POST', url: '/api/chat', payload: { messages: [{ role: 'user', content: 'What is down?' }] } });
+      await app.close();
+    } finally {
+      config.auth.enabled = before;
+    }
+  }
+
+  it('asks for the whole snapshot for an administrator, and when sign-in is off', async () => {
+    await ask({ role: 'admin', modules: [] });
+    expect(getSnapshot).toHaveBeenLastCalledWith(undefined);
+    await ask(null);
+    expect(getSnapshot).toHaveBeenLastCalledWith(undefined);
+  });
+
+  it('asks only for the parts that the modules of a guest or an operator show', async () => {
+    await ask({ role: 'guest', modules: ['sla', 'assistant'] });
+    expect(getSnapshot).toHaveBeenLastCalledWith(['sla', 'services']);
+    await ask({ role: 'operator', modules: ['problems', 'assistant'] });
+    expect(getSnapshot).toHaveBeenLastCalledWith(['whole', 'recent', 'problems']);
+    await ask({ role: 'guest', modules: ['assistant'] });
+    expect(getSnapshot).toHaveBeenLastCalledWith([]);
+  });
+});
+
+describe('POST /api/chat: the pages a user holds decide what the focus may read (ADR-0017)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  async function askAs(user: { role: string; modules: string[] } | null) {
+    vi.mocked(getSnapshot).mockResolvedValue(snapshot('SNAPSHOT'));
+    vi.mocked(streamAnswer).mockImplementation(async function* () {
+      yield 'Fine.';
+    });
+    const { config } = await import('../core/config.js');
+    const before = config.auth.enabled;
+    config.auth.enabled = user !== null;
+    try {
+      const app = Fastify({ genReqId, logger: false, ajv: AJV_OPTIONS });
+      app.addHook('onRequest', async (req) => void (user && (req.user = user as never)));
+      registerRequestId(app);
+      registerErrorHandler(app);
+      await app.register(chatRoutes);
+      await app.ready();
+      await app.inject({ method: 'POST', url: '/api/chat', payload: { messages: [{ role: 'user', content: 'Berapa kecepatan internet di Surabaya?' }] } });
+      await app.close();
+    } finally {
+      config.auth.enabled = before;
+    }
+  }
+
+  it('lets it read everything for an administrator and for sign-in off, which pass no limit', async () => {
+    await askAs({ role: 'admin', modules: [] });
+    expect(buildFocus).toHaveBeenLastCalledWith('Berapa kecepatan internet di Surabaya?', null, expect.objectContaining({ operator: true }));
+    await askAs(null);
+    expect(buildFocus).toHaveBeenLastCalledWith('Berapa kecepatan internet di Surabaya?', null, expect.objectContaining({ operator: true }));
+  });
+
+  it('has the slow views it needs waited for before the snapshot is built, for the same pages', async () => {
+    await askAs({ role: 'operator', modules: ['sites', 'network', 'assistant'] });
+    expect(warmFor).toHaveBeenLastCalledWith('Berapa kecepatan internet di Surabaya?', new Set(['sites', 'network', 'assistant']));
+    const order = (fn: unknown) => (fn as { mock: { invocationCallOrder: number[] } }).mock.invocationCallOrder.at(-1)!;
+    expect(order(warmFor)).toBeLessThan(order(getSnapshot));
+    await askAs(null);
+    expect(warmFor).toHaveBeenLastCalledWith('Berapa kecepatan internet di Surabaya?', null);
+  });
+
+  it('gives it the pages of any other user, whatever they are, so that it reads for those and no others', async () => {
+    await askAs({ role: 'operator', modules: ['sites', 'network', 'assistant'] });
+    expect(buildFocus).toHaveBeenLastCalledWith('Berapa kecepatan internet di Surabaya?', new Set(['sites', 'network', 'assistant']), expect.any(Object));
+    await askAs({ role: 'guest', modules: ['assistant'] });
+    expect(buildFocus).toHaveBeenLastCalledWith('Berapa kecepatan internet di Surabaya?', new Set(['assistant']), expect.any(Object));
+  });
+});
 
 describe('POST /api/chat', () => {
   // Call history is per-file; the validation test asserts the model was not
@@ -304,6 +408,16 @@ describe('GET /api/chat/warm', () => {
     }
   });
 
+  it('starts the list of busiest hosts, which takes tens of seconds when cold, without waiting for it', async () => {
+    vi.mocked(getSnapshot).mockResolvedValue(snapshot('WARM'));
+    vi.mocked(topHostsView).mockReturnValueOnce(new Promise(() => undefined));
+    const app = await buildTestApp(chatRoutes);
+    const reply = await app.inject({ method: 'GET', url: '/api/chat/warm' });
+    expect(reply.statusCode).toBe(202);
+    await vi.waitFor(() => expect(topHostsView).toHaveBeenCalledTimes(1));
+    await app.close();
+  });
+
   it('has the model read a snapshot once, and again only when the snapshot changes', async () => {
     vi.mocked(getSnapshot).mockResolvedValue(snapshot('FIRST'));
     const app = await buildTestApp(chatRoutes);
@@ -370,5 +484,178 @@ describe('GET /api/chat/warm', () => {
     expect(vi.mocked(getSnapshot)).toHaveBeenCalledTimes(2);
     expect(vi.mocked(prefillModel)).not.toHaveBeenCalled();
     await app.close();
+  });
+});
+
+describe('POST /api/chat: a reader who leaves, a focus that fails, an answer cut off (BK-91)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(warmFor).mockImplementation(async () => undefined);
+    vi.mocked(getSnapshot).mockResolvedValue(snapshot('SNAPSHOT'));
+  });
+
+  async function start() {
+    const lines: Record<string, unknown>[] = [];
+    const app = Fastify({ genReqId, logger: { level: 'info', stream: { write: (line: string) => void lines.push(JSON.parse(line)) } }, ajv: AJV_OPTIONS });
+    registerRequestId(app);
+    registerErrorHandler(app);
+    await app.register(chatRoutes);
+    await app.listen({ port: 0, host: '127.0.0.1' });
+    return { app, lines, port: (app.server.address() as AddressInfo).port };
+  }
+  const body = JSON.stringify({ messages: [{ role: 'user', content: 'What is down?' }] });
+
+  it('builds no snapshot and reads no detail for a reader who left while the slow views were awaited', async () => {
+    const { app, port } = await start();
+    let release!: () => void;
+    vi.mocked(warmFor).mockImplementation(() => new Promise<void>((resolve) => (release = resolve)));
+    const req = http.request({ host: '127.0.0.1', port, path: '/api/chat', method: 'POST', headers: { 'content-type': 'application/json' } }, (res) => {
+      res.on('error', () => undefined);
+      res.resume();
+    });
+    req.on('error', () => undefined);
+    req.end(body);
+    await vi.waitFor(() => expect(warmFor).toHaveBeenCalled());
+    req.destroy();
+    await new Promise((r) => setTimeout(r, 100));
+    release();
+    await new Promise((r) => setTimeout(r, 100));
+    expect(getSnapshot).not.toHaveBeenCalled();
+    expect(buildFocus).not.toHaveBeenCalled();
+    expect(streamAnswer).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  // BK-88: what a question started for a reader goes on after an answer that was given whole, and stops for one who left, and a place is freed by the read it was taken for, not by the close of the answer.
+  it('leaves the reads of an answered question to finish: their signal is not fired, and their places are not freed by the close', async () => {
+    const { app, port } = await start();
+    const release = vi.fn();
+    vi.mocked(takeHeavyPlace).mockImplementationOnce(() => release);
+    let signal: AbortSignal | undefined;
+    let place: unknown;
+    vi.mocked(buildFocus).mockImplementationOnce(async (_question, _modules, options) => {
+      signal = options?.signal;
+      place = options?.places?.heavy();
+      return null;
+    });
+    vi.mocked(streamAnswer).mockImplementation(async function* () {
+      yield 'Fine.';
+    });
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
+    expect(frames(await res.text()).at(-1)?.event).toBe('done');
+    await new Promise((r) => setTimeout(r, 50));
+    expect(place).toBeTypeOf('function');
+    expect(signal?.aborted).toBe(false);
+    expect(release).not.toHaveBeenCalled();
+    // The read that took the place frees it when it ends.
+    (place as () => void)();
+    expect(release).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
+  it('stops the reads of a reader who leaves while the answer is written, and frees the places they took', async () => {
+    const { app, port } = await start();
+    const release = vi.fn();
+    vi.mocked(takeHeavyPlace).mockImplementationOnce(() => release);
+    let signal: AbortSignal | undefined;
+    vi.mocked(buildFocus).mockImplementationOnce(async (_question, _modules, options) => {
+      signal = options?.signal;
+      options?.places?.heavy();
+      return null;
+    });
+    vi.mocked(streamAnswer).mockImplementation(async function* (_turns, _snapshot, aborted) {
+      yield 'Part of it.';
+      await new Promise<void>((resolve) => aborted?.addEventListener('abort', () => resolve(), { once: true }));
+    });
+    const req = http.request({ host: '127.0.0.1', port, path: '/api/chat', method: 'POST', headers: { 'content-type': 'application/json' } }, (res) => {
+      res.on('error', () => undefined);
+      res.once('data', () => req.destroy());
+    });
+    req.on('error', () => undefined);
+    req.end(body);
+    await vi.waitFor(() => expect(signal?.aborted).toBe(true));
+    expect(release).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
+  it('hands the line of what was not given to the model beside the data, with the one for the parts the pages do not show', async () => {
+    const { app, port } = await start();
+    vi.mocked(buildFocus).mockResolvedValueOnce({ sites: [], hosts: [], topics: [], text: '', notGiven: 'NOT GIVEN TO THIS USER: past problems. This account does not have the pages that show it.' });
+    vi.mocked(streamAnswer).mockImplementation(async function* () {
+      yield 'Fine.';
+    });
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
+    expect(frames(await res.text()).at(-1)?.event).toBe('done');
+    const options = vi.mocked(streamAnswer).mock.calls[0][3];
+    expect(options?.withheld).toContain('NOT GIVEN TO THIS USER: past problems');
+    expect(options?.focus).toBeFalsy();
+    await app.close();
+  });
+
+  it('logs a failing focus at warn, with the error and not the question, and still answers', async () => {
+    const { app, lines, port } = await start();
+    vi.mocked(buildFocus).mockRejectedValueOnce(new Error('the sites view broke'));
+    vi.mocked(streamAnswer).mockImplementation(async function* () {
+      yield 'Fine.';
+    });
+    const res = await fetch(`http://127.0.0.1:${port}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
+    const events = frames(await res.text());
+    expect(events.at(-1)?.event).toBe('done');
+    const warning = lines.find((l) => l.msg === 'chat focus failed');
+    expect(warning).toMatchObject({ level: 40 });
+    expect(JSON.stringify(warning)).toContain('the sites view broke');
+    expect(JSON.stringify(lines)).not.toContain('What is down?');
+    await app.close();
+  });
+
+  it('says in the done frame whether the model stopped at its token limit', async () => {
+    const { app, port } = await start();
+    const ask = async (truncated: boolean | null) => {
+      vi.mocked(streamAnswer).mockImplementation(async function* (_turns, _snapshot, _signal, options) {
+        yield 'Half an answer';
+        if (truncated !== null) options?.onFinish?.({ truncated });
+      });
+      const res = await fetch(`http://127.0.0.1:${port}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body });
+      return frames(await res.text()).find((f) => f.event === 'done')?.data as { truncated: boolean };
+    };
+    expect((await ask(true)).truncated).toBe(true);
+    expect((await ask(false)).truncated).toBe(false);
+    expect((await ask(null)).truncated).toBe(false);
+    await app.close();
+  });
+
+  // FR-72 and UX-73: what the page needs to say where the model's memory of the conversation ends, and in which language the answer is.
+  describe('the done frame, for the page that draws the conversation', () => {
+    const doneFor = async (port: number, messages: { role: string; content: string }[]) => {
+      vi.mocked(streamAnswer).mockImplementation(async function* () {
+        yield 'Ok.';
+      });
+      const res = await fetch(`http://127.0.0.1:${port}/api/chat`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ messages }) });
+      return frames(await res.text()).find((f) => f.event === 'done')?.data as { remembered: number; language: string | null };
+    };
+
+    it('counts the turns the model was given, the question included', async () => {
+      const { app, port } = await start();
+      expect((await doneFor(port, [{ role: 'user', content: 'Which hosts are down right now?' }])).remembered).toBe(1);
+      const piece = 'x'.repeat(800);
+      const talk = [
+        { role: 'user', content: piece },
+        { role: 'assistant', content: piece },
+        { role: 'user', content: piece },
+        { role: 'assistant', content: piece },
+        { role: 'user', content: 'Which hosts are down right now?' },
+      ];
+      // 3,000 characters of history: the newest four of the five fit, and a conversation opens with the user, so the answer before it goes too.
+      expect((await doneFor(port, talk)).remembered).toBe(3);
+      await app.close();
+    });
+
+    it('says the language the answer was asked in, and none when the words do not show it', async () => {
+      const { app, port } = await start();
+      expect((await doneFor(port, [{ role: 'user', content: 'Berapa host yang mati hari ini?' }])).language).toBe('id');
+      expect((await doneFor(port, [{ role: 'user', content: 'Which hosts are down right now?' }])).language).toBe('en');
+      expect((await doneFor(port, [{ role: 'user', content: 'MOPU?' }])).language).toBeNull();
+      await app.close();
+    });
   });
 });
